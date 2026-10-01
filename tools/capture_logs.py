@@ -5,7 +5,8 @@ Usage:
     capture_logs.py --host 192.168.2.50 --seconds 90 [--key CLE_BASE64] [--out fichier.log]
 
 Sans --key, utilise $ESPHOME_API_KEY ou la clé lue dans le YAML du projet.
-Écrit sur stdout ET, si --out est donné, dans le fichier (append).
+Écrit sur stdout ET, si --out est donné, dans le fichier (écrasé par défaut, --append pour
+ajouter).
 Sortie adaptée à un agent : une ligne par message de log, horodatée.
 """
 from __future__ import annotations
@@ -100,10 +101,14 @@ def main() -> int:
     ap.add_argument("--key", default=None, help="clé API base64 (défaut: env ESPHOME_API_KEY ou YAML)")
     ap.add_argument("--seconds", type=float, default=90)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--append", action="store_true",
+                    help="AJOUTER au fichier au lieu de l'écraser (défaut : écraser). "
+                         "Le mode ajout a déjà fait relire une fenêtre précédente comme si elle "
+                         "était la nouvelle : un fichier de sortie de capture doit être neuf.")
     args = ap.parse_args()
 
     key = args.key or os.environ.get("ESPHOME_API_KEY") or key_from_yaml(DEFAULT_YAML)
-    out = open(args.out, "a", encoding="utf-8") if args.out else None
+    out = open(args.out, "a" if args.append else "w", encoding="utf-8") if args.out else None
     try:
         return asyncio.run(run(args.host, args.port, key, args.seconds, out))
     except Exception as exc:

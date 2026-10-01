@@ -1,0 +1,17 @@
+=== fenetre_1h_cond_20261001.log ===
+lignes lues : 3719 | trames décodées : 181 | émissions distinctes : 180
+fenêtre couverte : 12:51:03 → 13:50:43 (3580 s)
+cadence : médiane 20.0 s (min 20, max 20)
+trous > 30 s : aucun
+rejets : 0 
+station(s) : ['0x84cb']
+T (19.0, 20.2) °C | H (53, 60) % | vent (0.0, 42.4) | rafale (1.6, 28.8) | pluie [59.2, 178.2] mm | UV [4, 5, 10, 12] | lux (11885, 65160)
+émissions par tranche de 10 min :
+   770-780 min : ########################### 27
+   780-790 min : ############################## 30
+   790-800 min : ############################## 30
+   800-810 min : ############################## 30
+   810-820 min : ############################## 30
+   820-830 min : ############################## 30
+   830-840 min : ### 3
+résumé JSON : evidence/resume_fenetre_1h.json

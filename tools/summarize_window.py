@@ -23,6 +23,10 @@ OK = re.compile(r"V7IN1 OK (\{.*\})$")
 RAW = re.compile(r"V7IN1 RAW ([0-9a-f ]+)$")
 REJ = re.compile(r"V7IN1 REJ ([^$]*)$")
 TS = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\]")
+# ESPHome colore ses lignes (chaque ligne finit par une séquence ANSI) : sans ce nettoyage, les
+# motifs ancrés en fin de ligne ne correspondent JAMAIS et un log plein de trames passe pour vide.
+# C'est exactement le bug qui a fait afficher « AUCUNE trame décodée » sur une fenêtre de 181.
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def secs(h: str, m: str, s: str) -> int:
@@ -42,6 +46,7 @@ def main() -> int:
 
     frames, rejects, raw_count = [], [], 0
     for line in lines:
+        line = ANSI.sub("", line).rstrip()
         m = TS.match(line)
         if not m:
             continue

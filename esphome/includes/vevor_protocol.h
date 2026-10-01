@@ -104,6 +104,36 @@ inline bool decode(const uint8_t *in, Frame &out, const char **reason) {
   out.lux = (lux_raw & 0x8000) ? (uint32_t)((lux_raw & 0x7FFF) * 10) : lux_raw;
 
   out.valid = true;
+
+  // PORTE DE PLAUSIBILITÉ — une trame PEUT passer en-tête + checksum + compteur et être fausse.
+  // Mesuré le 01/10 sur une fenêtre d'une heure : 2 trames publiées sur 181 (1,6 %) portaient un
+  // décalage d'un bit à l'extraction, ce qui DOUBLE tous les octets de valeur (un décalage d'un
+  // bit = ×2) — direction 779° et 835°, pluie 178,2 mm au lieu de 59,2, vent 34,2 km/h. Ces
+  // valeurs ne sont pas seulement improbables, elles sont PHYSIQUEMENT IMPOSSIBLES : une direction
+  // au-delà de 359° n'existe pas. On refuse la trame au lieu de la publier, et le composant la
+  // compte dans son compteur de rejets (visible dans Home Assistant).
+  if (out.wind_dir_deg > 359) {
+    *reason = "direction";
+    return false;
+  }
+  if (out.humidity > 100) {
+    *reason = "humidite";
+    return false;
+  }
+  if (out.temp_c < -40.0f || out.temp_c > 60.0f) {
+    *reason = "temperature";
+    return false;
+  }
+  // Bornes hautes larges mais finies : un anémomètre de station domestique ne dépasse pas ces
+  // valeurs, alors qu'un décalage de bits les double.
+  if (out.wind_kmh > 180.0f || out.gust_kmh > 180.0f) {
+    *reason = "vent";
+    return false;
+  }
+  if (out.uv_index < 0 || out.uv_index > 16) {
+    *reason = "uv";
+    return false;
+  }
   return true;
 }
 

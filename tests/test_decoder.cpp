@@ -103,6 +103,37 @@ static void test_rtl433_reference() {
   expect(f.battery_low, "batterie faible (0x9d)");
 }
 
+// --- 2bis. Porte de plausibilité : trame « bien formée » mais fausse -------------------------
+// Deux trames RÉELLES relevées dans une fenêtre d'une heure le 01/10 (logs/fenetre_1h_cond) :
+// elles passaient en-tête + checksum + compteur, et pourtant tous leurs octets de valeur valent
+// deux fois la valeur correcte — signature d'un décalage d'un bit à l'extraction. Elles affichaient
+// une direction de 779° et 835°, ce qui n'existe pas. Elles doivent donc être REFUSÉES, pas
+// publiées : c'est le seul garde-fou qui distingue « trame cohérente » de « trame juste ».
+static void test_plausibility() {
+  printf("Porte de plausibilité (trames fausses mais bien formées)\n");
+  vevor::Frame f;
+  const char *reason = "";
+
+  // Trame saine prise dans la même fenêtre, juste avant la première trame fautive.
+  const uint8_t bonne[21] = {0xaa, 0x00, 0x84, 0xcb, 0x16, 0x02, 0xb9, 0x38, 0x01, 0x3a, 0x0e,
+                             0x02, 0x22, 0x01, 0xff, 0x06, 0x9a, 0x2d, 0x95, 0xd1, 0x96};
+  expect(vevor::decode(bonne, f, &reason), "trame saine acceptée");
+  expect(f.wind_dir_deg == 289, "trame saine : direction 289°");
+  expect_near(f.rain_mm, 59.2f, 0.06f, "trame saine : pluie 59,2 mm");
+
+  // Trame fautive n° 1 : direction 779°, pluie 178,2 mm, vent 34,2 km/h.
+  const uint8_t fausse1[21] = {0xaa, 0x00, 0x84, 0xcb, 0x16, 0x02, 0xbb, 0x38, 0x02, 0x1e, 0x10,
+                               0x04, 0x44, 0x03, 0xfe, 0x0b, 0x2f, 0x6e, 0x09, 0x2e, 0x0a};
+  expect(!vevor::decode(fausse1, f, &reason),
+         "trame à décalage de bits n° 1 refusée (direction 779° impossible)");
+  expect(std::strcmp(reason, "direction") == 0, "motif de refus = direction, pas un rejet muet");
+
+  // Trame fautive n° 2 : direction 835°, même signature.
+  const uint8_t fausse2[21] = {0xaa, 0x00, 0x84, 0xcb, 0x16, 0x02, 0xba, 0x38, 0x02, 0x62, 0x24,
+                               0x04, 0x0c, 0x03, 0xfe, 0x0d, 0x32, 0x3f, 0xad, 0xc7, 0xae};
+  expect(!vevor::decode(fausse2, f, &reason), "trame à décalage de bits n° 2 refusée (direction 835°)");
+}
+
 // --- 3. Robustesse : entrées dégénérées ----------------------------------------------------
 static void test_robustness() {
   printf("Robustesse\n");
@@ -267,6 +298,7 @@ int main() {
   printf("=== Tests du décodeur Vevor 7-en-1 (sans matériel) ===\n\n");
   test_vectors();
   test_rtl433_reference();
+  test_plausibility();
   test_robustness();
   test_reasons();
   test_pulse_chain();

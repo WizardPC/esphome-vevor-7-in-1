@@ -1140,3 +1140,38 @@ d'inutile. `PHASE` repassera à `phase=scanning_frequency step=…` dès qu'une 
   à confirmer par la capture réelle.
 - Fréquence de départ 868,30 MHz = simple point de départ pour le balayage, pas une mesure.
 - `symbol_rate: 11494` : déduit de la période bit de 87 µs de rtl_433.
+
+## Itération 12 — fenêtre d'une heure réelle, et le défaut qu'elle a révélé (01/10/2026)
+
+**Contexte.** La fenêtre de 11:36→12:36 était vide (0 capture, 3600 s). Vérifié : ce n'était pas le
+firmware. Test interleavé (2 tours × 60 s, témoin / firmware corrigé / binaire d'avant la revue,
+`logs/ab_cycle.jsonl`) : le témoin et le binaire d'avant la revue ne reçoivent RIEN (le second
+affiche ses propres lectures SPI : `VERSION=0x00`, `MARCSTATE=0x00 SLEEP`, « valeurs non fiables »),
+le firmware corrigé reçoit 3 trames/60 s aux deux tours. Le binaire d'avant la revue, qui décodait
+216 trames à 11:28, est donc muet **dans la même fenêtre** : l'accès SPI depuis ce composant est
+bien ce qui tue la réception. La station, elle, émettait par phases (silence 11:28→12:42).
+
+**Fenêtre d'une heure conditionnelle** (`build/fenetre_1h_conditionnelle.sh`, flash → sonde 60 s →
+heure longue si la station émet) : détectée active dès la première sonde (4 trames/60 s), fenêtre
+12:51:00→13:51:00 UTC, `logs/fenetre_1h_cond_20261001.log`.
+
+**Résultats** (`evidence/rapport_fenetre_1h_decalage.json`) : **181 trames, 181 valides, 0 échec de
+checksum, 0 échec de compteur, 179/179 intervalles à 20 s, accord champ par champ C++/Python sur les
+181**. Compteurs carte : captures=558, trames=185, doublons ignorés=116+, rejets=178.
+
+**Défaut trouvé par le verdict** : 2 trames sur 181 (1,6 %) sont **fausses tout en passant en-tête,
+checksum et compteur** — décalage d'un bit à l'extraction, ce qui double les octets de valeur :
+direction 779° et 835°, pluie 178,2 mm au lieu de 59,2, vent 34,2 km/h, UV 10-12. Elles venaient de
+captures **d'un seul bloc** (piste du recollage écartée par vérification : les 2 trames recollées de
+la fenêtre sont, elles, correctes). Piste retenue : la rafale livrée deux fois par le RMT produit
+une fois un décodage décalé d'un bit, une fois le bon — la déduplication ne peut pas l'écarter
+(trames différentes octet pour octet).
+
+**Correctif** : porte de plausibilité dans `includes/vevor_protocol.h` (direction > 359°, humidité
+> 100 %, température hors −40..60 °C, vent/rafale > 180 km/h, UV hors 0..16 → refus motivé, compté
+dans les rejets) + test `test_plausibility` avec **les deux trames réelles fautives** (elles doivent
+être refusées) et la trame saine encadrante (elle doit passer).
+
+**Corrigé aussi** : `tools/summarize_window.py` affichait « AUCUNE trame décodée » sur une fenêtre de
+181 trames — ESPHome colore ses lignes, et les motifs ancrés en fin de ligne ne correspondaient
+jamais à cause des séquences ANSI. Nettoyage ANSI ajouté avant analyse.

@@ -94,6 +94,16 @@ tools/scan_freq.py --host 192.168.2.50 --start 867.8 --stop 868.6 --step 0.05 --
    D'où la règle : décoder d'abord la capture SEULE, ne recoller que si elle est trop courte pour
    porter une rafale (`MAX_FRAGMENT_TIMINGS`). Éprouvé par les tests `_coupe_*`.
 
+6. **Une trame bien formée n'est pas une trame JUSTE.** Mesuré le 01/10 sur une fenêtre d'une
+   heure : sur 181 trames valides (en-tête + checksum + compteur tous bons, cadence 20,0 s), **2
+   étaient fausses** — le décalage d'un bit à l'extraction double tous les octets de valeur, et
+   elles annonçaient 178,2 mm de pluie au lieu de 59,2 et une direction de 779°. Le checksum d'une
+   trame à décalage de bits peut donc passer. D'où deux règles : (a) une **porte de plausibilité**
+   dans le firmware (`vevor_protocol.h`) refuse ce qui est physiquement impossible — direction
+   > 359°, humidité > 100 %, vent > 180 km/h, UV > 16 — et le composant les compte dans ses rejets ;
+   (b) le **recollage de morceaux** n'est pas innocent : il ne s'applique qu'aux captures trop
+   courtes pour porter une rafale, jamais à une rafale complète.
+
 ## Auto-évaluation
 
 `tools/eval_frames.py` réimplémente le décodage en Python, indépendamment du C++ du firmware, et

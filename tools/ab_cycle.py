@@ -43,6 +43,12 @@ VARIANTS = {
     "prod": (ROOT / "esphome", "vevor-7in1.yaml",
              ROOT / "build/variants/nous_prod.ota.bin",
              "notre firmware de production"),
+    # Binaire d'avant la revue de code : c'est LUI qui décodait encore 216 trames le 01/10 à
+    # 11:28. Il sert de contrôle : si lui reçoit et que `prod` ne reçoit pas, la régression est
+    # dans nos corrections, pas dans l'air. Le YAML n'apporte que les identifiants OTA (identiques).
+    "prod_avant_revue": (ROOT / "esphome", "vevor-7in1.yaml",
+                         ROOT / "build/variants/prod_avant_revue.ota.bin",
+                         "notre firmware d'avant la revue"),
 }
 
 
@@ -71,7 +77,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--rounds", type=int, default=2)
     ap.add_argument("--seconds", type=int, default=100)
-    ap.add_argument("--variants", default="temoin,nous_v0,nous_v1,nous_v2")
+    ap.add_argument("--variants", default="temoin,prod")
     args = ap.parse_args()
 
     names = [v.strip() for v in args.variants.split(",") if v.strip()]
