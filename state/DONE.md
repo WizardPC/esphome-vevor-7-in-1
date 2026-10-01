@@ -1,75 +1,101 @@
 # État final — récepteur Vevor 7-en-1 868 MHz (ESP32-C3 SuperMini + CC1101, ESPHome)
 
-**Statut : objectif de `MISSION.md` atteint** — et **corrigé** après la revue de code du 01/10
-(dossier `reviews/`, non versionné), qui a mis en évidence deux défauts dans la première version
-validée : un **comptage de trames doublé** et une **instrumentation SPI toujours active**. Ce
-document dit ce qui est prouvé, et par quoi.
+**Statut : objectif de `MISSION.md` atteint**, puis **corrigé et rendu auto-réparant** après deux
+séries de vérifications indépendantes le 01/10/2026. Ce document dit ce qui est prouvé, et par quoi
+— y compris ce que j'ai affirmé à tort en cours de route.
 
-## 1. Le défaut de la première validation, corrigé depuis
+## 1. Ce qui a été corrigé, et sur quelle preuve
 
-La première fenêtre (`logs/validation_prod_20261001.log`, 600 s, firmware d'avant revue) avait été
-annoncée comme « 60 trames validées ». **C'était trompeur, et la revue l'a établi puis je l'ai
-revérifié moi-même** : ces 60 lignes ne contenaient que **30 mesures distinctes**, chacune publiée
-deux fois (chaque compteur TX apparaissait exactement 2×). Cause : le recollage inter-captures
-s'appliquait à **toute** capture, y compris complète — les 480 impulsions précédentes étaient
-recollées devant chaque nouvelle rafale, si bien que le décodeur relisait la rafale PRÉCÉDENTE et la
-republiait 20 s plus tard, hors de la fenêtre anti-doublon de 5 s.
+**a) Comptage de trames doublé.** La première validation annonçait « 60 trames en 10 min » : c'étaient
+**30 mesures publiées deux fois** (chaque compteur TX exactement 2×). Le recollage inter-captures
+s'appliquait à *toute* capture, y compris complète, et faisait relire la rafale PRÉCÉDENTE.
+Corrigé : décodage direct d'abord, recollage **uniquement entre deux morceaux** de rafale
+(`MAX_FRAGMENT_TIMINGS = 160` ; une rafale utile en fait 176 à 184).
 
-Correction (`esphome/components/vevor_7in1/vevor_7in1.cpp`, `esphome/includes/vevor_protocol.h`) :
-**décodage direct d'abord**, recollage **uniquement entre deux morceaux** de rafale
-(`MAX_FRAGMENT_TIMINGS = 160` ; mesuré : une rafale utile fait 176 à 184 impulsions). Éprouvé hors
-matériel — `tests/test_decoder.cpp` couvre maintenant la coupure nette, la coupure AU MILIEU d'une
-impulsion et le morceau isolé (**198 vérifications, 0 échec**).
+**b) Instrumentation SPI supprimée.** `sample_radio_()` était appelée dans `loop()` alors que son
+commentaire la disait désactivée, et comme `SPIDelegate::is_ready()` renvoie `true` même sans broche
+CS, elle publiait toutes les 10 s un faux `RSSI=-74.0 dBm (brut 0x00)`, `SLEEP`, `0 MHz`. Tout accès
+SPI depuis ce composant a été supprimé (composant, schéma, YAML).
 
-Second défaut corrigé : l'instrumentation SPI (`sample_radio_()`) était appelée dans `loop()` alors
-que son commentaire la disait désactivée, et comme `SPIDelegate::is_ready()` renvoie `true` même sans
-broche CS, elle publiait toutes les 10 s un faux `RSSI=-74.0 dBm (brut 0x00)`, `SLEEP`,
-`FREQ=0.00000 MHz` (60 lignes pendant la fenêtre de validation). Toute l'instrumentation SPI a été
-**supprimée** (composant, schéma, YAML) : c'est elle qui rendait la puce muette (voir §2).
+**c) Filet de tests et outillage.** Ancrage externe rtl_433 complété (vent, rafale, pluie, lux
+calculés à la main depuis la source), période et polarité désormais **assertées**, recollage couvert
+(**204 vérifications, 0 échec**). Contre-épreuve : la même erreur d'échelle de vent injectée dans
+l'encodeur Python **et** dans le C++ fait échouer la suite. `eval_frames.py` compare **trame par
+trame** le C++ et un décodeur Python indépendant ; `capture_logs.py` **écrase désormais** son fichier
+de sortie au lieu d'y ajouter (le mode AJOUT avait fait relire une fenêtre vidée comme si c'était la
+nouvelle — voir §3) ; `summarize_window.py` ne voyait aucune trame à cause des séquences ANSI.
 
-## 2. La cause des « 0 trame » historiques
+**d) Trames fausses mais bien formées.** Sur une fenêtre d'une heure, **2 trames sur 181** passaient
+en-tête + checksum + compteur et étaient pourtant fausses : décalage d'un bit à l'extraction, qui
+double les octets de valeur (direction 779°, pluie 178,2 mm au lieu de 59,2). Ajout d'une **porte de
+plausibilité** dans `vevor_protocol.h` (direction > 359°, humidité > 100 %, température hors −40..60,
+vent/rafale > 180 km/h, UV hors 0..16) → refus motivé, compté dans les rejets. Le test
+`test_plausibility` embarque **les deux trames fautives réelles**.
 
-Identifiée par **alternance témoin / notre firmware dans les mêmes fenêtres d'émission**
-(`tools/ab_cycle.py`, mesure conservée dans `evidence/ab_cycle.jsonl`) : notre composant déclarait un
-**second périphérique SPI** sur le bus du CC1101 (instrument de lecture des registres, `cs_pin` sur
-GPIO10). Avec : **0 capture RMT, 0 trame**. Sans : **5 trames/60 s**. Le firmware de référence n'a
-jamais eu qu'un seul périphérique sur ce bus.
+## 2. Le défaut principal : un démarrage sur deux lève la puce absente du bus SPI
 
-## 3. Ce qui est vérifié, et par quoi
+Mesuré sur **6 cycles** flash → 5 min, avec le même binaire : **sourd / sain / sourd / sain / sourd /
+sain** (0 trame contre 15). Dans les démarrages sourds, le composant relit `Chip ID: 0xFFFF` — **toutes
+les lectures SPI à 0xFF** : la puce ne répond pas sur le bus, n'est donc jamais configurée, reste en
+IDLE et ne produit rien sur GDO0.
 
-- **Décodage et cadence** : fenêtre d'une heure du firmware corrigé — voir
-  `evidence/rapport_fenetre_1h.json` (décodeur Python indépendant) et
-  `evidence/resume_fenetre_1h.json` (cadence, trous, rejets, plages de valeurs).
-- **Deux implémentations indépendantes comparées champ par champ** : `tools/eval_frames.py` compare,
-  trame par trame, les valeurs publiées par le C++ à celles de son propre décodeur ; le verdict
-  `PASS` exige cet accord **et** des valeurs plausibles (plages physiques + cohérence lux/UV) **et**
-  une avance de compteur TX conforme au temps écoulé **et** une cadence ~20 s. Un rapport qui contient
-  un constat ne peut plus conclure `PASS` (c'était le défaut du verdict précédent : `PASS` avec
-  « 59 ruptures de séquence » dans son propre corps).
-- **Ancrage externe du décodage** : la trame de référence de rtl_433 est vérifiée en dur dans
-  `tests/test_decoder.cpp`, valeurs **calculées à la main** depuis `rtl_433/src/devices/vevor_7in1.c`
-  (vent 13 ticks / 8,333 = 1,6 km/h, rafale 3 / 1,25 = 2,4 km/h, pluie 55 × 0,233 = 12,8 mm, lux
-  14 457). Contre-épreuve faite : injecter la même erreur d'échelle de vent dans l'encodeur Python
-  **et** dans le C++ fait désormais ÉCHOUER la suite (avant, elle passait 173/173).
-- **Recoupement par un second récepteur** : le firmware de référence, compilé et flashé par nous sur
-  la même carte, lisait la même station au même moment (T 17,5 °C, H 70-71 %, pluie 59,2 mm).
+- **Ré-armement à chaud** (`reset` + réglages + `begin_rx`) : **inefficace** (répété 9 fois, 9 échecs).
+- **Redémarrage** : **récupère** — l'état de la puce s'inverse d'un démarrage à l'autre, car elle
+  garde ses registres pendant que l'ESP32 redémarre.
+- La littérature TI décrit le même symptôme (« CC1101 not responding to SPI » : des 1 partout, la
+  puce finit par répondre si on insiste, quartz qui démarre tardivement) ; le composant ESPHome, lui,
+  lit `PARTNUM`/`VERSION` **une seule fois** puis se déclare en échec — il amplifie donc une condition
+  matérielle marginale en une session entièrement sourde.
 
-## 4. Fichiers
+**Correctif embarqué** (`esphome/vevor-7in1.yaml`) : état radio journalisé toutes les 20 s
+(`SANTE radio=ok|EN ECHEC trames=N captures=N`), 9 tentatives d'initialisation sur 3 min, puis
+**redémarrage automatique** — la station émettant **en continu toutes les 20 s, jour et nuit**
+(confirmé par l'utilisateur), tout silence prolongé est une panne du récepteur, sans ambiguïté. Après
+4 redémarrages rapprochés, la carte continue d'essayer à raison d'un par 30 min : elle ne renonce
+jamais, sans passer son temps à redémarrer. Bouton « Redémarrer la carte » ajouté.
 
-- Firmware : `esphome/vevor-7in1.yaml` ; binaire mesuré : `build/variants/nous_prod.ota.bin`
-  (non versionné — `build/` est ignoré par git, d'où `evidence/` pour les preuves synthétiques).
-- Preuves versionnées : `evidence/` (rapports JSON de la fenêtre d'une heure + `ab_cycle.jsonl`).
+## 3. Ce que j'ai affirmé à tort (et la règle qui en découle)
+
+- **« La station émet par bouffées, avec des phases de silence »** : FAUX. Les fenêtres vides de
+  11:36→12:36 et 13:53→14:53 étaient des **carte sourde**, pas des silences de la station (qui émet
+  en continu). Aggravant : la sonde du 13:53 comptait les trames d'un fichier ouvert en AJOUT (4
+  trames laissées par la sonde de 12:50) et a déclaré « station active » sur une carte déjà sourde.
+- **« Le binaire d'avant revue est muet parce qu'il touche au SPI »** : non concluant. Mesurer une
+  seule fenêtre par binaire ne vaut rien quand un démarrage sur deux est sourd — l'appariement
+  témoin/nous n'est fiable que sur **plusieurs tours** (l'effet « second périphérique SPI » des
+  mesures du matin reste établi, lui, par 6 tours alternés).
+- **Règle retenue** : ne jamais juger l'état d'un récepteur sur un seul démarrage ; soit le comparer
+  dans la MÊME fenêtre d'émission sur plusieurs tours, soit lire l'état embarqué (`SANTE radio=`).
+
+## 4. Ce qui est vérifié aujourd'hui, et par quoi
+
+| Preuve | Résultat |
+|---|---|
+| Fenêtre d'une heure, garde-fou actif (`evidence/rapport_fenetre_1h.json`) | **180 trames, 180 valides**, 0 échec de checksum, 0 échec de compteur, **verdict `PASS`** |
+| Accord C++ / décodeur Python indépendant | champ par champ sur les 180 trames, 0 désaccord |
+| Cadence et continuité | 179/179 intervalles entre 15 et 25 s (médiane 20,0 s), aucun trou > 30 s |
+| Compteur TX | avance conforme au temps écoulé : 0 doublon, 0 rafale manquée |
+| Plausibilité | pluie monotone (59,2 → 59,2 mm), aucune valeur impossible publiée |
+| Décodeur hors matériel | 204 vérifications, 0 échec, dont l'ancrage rtl_433 et le recollage |
+| Auto-guérison | redémarrage automatique déclenché à chaque session sourde mesurée |
+
+## 5. Fichiers
+
+- Firmware : `esphome/vevor-7in1.yaml` (+ `components/vevor_7in1/`, `includes/vevor_protocol.h`).
+- Preuves versionnées : `evidence/` — rapport de la fenêtre validée, rapport de la fenêtre **fautive**
+  conservé à part (`rapport_fenetre_1h_decalage.json`), comparaison A/B (`ab_cycle.jsonl`).
+- Outils : `tools/` (capture, évaluation, synthèse, balayage, A/B) et `build/` (scénarios de mesure).
 - Journal complet des itérations : `state/PROGRESS.md`.
 
-## 5. Suites ouvertes (dites franchement)
+## 6. Suites ouvertes (dites franchement)
 
-1. **La station émet par bouffées** (mesuré : ON 08:04-08:09, silence 43 min, ON 08:53-09:42+, …).
-   Toute mesure « 0 trame » doit être validée par un créneau témoin dans la MÊME fenêtre — c'est la
-   règle que ce projet a payée cher. Un contrôle physique de l'unité extérieure (pile /
-   supercondensateur, afficheur intérieur) reste recommandé.
-2. **Le mécanisme exact** par lequel un second périphérique SPI sur une broche CS libre rend la puce
-   muette n'est pas expliqué au niveau du pilote ESPHome : la cause est établie par la mesure.
-3. **Duplication d'outillage** : `key_from_yaml()` existe encore en plusieurs copies (sans bug connu
+1. **La cause du mutisme SPI au démarrage n'est pas expliquée au niveau matériel** : le symptôme est
+   établi (0xFF sur tout le bus, 1 démarrage sur 2) et le remède mesuré (redémarrage), mais départager
+   « quartz qui démarre tard » de « liaison SPI marginale » demande un test physique : **couper
+   vraiment l'alimentation** de la carte et vérifier que la puce répond à chaque fois. Si c'est le
+   quartz, la correction durable est d'alimenter le module CC1101 **par un GPIO**, pour que le
+   firmware le cycle en alimentation au lieu de jouer un redémarrage à pile ou face.
+2. **Duplication d'outillage** : `key_from_yaml()` existe encore en plusieurs copies (sans bug connu
    après vérification), et `maybe_await` en trois exemplaires — à factoriser dans `tools/_common.py`.
-4. Les variantes de diagnostic `vevor-7in1-v1/v2/v3.yaml` ont été **supprimées** (obsobètes, et
-   v1/v3 contenaient encore le second périphérique SPI — mauvais exemple à laisser dans le dépôt).
+3. Les variantes de diagnostic `vevor-7in1-v1/v2/v3.yaml` ont été **supprimées** (obsolètes, et v1/v3
+   contenaient encore le second périphérique SPI — mauvais exemple à laisser dans le dépôt).

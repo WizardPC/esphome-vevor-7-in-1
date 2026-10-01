@@ -249,6 +249,15 @@ vevor_7in1:
           id(uv_index).publish_state(f.uv_index);
           id(light_lux).publish_state(f.lux);
           ESP_LOGI("v7in1", "V7IN1 OK %s", vevor::to_json(f).c_str());
+globals:
+  # Compteur de redémarrages effectués alors que la puce était muette sur le bus SPI. PERSISTANT
+  # (restore_value) : c'est ce qui borne les tentatives, pour ne pas boucler indéfiniment sur un
+  # matériel réellement hors service. Remis à zéro dès qu'une trame est publiée.
+  - id: g_reboots_radio
+    type: int
+    restore_value: true
+    initial_value: "0"
+
 # Ré-armement radio : UNE seule implémentation, appelée par le bouton ET par la surveillance
 # automatique (interval de 60 s plus bas). C'est l'entrée en RX qui retente le verrouillage PLL
 # (cc1101.cpp : enter_calibrated_ avec PLL_LOCK_RETRIES) — donc le seul levier à chaud contre une
@@ -274,40 +283,60 @@ interval:
           id(valid_sensor).publish_state(id(vevor_rx).get_frames());
           id(rejected_sensor).publish_state(id(vevor_rx).get_rejected());
           id(duplicates_sensor).publish_state(id(vevor_rx).get_duplicates());
-  # SURVEILLANCE DE LA RADIO (60 s) — pourquoi : mesuré le 01/10, la carte se réveille SOURDE après
-  # certains OTA (0 capture pendant toute la session alors que la station émet). Cause trouvée dans
-  # cc1101.cpp (ESPHome 2026.9.1) : si l'entrée en RX échoue au démarrage, le composant se marque
-  # en échec et la puce reste en IDLE — plus rien sur GDO0. Ces lignes partent AVANT que l'API soit
-  # joignable, donc elles sont invisibles depuis l'extérieur : c'est ce qui a rendu le défaut
-  # difficile à voir. Ici on rend l'état lisible et la carte se répare seule.
-  - interval: 60s
+  # SURVEILLANCE DE LA RADIO (60 s) — mesuré le 01/10 : un démarrage sur deux lève la puce ABSENTE
+  # DU BUS SPI (le composant relit « Chip ID: 0xFFFF », toutes les lectures à 0xFF). Elle n'est
+  # alors jamais configurée, reste en IDLE, et rien n'arrive sur GDO0 — alors que la station émet.
+  # Le ré-armement à chaud est INEFFICACE (3 tentatives, 3 « Failed to verify » mesurés) ; le
+  # REDÉMARRAGE récupère (l'état de la puce s'inverse d'un démarrage à l'autre). Ces lignes
+  # partaient auparavant avant que l'API soit joignable : le défaut était invisible de l'extérieur.
+  #
+  # Le critère est le nombre de TRAMES PUBLIÉES, et non de captures : en état sourd il arrive
+  # encore quelques captures parasites (3 à 5 par fenêtre), qui remettaient à zéro un compteur
+  #   basé sur les captures — le redémarrage ne partait donc jamais (constaté sur une fenêtre de
+  #   9 minutes : 7 lignes « EN ECHEC », 0 redémarrage).
+  # Cadence 20 s : les tentatives d'initialisation rapprochées du mode 1 ont besoin d'être serrées.
+  - interval: 20s
     then:
       - lambda: |-
-          static uint32_t dernier = 0;
+          static uint32_t dernieres_trames = 0;
           static int muettes = 0;
-          const uint32_t c = id(vevor_rx).get_captures();
-          if (c != dernier) {
-            dernier = c;
+          const uint32_t t = id(vevor_rx).get_frames();
+          if (t != dernieres_trames) {
+            dernieres_trames = t;
             muettes = 0;
+            id(g_reboots_radio) = 0;   // la chaîne complète vit : plus de dette de tentatives
             return;
           }
           muettes++;
-          ESP_LOGI("v7in1", "SANTE radio=%s captures=%u muet depuis %d min",
-                   id(radio).is_failed() ? "EN ECHEC" : "ok", (unsigned) c, muettes);
-          // Ré-armement à chaud : tenté une fois, par acquit de conscience — mesuré le 01/10, il
-          // NE récupère PAS une puce muette (le composant relit Chip ID 0xFFFF : la puce ne répond
-          // pas sur le SPI du tout).
-          if (muettes == 3) {
-            ESP_LOGW("v7in1", "AUCUNE capture depuis %d min — ré-armement radio automatique",
-                     muettes);
+          ESP_LOGI("v7in1", "SANTE radio=%s trames=%u captures=%u (aucune trame depuis %d s)",
+                   id(radio).is_failed() ? "EN ECHEC" : "ok", (unsigned) t,
+                   (unsigned) id(vevor_rx).get_captures(), muettes * 20);
+          // Règle de base : cette station émet une rafale toutes les 20 s, JOUR ET NUIT (confirmé
+          // par l'utilisateur le 01/10). Un silence de plusieurs minutes est donc TOUJOURS une
+          // panne du récepteur — plus besoin de distinguer « station à l'arrêt » de « carte
+          // sourde », ce qui autorise un redémarrage sans conditions. Le journal garde la
+          // distinction (radio EN ECHEC = puce muette sur le SPI ; radio ok = chaîne RF/RMT), pour
+          // savoir ce qu'on répare.
+          if (muettes <= 9) {
+            // 3 minutes de tentatives d'initialisation douces — c'est ce que recommande le fil TI
+            // « CC1101 not responding to SPI » (le quartz démarre tardivement, la puce finit par
+            // répondre si on insiste) ; une tentative coûte 10 ms. Mesuré : inefficace en mode
+            // « puce muette », mais gratuit et parfois suffisant en mode « radio saine ».
+            ESP_LOGW("v7in1", "aucune trame depuis %d s — tentative d'initialisation radio %d/9",
+                     muettes * 20, muettes);
             id(rearmer_radio).execute();
+            return;
           }
-          // Redémarrage : c'est LUI qui récupère (mesuré : l'état de la puce s'inverse à chaque
-          // démarrage — sourd/sain/sourd/sain sur 3 cycles). Condition restrictive : uniquement si
-          // la radio s'avoue EN ÉCHEC, jamais pour une station simplement à l'arrêt.
-          if (muettes >= 8 && id(radio).is_failed()) {
-            ESP_LOGE("v7in1", "radio EN ÉCHEC (SPI muet) et aucune capture depuis %d min — "
-                              "redémarrage de la carte, seul remède mesuré", muettes);
+          // Redémarrage : seul remède mesuré au mutisme SPI (l'état de la puce s'inverse d'un
+          // démarrage à l'autre). Quatre tentatives rapprochées, puis on continue à une par 30 min
+          // — la carte ne cesse jamais d'essayer de revenir, sans pour autant passer son temps à
+          // redémarrer.
+          if (id(g_reboots_radio) < 4 || (muettes % 90) == 0) {
+            id(g_reboots_radio) = id(g_reboots_radio) + 1;
+            ESP_LOGE("v7in1", "aucune trame depuis %d min (radio %s, captures=%u) — redémarrage "
+                              "n°%d (seul remède mesuré)",
+                     muettes / 3, id(radio).is_failed() ? "EN ECHEC" : "ok",
+                     (unsigned) id(vevor_rx).get_captures(), (int) id(g_reboots_radio));
             App.safe_reboot();
           }
 

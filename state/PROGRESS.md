@@ -1217,3 +1217,27 @@ précédente s'est fait passer pour un résultat) → écrasement par défaut ; 
 voyait aucune trame à cause des séquences ANSI d'ESPHome → nettoyage ; et le garde-fou de
 plausibilité, vérifié par une fenêtre d'une heure complète : 180 trames, 180 valides, 0 échec de
 checksum, 0 désaccord C++/Python, pluie monotone, `verdict: PASS`.
+
+## Itération 14 — la station émet en continu : le garde-fou devient inconditionnel (01/10/2026)
+
+**Information donnée par l'utilisateur** : « la station émet en continu toutes les 20 s jour et nuit ».
+Elle lève l'ambiguïté qui bridait le garde-fou : un silence de plus de quelques minutes n'est jamais
+un arrêt de la station, c'est toujours une panne du récepteur. Il n'y a donc plus de raison de
+repousser le redémarrage à 20 min « au cas où la station serait à l'arrêt ».
+
+**Garde-fou final** (`esphome/vevor-7in1.yaml`) : état journalisé toutes les 20 s, 9 tentatives
+d'initialisation sur 3 min (gratuites, recommandées par le fil TI pour un quartz lent), puis
+redémarrage automatique — 4 fois de suite, puis un par 30 min sans jamais renoncer. Le compteur de
+tentatives est persistant et remis à zéro dès qu'une trame passe. La distinction « radio EN ECHEC »
+(puce muette sur le SPI) contre « radio ok » (chaîne RF/RMT) reste journalisée : elle sert à savoir
+ce qu'on répare, plus à décider s'il faut redémarrer.
+
+**Mesures intermédiaires qui ont mené là** (toutes consignées dans `logs/`) :
+- v2 (seuil 8 min sur les CAPTURES) : redémarrage déclenché 3/3 mais jamais là où il fallait — en
+  état sourd, quelques captures parasites remettaient le compteur à zéro (9 min, 7 lignes EN ECHEC,
+  0 redémarrage). Critère changé pour les TRAMES publiées.
+- v3 : 8 tentatives d'initialisation en 3 min, 0 redémarrage en phase A (seuil resté à 20 min) ;
+  les deux cycles sont restés sourds 21 min → confirme que les tentatives d'initialisation ne
+  récupèrent pas, seul le redémarrage le fait.
+- Un second mode de panne a été observé au passage : « radio=ok, captures=0 » pendant 10 min — la
+  puce répond au SPI, est configurée, et rien n'arrive au RMT. Il est traité par la même règle.
