@@ -104,6 +104,19 @@ tools/scan_freq.py --host 192.168.2.50 --start 867.8 --stop 868.6 --step 0.05 --
    (b) le **recollage de morceaux** n'est pas innocent : il ne s'applique qu'aux captures trop
    courtes pour porter une rafale, jamais à une rafale complète.
 
+7. **Un démarrage sur deux peut se lever la puce absente du bus SPI** — et rien ne le signale, sauf
+   un `captures=0` silencieux. Mesuré le 01/10 sur 6 cycles flash → mesure, même binaire :
+   sourd / sain / sourd / sain / sourd / sain. Dans les démarrages sourds, le composant relit
+   `Chip ID: 0xFFFF` (toutes les lectures SPI à `0xFF`) : la puce ne répond pas, n'est jamais
+   configurée, reste en IDLE d'usine et ne produit rien sur GDO0. Le ré-armement à chaud
+   (`reset` + réglages + `begin_rx`) **ne la récupère pas** (3 tentatives, 3 échecs) ; **le
+   redémarrage, oui** — l'état de la puce s'inverse à chaque boot, car la puce garde ses registres
+   pendant que l'ESP32 redémarre. D'où la surveillance embarquée : état radio journalisé chaque
+   minute, ré-armement à 3 min, et **redémarrage automatique à 8 min — uniquement si la radio
+   s'avoue en échec**, jamais pour une station simplement à l'arrêt. Ces lignes de diagnostic
+   partaient auparavant avant que l'API soit joignable : c'est ce qui a rendu le défaut si long à
+   voir.
+
 ## Auto-évaluation
 
 `tools/eval_frames.py` réimplémente le décodage en Python, indépendamment du C++ du firmware, et

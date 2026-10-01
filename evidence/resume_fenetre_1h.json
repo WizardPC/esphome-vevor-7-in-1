@@ -1,10 +1,10 @@
 {
-  "fichier": "logs/fenetre_1h_cond_20261001.log",
-  "lignes": 3719,
-  "trames_decodues": 181,
+  "fichier": "logs/verif_garde_fou_60min.log",
+  "lignes": 2223,
+  "trames_decodues": 180,
   "emissions_distinctes": 180,
-  "debut": "12:51:03",
-  "fin": "13:50:43",
+  "debut": "14:58:23",
+  "fin": "15:58:03",
   "duree_couverte_s": 3580,
   "cadence_mediane_s": 20,
   "cadence_min_s": 20,
@@ -16,42 +16,39 @@
     33995
   ],
   "temperature_C": [
-    19.0,
-    20.2
+    19.2,
+    19.9
   ],
   "humidite_pct": [
-    53,
-    60
+    54,
+    61
   ],
   "vent_kmh": [
-    0.0,
-    42.4
+    1.3,
+    13.4
   ],
   "rafale_kmh": [
-    1.6,
-    28.8
+    2.4,
+    16.8
   ],
   "pluie_mm": [
-    59.2,
-    178.2
+    59.2
   ],
   "uv": [
-    4,
-    5,
-    10,
-    12
+    1,
+    2
   ],
   "lux": [
-    11885,
-    65160
+    19890,
+    38160
   ],
   "emissions_par_10min": {
-    "770-780 min": 27,
-    "780-790 min": 30,
-    "790-800 min": 30,
-    "800-810 min": 30,
-    "810-820 min": 30,
-    "820-830 min": 30,
-    "830-840 min": 3
+    "890-900 min": 5,
+    "900-910 min": 30,
+    "910-920 min": 30,
+    "920-930 min": 30,
+    "930-940 min": 30,
+    "940-950 min": 30,
+    "950-960 min": 25
   }
 }

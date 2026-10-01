@@ -294,14 +294,20 @@ interval:
           muettes++;
           ESP_LOGI("v7in1", "SANTE radio=%s captures=%u muet depuis %d min",
                    id(radio).is_failed() ? "EN ECHEC" : "ok", (unsigned) c, muettes);
-          if (muettes == 3 || (muettes > 3 && (muettes % 6) == 0)) {
+          // Ré-armement à chaud : tenté une fois, par acquit de conscience — mesuré le 01/10, il
+          // NE récupère PAS une puce muette (le composant relit Chip ID 0xFFFF : la puce ne répond
+          // pas sur le SPI du tout).
+          if (muettes == 3) {
             ESP_LOGW("v7in1", "AUCUNE capture depuis %d min — ré-armement radio automatique",
                      muettes);
             id(rearmer_radio).execute();
           }
-          if (muettes >= 30 && id(radio).is_failed()) {
-            ESP_LOGE("v7in1", "radio EN ÉCHEC et muette depuis %d min — redémarrage de la carte",
-                     muettes);
+          // Redémarrage : c'est LUI qui récupère (mesuré : l'état de la puce s'inverse à chaque
+          // démarrage — sourd/sain/sourd/sain sur 3 cycles). Condition restrictive : uniquement si
+          // la radio s'avoue EN ÉCHEC, jamais pour une station simplement à l'arrêt.
+          if (muettes >= 8 && id(radio).is_failed()) {
+            ESP_LOGE("v7in1", "radio EN ÉCHEC (SPI muet) et aucune capture depuis %d min — "
+                              "redémarrage de la carte, seul remède mesuré", muettes);
             App.safe_reboot();
           }
 
@@ -329,6 +335,10 @@ button:
         # bouton et la surveillance automatique doivent réarmer EXACTEMENT pareil, sinon on ne sait
         # plus ce qu'on a testé.
         - script.execute: rearmer_radio
+  # Redémarrage à la demande. Utile parce que c'est LE remède mesuré au mutisme SPI (l'état de la
+  # puce s'inverse à chaque démarrage) : sans ce bouton, il fallait reflasher pour redémarrer.
+  - platform: restart
+    name: "Redémarrer la carte"
 number:
   - platform: template
     name: "Fréquence CC1101"

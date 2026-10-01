@@ -1175,3 +1175,45 @@ dans les rejets) + test `test_plausibility` avec **les deux trames réelles faut
 **Corrigé aussi** : `tools/summarize_window.py` affichait « AUCUNE trame décodée » sur une fenêtre de
 181 trames — ESPHome colore ses lignes, et les motifs ancrés en fin de ligne ne correspondaient
 jamais à cause des séquences ANSI. Nettoyage ANSI ajouté avant analyse.
+
+## Itération 13 — le vrai défaut : un démarrage sur deux lève la puce absente du bus SPI (01/10/2026)
+
+**Point de départ.** L'utilisateur a contesté mon explication « la station est en phase de silence » :
+« il n'y a pas de raison que la station arrête d'émettre juste pendant les tests, c'est que la sonde
+ne capte plus rien après un OTA. Peut-être forcer un reboot pour la récupérer. » Il avait raison.
+
+**Preuve que ma conclusion était fausse.** La sonde du 13:53:38 comptait les trames dans un fichier
+ouvert en AJOUT : elle a compté les 4 trames laissées par la sonde de 12:50 et conclu « station
+active ». La capture d'une heure qui a suivi affichait `captures=0` dès sa première seconde : aucune
+livraison du RMT, donc ni décodage ni rejet — la carte, pas la station.
+
+**Mesure du taux (6 cycles flash → 5 min de capture, même binaire d8e6152d)** : sourd / sain /
+sourd / sain / sourd / sain — **alternance stricte, 3 cycles sur 3**, 0 trame contre 15 trames.
+Ce n'est pas aléatoire : chaque démarrage inverse l'état de la puce (elle garde ses registres quand
+l'ESP32 redémarre).
+
+**Cause, lue dans le journal embarqué** (ré-armement automatique déclenché par le firmware) :
+```
+[D][cc1101:148]: CC1101 found! Chip ID: 0xFFFF
+[E][cc1101:150]: Failed to verify CC1101.
+[W][cc1101:279]: Failed to enter RX state!
+```
+`0xFFFF` = **toutes les lectures SPI à 0xFF : la puce ne répond pas sur le bus**. Elle n'est donc
+jamais configurée, reste en IDLE d'usine, et GDO0 ne sort rien. Ni PLL, ni RMT, ni station.
+
+**Ce qui répare, ce qui ne répare pas (mesuré)**
+- ré-armement à chaud (`reset` + réglages + `begin_rx`) : **inefficace** (3 tentatives, 3 fois
+  « Failed to verify ») ;
+- redémarrage : **efficace** — c'est lui qui inverse l'état (sourd → sain à chaque fois).
+
+**Correctif (firmware, autonome)** : état radio journalisé chaque minute (`SANTE radio=ok|EN ECHEC
+captures=N muet depuis M min`), ré-armement automatique à 3 min, **redémarrage automatique à 8 min
+si et seulement si la radio s'avoue en échec** (jamais si la station est simplement à l'arrêt, sinon
+les captures longues seraient sabotées), plus un bouton « Redémarrer la carte » pour ne plus dépendre
+d'un reflash.
+
+**Corrigé au passage** : `capture_logs.py` écrivait en AJOUT (une fenêtre vide relue sur la
+précédente s'est fait passer pour un résultat) → écrasement par défaut ; `summarize_window.py` ne
+voyait aucune trame à cause des séquences ANSI d'ESPHome → nettoyage ; et le garde-fou de
+plausibilité, vérifié par une fenêtre d'une heure complète : 180 trames, 180 valides, 0 échec de
+checksum, 0 désaccord C++/Python, pluie monotone, `verdict: PASS`.
