@@ -1,0 +1,41 @@
+# Fichier d'appoint — UN SEUL usage : téléverser un binaire par OTA vers une carte dont l'OTA
+# n'exige aucune clé (cas d'une carte flashée avec un firmware tiers, comme le témoin).
+#
+# Pourquoi il existe : ESPHome définit le chiffrement OTA à partir du bloc `ota:` de la
+# configuration UTILISÉE pour le téléversement (esphome/components/esphome/ota/__init__.py :
+# `USE_OTA_ENCRYPTION` n'est défini que si `encryption:` est présent dans le `ota:`). Notre
+# `vevor-7in1.yaml` déclare `encryption: {}` (il hérite donc de la clé API) : utilisé pour
+# téléverser, il PROPOSE le chiffrement et la carte sans clé refuse la poignée de main.
+# Ce fichier décrit le même appareil SANS `encryption:` dans `ota:` → le téléversement part en
+# clair, comme l'attend la carte.
+#
+# On ne construit rien depuis ce fichier (il ne contient pas le composant radio) : on passe
+# `--file` avec le binaire déjà construit par vevor-7in1.yaml.
+#
+# Usage :
+#   .venv/bin/esphome upload esphome/flash-plain.yaml --device 172.16.0.205 \
+#       --file esphome/.esphome/build/vevor-7in1/build/firmware.ota.bin
+
+esphome:
+  name: vevor-7in1
+  friendly_name: Station Vevor 7-en-1
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: arduino
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_key
+  reboot_timeout: 0s
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  use_address: 172.16.0.205

@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""Résume un ensemble de captures de balayage (un fichier par palier de fréquence).
+
+Chaque palier est jugé sur ce qui compte vraiment : le nombre de trames RÉELLEMENT extraites
+du flux démodulé (ligne « trame extraite » du composant), et non le nombre de captures RMT —
+le bruit en fabrique aussi. Les compteurs « captures » et « plus longue » sont reportés pour
+diagnostiquer l'instrument, pas pour conclure sur le signal.
+
+Usage:
+    tools/sweep_summary.py "logs/sweep1_frozen/*.log" --out logs/sweep1_summary.json
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import pathlib
+import re
+import sys
+
+FREQ_RE = re.compile(r"sweepas_([0-9.]+)\.log$")
+CAP_RE = re.compile(r"captures=(\d+) \(\+(\d+)\), trames=(\d+), dernières impulsions=(\d+), plus longue=(\d+)")
+
+
+def analyse(p: pathlib.Path) -> dict:
+    txt = p.read_text(encoding="utf-8", errors="replace")
+    caps = CAP_RE.findall(txt)
+    lignes = [l for l in txt.splitlines() if l.strip()]
+    m = FREQ_RE.search(p.name)
+    return {
+        "log": p.name,
+        "freq_mhz": float(m.group(1)) if m else None,
+        "extraites": txt.count("trame extraite"),
+        "trames_raw": txt.count("V7IN1 RAW"),
+        "trames_valides": txt.count("V7IN1 OK"),
+        "captures_fin": int(caps[-1][0]) if caps else None,
+        "captures_delta": sum(int(c[1]) for c in caps),
+        "trames_compteur": int(caps[-1][2]) if caps else 0,
+        "impulsions_max": max((int(c[4]) for c in caps), default=None),
+        "horodatage_debut": lignes[0][1:9] if lignes and lignes[0].startswith("[") else None,
+        "horodatage_fin": lignes[-1][1:9] if lignes and lignes[-1].startswith("[") else None,
+    }
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("glob")
+    ap.add_argument("--out", default=None)
+    args = ap.parse_args()
+
+    rows = [analyse(p) for p in sorted(pathlib.Path(".").glob(args.glob))]
+    rows.sort(key=lambda r: (r["freq_mhz"] is None, r["freq_mhz"]))
+
+    print(f"{'MHz':>8}  {'extraites':>9}  {'capt.delta':>10}  {'imp.max':>8}  {'debut':>8}  {'fin':>8}")
+    for r in rows:
+        print(f"{r['freq_mhz'] if r['freq_mhz'] is not None else '-':>8}  {r['extraites']:>9}  "
+              f"{r['captures_delta']:>10}  {r['impulsions_max'] if r['impulsions_max'] is not None else '-':>8}  "
+              f"{r['horodatage_debut'] or '-':>8}  {r['horodatage_fin'] or '-':>8}")
+
+    total_ext = sum(r["extraites"] for r in rows)
+    total_cap = sum(r["captures_delta"] for r in rows)
+    avec_captures = [r["freq_mhz"] for r in rows if r["captures_delta"]]
+    print(f"\nTOTAL extraites={total_ext} sur {len(rows)} paliers ; captures RMT cumulées={total_cap}")
+    print(f"paliers avec au moins une capture RMT : {len(avec_captures)}/{len(rows)} "
+          f"({', '.join(str(f) for f in avec_captures if f is not None)})")
+    print("VERDICT : " + ("AUCUNE trame extraite sur toute la plage balayée"
+                          if total_ext == 0 else f"{total_ext} trame(s) extraite(s) — à examiner"))
+
+    if args.out:
+        pathlib.Path(args.out).write_text(
+            json.dumps({"rows": rows, "total_extraites": total_ext,
+                        "captures_rmt_cumulees": total_cap}, indent=1, ensure_ascii=False),
+            encoding="utf-8")
+        print(f"# rapport écrit: {args.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

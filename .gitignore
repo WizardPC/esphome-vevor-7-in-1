@@ -1,3 +1,45 @@
+# === Secrets : ne JAMAIS publier ===
+.ha_token
+esphome/secrets.yaml
+secrets.yaml
+*.secret.yaml
+
+# === Environnements et caches de build (le .esphome généré contient la config compilée,
+#     donc les mots de passe Wi-Fi et les clés API en clair) ===
+.venv/
+.venv-dev/
+esphome/.esphome/
+*.bin
+*.elf
+*.map
+
+# === Artefacts de build (binaires et journaux de compilation : régénérables) ===
+build/test_decoder
+build/*.log
+build/.build_flash.lock
+
+# === Python ===
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# === Sauvegardes et divers ===
+*.bak
+*.bak-*
+*.orig
+*.tmp
+.tmp_*
+state/.tmp_entry.md
+
+# === Journaux de mesure bruts (2,4 Mo de captures) : hors dépôt par défaut.
+#     Les preuves retenues sont dans state/ (PROGRESS.md, DONE.md) et les rapports JSON.
+logs/
+!logs/.gitkeep
+
+# === Sorties de build (journaux de compilation, statuts, binaires de test) ===
+build/
+
+# === Modèle C/C++ fourni par GitHub à la création du dépôt (conservé) ===
 # Prerequisites
 *.d
 
