@@ -112,6 +112,16 @@ void CC1101Component::setup() {
   }
 
   this->configure();
+  if (this->state_.VERSION == 0 || this->state_.PARTNUM == 0xFF) {
+    // La puce ne répond pas encore : on ne renonce NI ne bloque. Relectures depuis loop(),
+    // une toutes les 250 ms pendant au plus 15 s (budget 60), sans jamais dépasser le watchdog.
+    this->retry_budget_ = 60;
+    this->next_retry_ms_ = millis() + 250;
+    ESP_LOGW(TAG, "puce absente du bus SPI au démarrage — %u relectures non bloquantes prévues "
+                  "(la datasheet dit que CHIP_RDYn reste haut tant que l'alimentation et le quartz "
+                  "ne sont pas stabilisés)", (unsigned) this->retry_budget_);
+    return;
+  }
   if (this->is_failed()) {
     return;
   }
@@ -156,7 +166,7 @@ void CC1101Component::configure() {
   // CHIP_RDYn pour distinguer « puce pas prête » de « liaison SPI muette ».
   uint8_t tentatives = 0;
   uint8_t chip_rdy_haute = 0;
-  while (tentatives < 20) {
+  while (tentatives < 4) {
     tentatives++;
     const uint8_t status = this->read_status_();
     if ((status & 0x80) != 0) {
@@ -170,16 +180,17 @@ void CC1101Component::configure() {
                (unsigned) tentatives, this->chip_id_, status, (unsigned) chip_rdy_haute);
       break;
     }
-    ESP_LOGW(TAG, "CC1101 muet sur le SPI — lecture %u/20 (Chip ID: 0x%04X, status 0x%02X) : %s",
+    ESP_LOGW(TAG, "CC1101 muet sur le SPI — lecture %u/4 (Chip ID: 0x%04X, status 0x%02X) : %s",
              (unsigned) tentatives, this->chip_id_, status,
              (status & 0x80) != 0 ? "CHIP_RDYn HAUT = alimentation ou quartz pas prêts"
                                   : "CHIP_RDYn bas = puce prête, donc liaison SPI en cause");
-    delay(250);
+    delay(50);
   }
   if (this->state_.VERSION == 0 || this->state_.PARTNUM == 0xFF) {
-    ESP_LOGE(TAG, "Failed to verify CC1101 après %u relectures (%u fois CHIP_RDYn haut).",
+    // PAS de mark_failed() ici : l'échec est peut-être transitoire (puce pas encore prête, cf.
+    // CHIP_RDYn). C'est setup() qui décide — relectures non bloquantes depuis loop(), budget 15 s.
+    ESP_LOGE(TAG, "identité CC1101 illisible après %u relectures (%u fois CHIP_RDYn haut)",
              (unsigned) tentatives, (unsigned) chip_rdy_haute);
-    this->mark_failed();
     return;
   }
 
@@ -192,6 +203,44 @@ void CC1101Component::configure() {
     this->write_(static_cast<Register>(i));
   }
   this->set_output_power(this->output_power_requested_);
+
+  // MODIFICATION LOCALE — CONTRÔLE DES ÉCRITURES (relire ce qu'on vient d'écrire).
+  //
+  // Pourquoi : sur ce montage, il arrive que la puce réponde à la lecture d'identité (0x0014) et se
+  // déclare prête (CHIP_RDYn bas), mais ne reçoive RIEN — et un balayage de ±100 kHz autour de la
+  // fréquence nominale ne ramène AUCUNE trame. Un décalage de quartz aurait été rattrapé par ce
+  // balayage ; son échec total désigne les écritures de configuration : si elles ne prennent pas,
+  // la puce reste sur sa configuration d'usine et ne reçoit à aucune fréquence. Sans cette
+  // comparaison, « configuration appliquée » et « configuration ignorée » se ressemblent exactement.
+  {
+    struct Surveille {
+      Register reg;
+      const char *nom;
+    };
+    const Surveille surveilles[] = {
+        {Register::FREQ2, "FREQ2"},     {Register::FREQ1, "FREQ1"},     {Register::FREQ0, "FREQ0"},
+        {Register::MDMCFG4, "MDMCFG4"}, {Register::MDMCFG3, "MDMCFG3"}, {Register::MDMCFG2, "MDMCFG2"},
+        {Register::PKTCTRL0, "PKTCTRL0"}, {Register::IOCFG0, "IOCFG0"}};
+    uint8_t ecarts = 0;
+    for (const auto &s : surveilles) {
+      const uint8_t voulu = this->state_.regs()[static_cast<uint8_t>(s.reg)];
+      this->read_(s.reg);
+      const uint8_t lu = this->state_.regs()[static_cast<uint8_t>(s.reg)];
+      if (lu != voulu) {
+        ecarts++;
+        ESP_LOGE(TAG, "ECRITURE NON PRISE %s : ecrit 0x%02X, relu 0x%02X", s.nom, voulu, lu);
+      } else {
+        ESP_LOGI(TAG, "registre %s : ecrit 0x%02X, relu 0x%02X (conforme)", s.nom, voulu, lu);
+      }
+    }
+    if (ecarts == 0) {
+      ESP_LOGI(TAG, "controle des ecritures : les %u registres surveilles sont conformes",
+               (unsigned) (sizeof(surveilles) / sizeof(surveilles[0])));
+    } else {
+      ESP_LOGE(TAG, "controle des ecritures : %u registre(s) NON pris — la configuration radio n'est "
+                    "pas celle demandee", (unsigned) ecarts);
+    }
+  }
 
   if (!this->enter_rx_()) {
     this->mark_failed();
@@ -206,7 +255,48 @@ void CC1101Component::call_listeners_(const std::vector<uint8_t> &packet, float 
   this->packet_trigger_.trigger(packet, freq_offset, rssi, lqi);
 }
 
+// MODIFICATION LOCALE — relecture NON BLOQUANTE de l'identité de la puce, appelée depuis loop().
+// Une tentative par tranche de 250 ms, budget borné : le pendant de la boucle RadioLib (10
+// relectures espacées de 10 ms), mais sans jamais immobiliser la boucle principale — une boucle
+// bloquante de plusieurs secondes dans setup() fait planter l'ESP32 (watchdog de tâche).
+void CC1101Component::retry_radio_init_() {
+  const uint32_t now = millis();
+  if (now < this->next_retry_ms_) {
+    return;
+  }
+  this->next_retry_ms_ = now + 250;
+  this->retry_budget_--;
+
+  const uint8_t status = this->read_status_();
+  this->read_(Register::PARTNUM);
+  this->read_(Register::VERSION);
+  this->chip_id_ = encode_uint16(this->state_.PARTNUM, this->state_.VERSION);
+
+  if (this->state_.VERSION != 0 && this->state_.PARTNUM != 0xFF) {
+    ESP_LOGI(TAG, "CC1101 trouvé après relecture (Chip ID: 0x%04X, status 0x%02X) — configuration",
+             this->chip_id_, status);
+    this->configure();  // configuration complète + entrée en RX
+    this->retry_budget_ = 0;
+    return;
+  }
+  ESP_LOGW(TAG, "puce toujours muette sur le SPI (Chip ID: 0x%04X, status 0x%02X) : %s — "
+                "relectures restantes %u",
+           this->chip_id_, status,
+           (status & 0x80) != 0 ? "CHIP_RDYn HAUT = alimentation ou quartz pas prêts"
+                                : "CHIP_RDYn bas = puce prête, liaison SPI en cause",
+           (unsigned) this->retry_budget_);
+  if (this->retry_budget_ == 0) {
+    ESP_LOGE(TAG, "échec définitif : puce absente du bus SPI après 15 s de relectures");
+    this->mark_failed();
+    this->disable_loop();
+  }
+}
+
 void CC1101Component::loop() {
+  if (this->retry_budget_ > 0) {
+    this->retry_radio_init_();
+    return;
+  }
   this->disable_loop();
   if (this->state_.PKT_FORMAT != static_cast<uint8_t>(PacketFormat::PACKET_FORMAT_FIFO) || this->gdo0_pin_ == nullptr ||
       !this->gdo0_pin_->digital_read()) {

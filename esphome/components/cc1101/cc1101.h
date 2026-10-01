@@ -96,6 +96,10 @@ class CC1101Component final : public Component,
  protected:
   uint16_t chip_id_{0};
   bool initialized_{false};
+  // MODIFICATION LOCALE : relectures non bloquantes de l'identité de la puce (voir cc1101.cpp).
+  uint8_t retry_budget_{0};
+  uint32_t next_retry_ms_{0};
+  void retry_radio_init_();
 
   float output_power_requested_{10.0f};
   float output_power_effective_{10.0f};
