@@ -77,7 +77,7 @@ jamais, sans passer son temps à redémarrer. Bouton « Redémarrer la carte » 
 | Compteur TX | avance conforme au temps écoulé : 0 doublon, 0 rafale manquée |
 | Plausibilité | pluie monotone (59,2 → 59,2 mm), aucune valeur impossible publiée |
 | Décodeur hors matériel | 204 vérifications, 0 échec, dont l'ancrage rtl_433 et le recollage |
-| Auto-guérison | redémarrage automatique déclenché à chaque session sourde mesurée |
+| Auto-guérison | essai 1 (démarrage sourd) : **0 trame** puis redémarrage automatique à 3 min, encore sourd, second redémarrage, et **21 trames retrouvées sans intervention** ; essai 2 (démarrage sain) : 15 puis 36 trames, cadence normale |
 
 ## 5. Fichiers
 

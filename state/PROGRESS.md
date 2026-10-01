@@ -1241,3 +1241,18 @@ ce qu'on répare, plus à décider s'il faut redémarrer.
   récupèrent pas, seul le redémarrage le fait.
 - Un second mode de panne a été observé au passage : « radio=ok, captures=0 » pendant 10 min — la
   puce répond au SPI, est configurée, et rien n'arrive au RMT. Il est traité par la même règle.
+
+## Itération 15 — auto-guérison mesurée de bout en bout (01/10/2026, binaire 6706e62f)
+
+Deux cycles `flash → 5 min → 12 min`, avec le garde-fou final :
+
+- **essai 1 — démarrage sourd, récupéré sans intervention** : phase A = 0 trame, 8 tentatives
+  d'initialisation, **1 redémarrage automatique à 3 min**. Phase B : 10 tentatives puis un second
+  redémarrage, puis **21 trames**. La carte est donc revenue seule en deux redémarrages, sans
+  personne et sans reflash — c'est exactement ce que demandait l'utilisateur (« forcer un reboot
+  pour la récupérer »), automatisé.
+- **essai 2 — démarrage sain** : phase A = 15 trames, phase B = 36 trames, aucun redémarrage,
+  aucune tentative d'initialisation. Cadence normale (3 trames/minute = une tous les 20 s).
+
+Total de la séquence : 72 trames reçues pendant les 34 minutes de l'expérience, dont aucune perdue
+après récupération. Le binaire mesuré (6706e62f) est celui flashé sur la carte.
