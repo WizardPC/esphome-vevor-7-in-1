@@ -11,13 +11,17 @@ Usage : tools/boot_probe.py temoin nous_v0 nous_v1 nous_v3
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-TEMOIN = pathlib.Path("/home/hermes/projets/_temoins")
+# Dossier (HORS dépôt) où est construit le firmware de référence servant de témoin.
+# Paramétrable : VEVOR_TEMOIN_DIR=/chemin/vers/_temoins tools/ab_cycle.py ...
+TEMOIN = pathlib.Path(os.environ.get("VEVOR_TEMOIN_DIR",
+                                     str(pathlib.Path.home() / "projets" / "_temoins")))
 ESPHOME = ROOT / ".venv" / "bin" / "esphome"
 PY = ROOT / ".venv" / "bin" / "python"
 HOST = "172.16.0.205"
@@ -25,15 +29,13 @@ HOST = "172.16.0.205"
 VARIANTS = {
     "temoin": (TEMOIN / "witness-test", "witness.yaml",
                TEMOIN / "witness-test/.esphome/build/vevor-weather-station/build/firmware.ota.bin"),
-    "nous_v0": (ROOT / "esphome", "vevor-7in1.yaml", ROOT / "build/variants/nous_v0.ota.bin"),
-    "nous_v1": (ROOT / "esphome", "vevor-7in1-v1.yaml", ROOT / "build/variants/nous_v1.ota.bin"),
-    "nous_v3": (ROOT / "esphome", "vevor-7in1-v3.yaml", ROOT / "build/variants/nous_v3.ota.bin"),
+    "prod": (ROOT / "esphome", "vevor-7in1.yaml", ROOT / "build/variants/nous_prod.ota.bin"),
 }
 
 INTERESTING = re.compile(
     r"CC1101 found|Failed to verify|marked as failed|is_failed|Failed to enter|PLL|"
     r"V7IN1 BOOT|Registered with remote_receiver|Vevor 7-in-1|rf_raw|\[84CB\]|"
-    r"Remote Receiver|MARCSTATE|RF Mode|RX |rx_|BOOT",
+    r"Remote Receiver|Captures RMT|rx_|BOOT",
     re.I)
 
 
@@ -48,9 +50,11 @@ def main() -> int:
         out = proc.stdout + proc.stderr
         print("flash:", "OK" if "OTA successful" in out else f"FAIL ({proc.returncode})", flush=True)
         # capture IMMÉDIATE (aucune attente) : on veut le setup dans le tampon de logs
-        subprocess.run([str(PY), str(ROOT / "tools" / "capture_logs.py"),
-                        "--host", HOST, "--seconds", "40", "--out", str(log)],
-                       capture_output=True, text=True, timeout=120)
+        cap = subprocess.run([str(PY), str(ROOT / "tools" / "capture_logs.py"),
+                              "--host", HOST, "--seconds", "40", "--out", str(log)],
+                             capture_output=True, text=True, timeout=120)
+        if cap.returncode != 0:
+            print(f"  !! capture en échec (code {cap.returncode}) — rien à conclure", flush=True)
         text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
         keep = [l for l in text.splitlines() if INTERESTING.search(l)]
         for line in keep[:25]:

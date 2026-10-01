@@ -1,0 +1,6 @@
+# Dépendances de l'agent / des outils (ce qui tourne sur la machine qui pilote la carte).
+# Le firmware lui-même n'a besoin que d'ESPHome pour compiler.
+esphome==2026.9.1
+aioesphomeapi>=30.0
+# Tests hors matériel (C++ compilé sans carte) : compilateur embarqué dans un venv séparé.
+#   python -m venv .venv-dev && .venv-dev/bin/pip install ziglang

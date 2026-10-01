@@ -73,8 +73,18 @@ static void test_vectors() {
 }
 
 // --- 2. La trame de référence de rtl_433, attendue en dur ----------------------------------
+// Les valeurs attendues ci-dessous sont calculées À LA MAIN à partir du code de rtl_433
+// (src/devices/vevor_7in1.c, fonctions relues le 01/10/2026) et des octets de la trame : c'est
+// l'ANCRAGE EXTERNE du décodage. Sans lui, une erreur de formule présente à la fois dans
+// l'encodeur Python (tests/frames.py) et dans le C++ passerait toute la suite — mesuré : une
+// échelle de vent fausse (8,333 → 3,0) recopiée des deux côtés laissait les 173 vérifications au
+// vert. Détail du calcul, octets utiles après les -1 sur les octets 8, 9, 11, 12, 13, 14, 16, 17 :
+//   vent   = ((b8<<8)|b9) / 8,333f  = 13 / 8,333   = 1,56 km/h
+//   rafale = b10 / 1,25f            = 3 / 1,25     = 2,4 km/h
+//   pluie  = ((b13<<8)|b14) * 0,233f = 55 * 0,233  = 12,8 mm
+//   lux    = (b16<<8)|b17, ×10 si le bit 15 est posé = 14 457 lx
 static void test_rtl433_reference() {
-  printf("Trame de référence rtl_433 (valeurs vérifiables à la main)\n");
+  printf("Trame de référence rtl_433 (valeurs calculées à la main depuis la source rtl_433)\n");
   const uint8_t raw[21] = {0xaa, 0x00, 0xf8, 0xf7, 0x9d, 0x02, 0xe3, 0x32, 0x01, 0x0e, 0x03,
                            0x02, 0x0b, 0x01, 0x38, 0x02, 0x39, 0x7a, 0x86, 0xe0, 0x87};
   vevor::Frame f;
@@ -83,8 +93,10 @@ static void test_rtl433_reference() {
   expect(f.id == 0xf8f7, "id = 0xf8f7");
   expect(f.temp_c > 23.8f && f.temp_c < 24.0f, "température = 23,9 °C");
   expect(f.humidity == 50, "humidité = 50 %");
+  expect_near(f.wind_kmh, 1.6f, 0.06f, "vent = 1,6 km/h (13 ticks / 8,333f)");
+  expect_near(f.gust_kmh, 2.4f, 0.06f, "rafale = 2,4 km/h (3 ticks / 1,25f)");
   expect(f.wind_dir_deg == 266, "direction = 266°");
-  expect(f.rain_mm > 12.7f && f.rain_mm < 12.9f, "pluie = 12,8 mm");
+  expect_near(f.rain_mm, 12.8f, 0.06f, "pluie = 12,8 mm (55 ticks × 0,233f)");
   expect(f.uv_index == 1, "UV = 1");
   expect(f.lux == 14457, "luminosité = 14 457 lx");
   expect(f.tx_counter == 0x86, "compteur TX = 0x86");
@@ -167,9 +179,88 @@ static void test_pulse_chain() {
     expect(f.id == s.id, name + " : id");
     expect_near(f.temp_c, s.temp_c, 0.06f, name + " : température");
     expect_near(f.rain_mm, s.rain_mm, 0.06f, name + " : pluie");
+    // Période et polarité retenues : les AFFICHER ne prouve rien, il faut les éprouver. Les
+    // scénarios nominaux doivent sortir à 90 µs en polarité normale, et le scénario à polarité
+    // inversée doit réellement sortir inversé — sinon la bascule de polarité n'est pas testée.
+    expect(period_used == 90, name + " : période bit retenue = 90 us");
+    const bool want_inverted = name.find("polarite_inversee") != std::string::npos;
+    expect(inverted == want_inverted,
+           name + " : polarité retenue " + (inverted ? "inversée" : "normale"));
     printf("    %-30s période retenue %d us, polarité %s\n", s.name, (int) period_used,
            inverted ? "inversée" : "normale");
   }
+}
+
+// --- 6. Recollage de deux morceaux de rafale -------------------------------------------------
+// Ce que le RMT livre réellement quand sa mémoire matérielle (96 symboles) est pleine : DEUX
+// morceaux. La coupure tombe à une frontière d'impulsion ou au milieu d'une impulsion — dans ce
+// second cas les deux moitiés ont le même signe et doivent être additionnées. Recoller en revanche
+// une rafale ENTIÈRE devant la suivante est l'erreur qui a fait publier 60 trames pour 31 mesures
+// distinctes le 01/10 (chaque compteur TX deux fois) : d'où le seuil MAX_FRAGMENT_TIMINGS,
+// éprouvé ici aussi.
+static void test_stitching() {
+  printf("Recollage de deux morceaux de rafale (coupure du RMT)\n");
+  const VevorPulseScenario *nominal = nullptr;
+  for (int i = 0; i < VEVOR_PULSE_COUNT; i++) {
+    if (std::strcmp(VEVOR_PULSE_VECTORS[i].name, "impulsions_nominales") == 0) {
+      nominal = &VEVOR_PULSE_VECTORS[i];
+    }
+  }
+  expect(nominal != nullptr, "le scénario nominal de référence existe");
+  if (nominal == nullptr) {
+    return;
+  }
+
+  const int32_t *full = nominal->timings;
+  const size_t n = nominal->count;
+  std::vector<uint8_t> bits(vevor::MAX_BITS);
+  int32_t out[512];
+  uint8_t raw[vevor::FRAME_BYTES];
+  int32_t period_used = 0;
+  bool inverted = false;
+
+  // (1) coupure NETTE, à une frontière d'impulsion (signes différents à la soudure)
+  size_t k = n / 2;
+  while (k > 1 && k + 1 < n && (full[k - 1] >= 0) == (full[k] >= 0)) {
+    k++;
+  }
+  size_t m = vevor::stitch_fragments(full, k, full + k, n - k, out, 512);
+  expect(m == n && std::memcmp(out, full, n * sizeof(int32_t)) == 0,
+         "coupure nette : le recollage redonne exactement la rafale d'origine");
+  expect(vevor::decode_timings(out, m, vevor::PERIOD_CANDIDATES, vevor::PERIOD_CANDIDATE_COUNT,
+                               bits.data(), bits.size(), raw, &period_used, &inverted),
+         "coupure nette : la trame est retrouvée après recollage");
+
+  // (2) coupure AU MILIEU d'une impulsion : les deux moitiés ont le même signe et sont réunies
+  size_t j = 0;
+  for (size_t i = n / 3; i < n; i++) {
+    if (full[i] > 170 || full[i] < -170) {
+      j = i;
+      break;
+    }
+  }
+  expect(j != 0, "une impulsion de plusieurs bits a été trouvée pour la couper en deux");
+  if (j == 0) {
+    return;
+  }
+  std::vector<int32_t> a(full, full + j + 1);
+  std::vector<int32_t> b;
+  a[j] = full[j] / 2;              // première moitié
+  b.push_back(full[j] - a[j]);     // seconde moitié, MÊME signe
+  b.insert(b.end(), full + j + 1, full + n);
+  m = vevor::stitch_fragments(a.data(), a.size(), b.data(), b.size(), out, 512);
+  expect(m == n && std::memcmp(out, full, n * sizeof(int32_t)) == 0,
+         "coupure au milieu d'une impulsion : les deux moitiés sont réunies");
+  expect(vevor::decode_timings(out, m, vevor::PERIOD_CANDIDATES, vevor::PERIOD_CANDIDATE_COUNT,
+                               bits.data(), bits.size(), raw, &period_used, &inverted),
+         "coupure au milieu d'une impulsion : la trame est retrouvée après recollage");
+
+  // (3) un morceau seul (sans son jumeau) ne doit PAS produire de trame — c'est ce que fait le
+  //     composant, qui ne tente le recollage que pour une capture COURTE (MAX_FRAGMENT_TIMINGS)
+  expect(!vevor::decode_timings(a.data(), a.size(), vevor::PERIOD_CANDIDATES,
+                                vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(), raw,
+                                &period_used, &inverted),
+         "un morceau seul ne produit pas de trame (d'où le recollage)");
 }
 
 int main() {
@@ -179,6 +270,7 @@ int main() {
   test_robustness();
   test_reasons();
   test_pulse_chain();
+  test_stitching();
 
   printf("\n%d vérifications, %d échec(s)\n", g_checks, g_failures);
   if (g_failures == 0) {

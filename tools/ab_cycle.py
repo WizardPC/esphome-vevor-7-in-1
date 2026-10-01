@@ -17,36 +17,32 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import pathlib
 import re
 import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-TEMOIN = pathlib.Path("/home/hermes/projets/_temoins")
+# Dossier (HORS dépôt) où est construit le firmware de référence servant de témoin.
+# Paramétrable : VEVOR_TEMOIN_DIR=/chemin/vers/_temoins tools/ab_cycle.py ...
+TEMOIN = pathlib.Path(os.environ.get("VEVOR_TEMOIN_DIR",
+                                     str(pathlib.Path.home() / "projets" / "_temoins")))
 ESPHOME = ROOT / ".venv" / "bin" / "esphome"
 HOST = "172.16.0.205"
 
 VARIANTS = {
-    # nom      : (répertoire de la config,                     fichier yaml,        binaire OTA,
-    #             description)
-    # Les binaires sont figés dans build/variants/ (et récupérés dans le dossier de build du
-    # témoin) : chaque variante garde donc SON binaire, sans rebuild à chaque tour.
+    # nom : (répertoire de la config, YAML, binaire OTA figé, description)
+    # Une variante = une entrée d'ici, avec son binaire DÉJÀ compilé dans build/variants/ : le
+    # cycle ne recompile jamais, il flashe et mesure. Les variantes de diagnostic v1/v2/v3 ont
+    # servi à isoler la cause du mutisme radio (01/10) puis ont été supprimées : elles
+    # contenaient le second périphérique SPI qui rend la puce muette, mauvais exemple à laisser.
     "temoin": (TEMOIN / "witness-test", "witness.yaml",
                TEMOIN / "witness-test/.esphome/build/vevor-weather-station/build/firmware.ota.bin",
-               "code du dépôt WizardPC (compilé par nous)"),
-    "nous_v0": (ROOT / "esphome", "vevor-7in1.yaml",
-                ROOT / "build/variants/nous_v0.ota.bin",
-                "notre firmware actuel (ré-armature radio au boot + instrument GPIO10)"),
-    "nous_v1": (ROOT / "esphome", "vevor-7in1-v1.yaml",
-                ROOT / "build/variants/nous_v1.ota.bin",
-                "notre firmware SANS ré-armature radio au boot"),
-    "nous_v3": (ROOT / "esphome", "vevor-7in1-v3.yaml",
-                ROOT / "build/variants/nous_v3.ota.bin",
-                "V1 SANS l'entité `number` de fréquence (plus aucun set_frequency au boot)"),
-    "nous_v2": (ROOT / "esphome", "vevor-7in1-v2.yaml",
-                ROOT / "build/variants/nous_v2.ota.bin",
-                "V1 SANS le second périphérique SPI (parité de bus avec le témoin)"),
+               "projet de référence (WizardPC/esphome-vevor-7in1), compilé par nos soins"),
+    "prod": (ROOT / "esphome", "vevor-7in1.yaml",
+             ROOT / "build/variants/nous_prod.ota.bin",
+             "notre firmware de production"),
 }
 
 
@@ -112,11 +108,18 @@ def main() -> int:
                                str(ROOT / "tools" / "press_button.py"),
                                "--host", HOST, "--name", "Dump impulsions",
                                "--seconds", str(args.seconds), "--out", str(log)]
-            subprocess.run(capture_cmd, capture_output=True, text=True,
-                           timeout=args.seconds + 120)
+            cap = subprocess.run(capture_cmd, capture_output=True, text=True,
+                                 timeout=args.seconds + 120)
+            # Un échec de capture (API injoignable, port occupé) ne doit JAMAIS se lire comme
+            # « aucune trame reçue » : c'est la classe d'erreur qui a coûté le plus cher ici.
+            capture_ok = cap.returncode == 0
+            if not capture_ok:
+                print(f"  !! capture en échec (code {cap.returncode}) : mesure à JETER — "
+                      f"{(cap.stderr or cap.stdout)[-200:]}", flush=True)
             row = {
                 "round": r, "variante": name, "debut_utc": started.isoformat(timespec="seconds"),
-                "flash_ok": flash_ok, "yaml": yaml, "log": str(log), "description": desc,
+                "flash_ok": flash_ok, "capture_ok": capture_ok, "yaml": yaml, "log": str(log),
+                "description": desc,
             }
             row.update(summarize(name, log))
             with out_jsonl.open("a", encoding="utf-8") as fh:

@@ -33,7 +33,7 @@ state/.tmp_entry.md
 
 # === Journaux de mesure bruts (2,4 Mo de captures) : hors dépôt par défaut.
 #     Les preuves retenues sont dans state/ (PROGRESS.md, DONE.md) et les rapports JSON.
-logs/
+logs/*
 !logs/.gitkeep
 
 # === Sorties de build (journaux de compilation, statuts, binaires de test) ===
@@ -109,3 +109,6 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# === Rapports de revue de code (contiennent des détails d'installation) ===
+reviews/

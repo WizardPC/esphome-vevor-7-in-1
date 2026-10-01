@@ -123,20 +123,6 @@ spi:
   mosi_pin: GPIO6
   miso_pin: GPIO5
 
-globals:
-  - id: g_valid
-    type: int
-    restore_value: false
-    initial_value: "0"
-  - id: g_rejected
-    type: int
-    restore_value: false
-    initial_value: "0"
-  - id: g_last_raw
-    type: std::string
-    restore_value: false
-    initial_value: '""'
-
 cc1101:
   id: radio
   # `allow_other_uses` RETIRÉ (test du 30/09 23:2x) : notre composant de diagnostic ne partage plus
@@ -225,39 +211,31 @@ vevor_7in1:
   # Période bit de référence ; le composant essaie 90, 88, 89 et 87 us à chaque capture, et
   # journalise celle qui gagne.
   bit_period: 90us
-  # Entités alimentées par les lectures SPI (une publication toutes les 5 s, au même rythme que
-  # le battement de cœur et la sonde GDO0).
-  rssi_sensor: rssi_sensor
-  radio_sensor: radio_state_sensor
-  inventory_sensor: inventory_sensor
+  # AUCUN cs_pin, AUCUNE clé d'instrumentation : ce composant n'a plus aucun accès SPI (voir
+  # l'avertissement en tête de components/vevor_7in1/vevor_7in1.h). La puce CC1101 doit rester le
+  # SEUL périphérique de son bus — un second périphérique SPI, même sur une broche CS libre, la
+  # rend muette (mesuré le 01/10/2026).
   on_frame:
     then:
       - lambda: |-
+          // Le composant ne livre QUE des trames déjà validées : 21 octets, en-tête, checksum et
+          // compteur vérifiés dans includes/vevor_protocol.h. Ici : extraire les valeurs, publier.
+          // Le compteur de trames REFUSÉES vit dans le composant (« Trames rejetées » ci-dessous,
+          // publié par l'interval) et compte les candidats dont le mot de synchronisation a été
+          // vu mais que la validation a écartés — c'est le vrai indicateur de bruit du décodage,
+          // distinct de « rien n'arrive à la puce » (compteur « Captures RMT »).
+          vevor::Frame f;
+          const char *reason = "taille";
+          if (x.size() != vevor::FRAME_BYTES || !vevor::decode(x.data(), f, &reason)) {
+            // Filet de sécurité : ne devrait jamais arriver.
+            ESP_LOGW("v7in1", "V7IN1 ANOMALIE trame livree invalide (%u octets, %s)",
+                     (unsigned) x.size(), reason);
+            id(reason_sensor).publish_state(reason);
+            return;
+          }
           std::string raw = vevor::hex_bytes(x.data(), x.size());
           ESP_LOGD("v7in1", "V7IN1 RAW %s", raw.c_str());
           id(raw_sensor).publish_state(raw);
-
-          if (x.size() != vevor::FRAME_BYTES) {
-            id(g_rejected)++;
-            id(rejected_sensor).publish_state(id(g_rejected));
-            id(reason_sensor).publish_state("taille");
-            ESP_LOGW("v7in1", "V7IN1 REJ taille=%u (attendu %u)", (unsigned) x.size(),
-                     (unsigned) vevor::FRAME_BYTES);
-            return;
-          }
-
-          vevor::Frame f;
-          const char *reason = "";
-          if (!vevor::decode(x.data(), f, &reason)) {
-            id(g_rejected)++;
-            id(rejected_sensor).publish_state(id(g_rejected));
-            id(reason_sensor).publish_state(reason);
-            ESP_LOGW("v7in1", "V7IN1 REJ %s", reason);
-            return;
-          }
-
-          id(g_valid)++;
-          id(valid_sensor).publish_state(id(g_valid));
           id(reason_sensor).publish_state("ok");
           id(station_id_sensor).publish_state(f.id);
           id(tx_counter_sensor).publish_state(f.tx_counter);
@@ -278,6 +256,8 @@ interval:
     then:
       - lambda: |-
           id(captures_sensor).publish_state(id(vevor_rx).get_captures());
+          id(valid_sensor).publish_state(id(vevor_rx).get_frames());
+          id(rejected_sensor).publish_state(id(vevor_rx).get_rejected());
           id(duplicates_sensor).publish_state(id(vevor_rx).get_duplicates());
 
 button:
@@ -309,17 +289,6 @@ button:
         - cc1101.set_fsk_deviation: ${deviation_khz}kHz
         - cc1101.set_filter_bandwidth: ${bw_khz}kHz
         - cc1101.begin_rx: radio
-  # INVENTAIRE DES REGISTRES (mesure pure, aucune écriture) : relit et journalise les 47
-  # registres de configuration + les registres d'état, et calcule le débit, la bande et la
-  # déviation RÉELLEMENT actifs. Appelable à tout moment depuis l'API — indispensable quand la
-  # carte tourne déjà et que l'on veut son état interne sans reflasher.
-  - platform: template
-    name: "Relire l'inventaire registres CC1101"
-    id: reg_inventory_button
-    entity_category: config
-    on_press:
-      - lambda: id(vevor_rx).log_register_inventory();
-
 number:
   - platform: template
     name: "Fréquence CC1101"
@@ -400,19 +369,6 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
   - platform: template
-    name: "RSSI"
-    id: rssi_sensor
-    unit_of_measurement: "dBm"
-    device_class: signal_strength
-    entity_category: diagnostic
-    accuracy_decimals: 1
-  - platform: template
-    name: "Offset fréquence"
-    id: freq_offset_sensor
-    unit_of_measurement: "Hz"
-    entity_category: diagnostic
-    accuracy_decimals: 0
-  - platform: template
     name: "Trames valides"
     id: valid_sensor
     accuracy_decimals: 0
@@ -444,21 +400,10 @@ text_sensor:
     name: "Dernière trame brute"
     id: raw_sensor
     entity_category: diagnostic
+  # Verdict de la dernière trame livrée par le composant : « ok », ou la raison du refus si une
+  # trame invalide arrivait malgré tout (filet de sécurité — le comptage des refus, lui, est dans
+  # « Trames rejetées »).
   - platform: template
     name: "Dernier verdict"
     id: reason_sensor
-    entity_category: diagnostic
-  # État de la puce radio, lu par SPI dans le composant (voir vevor_7in1 dans ce fichier) :
-  # MARCSTATE (RX ? IDLE ?), bit CS (porteuse détectée ?) et fréquence réellement inscrite dans
-  # les registres FREQ2/1/0. C'est la mesure qui dit si la puce écoute bien à 868,35 MHz.
-  - platform: template
-    name: "État radio CC1101"
-    id: radio_state_sensor
-    entity_category: diagnostic
-  # Inventaire des registres de la puce (identité, débit, bande, déviation, format de paquet) :
-  # mesure publiée à chaque inventaire et RELUE par l'API à chaque connexion. C'est ce qui rend la
-  # mesure exploitable sans capturer les logs au démarrage de la carte.
-  - platform: template
-    name: "Inventaire registres CC1101"
-    id: inventory_sensor
     entity_category: diagnostic

@@ -144,6 +144,13 @@ static constexpr size_t MAX_BITS = 4096;
 // En dessous de ce nombre d'impulsions, aucune rafale Vevor ne peut tenir.
 static constexpr size_t MIN_TIMINGS = 40;
 
+// Au-dessus de cette longueur, la capture porte une rafale ENTIÈRE — mesuré sur ce montage : 176
+// à 184 impulsions pour une rafale utile (le RMT du C3 la coupe parfois en deux : 96 + 82,
+// 94 + 70…). Seules les captures plus courtes sont des MORCEAUX qu'il faut recoller ; recoller
+// plus large fait relire la rafale PRÉCÉDENTE — mesuré le 01/10 : 60 trames publiées pour
+// 31 mesures distinctes, chaque compteur TX exactement deux fois.
+static constexpr size_t MAX_FRAGMENT_TIMINGS = 160;
+
 // Périodes bit essayées à chaque capture, dans l'ordre. Les valeurs encadrent tout ce qu'on
 // sait du protocole : 90 µs (valeur publiée, et période du montage témoin qui décode cette
 // station), 88,3 µs (mesure de l'utilisateur → 11 325 bauds), 87 µs (déduite de rtl_433). La
@@ -220,7 +227,8 @@ inline bool find_frame_candidate(const uint8_t *bits, size_t bit_count, uint8_t 
 // (indispensable pour savoir quoi resserrer ensuite).
 inline bool decode_timings(const int32_t *timings, size_t count, const int32_t *periods,
                            size_t period_count, uint8_t *bits, size_t max_bits, uint8_t *raw_out,
-                           int32_t *period_used, bool *inverted_used) {
+                           int32_t *period_used, bool *inverted_used,
+                           size_t *rejected_out = nullptr) {
   if (count < MIN_TIMINGS) {
     return false;
   }
@@ -229,6 +237,12 @@ inline bool decode_timings(const int32_t *timings, size_t count, const int32_t *
     for (int polarity = 0; polarity < 2; polarity++) {
       const bool invert = (polarity == 1);
       const size_t n = timings_to_bits(timings, count, periods[p], invert, bits, max_bits);
+      // Conversion SATURÉE (le tampon est plein) : le flux est tronqué, donc plus
+      // interprétable. On écarte la tentative au lieu de décoder une suite tronquée qui
+      // pourrait passer les contrôles par hasard.
+      if (n >= max_bits) {
+        continue;
+      }
       if (n < needed) {
         continue;
       }
@@ -249,10 +263,38 @@ inline bool decode_timings(const int32_t *timings, size_t count, const int32_t *
           }
           return true;
         }
+        // Mot de synchronisation trouvé mais trame REFUSÉE (en-tête, checksum, compteur) :
+        // c'est le vrai compteur de bruit du décodage, distinct de « rien n'arrive à la puce ».
+        if (rejected_out != nullptr) {
+          (*rejected_out)++;
+        }
       }
     }
   }
   return false;
+}
+
+// Recolle deux MORCEAUX de rafale (voir MAX_FRAGMENT_TIMINGS). La coupure du RMT peut tomber AU
+// MILIEU d'une impulsion : les deux demi-impulsions ont alors le même signe et doivent être
+// additionnées pour retrouver l'impulsion d'origine — sinon chaque soudure invente un front et
+// décale tous les bits suivants (c'est l'« extra = -180 us » que le firmware de référence
+// journalise). `out` doit pouvoir contenir prev_count + cur_count éléments ; renvoie la longueur
+// écrite. Testé hors matériel (tests/test_decoder.cpp, scénarios _coupe_*).
+inline size_t stitch_fragments(const int32_t *prev, size_t prev_count, const int32_t *cur,
+                               size_t cur_count, int32_t *out, size_t max_out) {
+  size_t n = 0;
+  for (size_t i = 0; i < prev_count && n < max_out; i++) {
+    out[n++] = prev[i];
+  }
+  size_t first = 0;
+  if (n > 0 && cur_count > 0 && ((out[n - 1] >= 0) == (cur[0] >= 0))) {
+    out[n - 1] += cur[0];
+    first = 1;
+  }
+  for (size_t i = first; i < cur_count && n < max_out; i++) {
+    out[n++] = cur[i];
+  }
+  return n;
 }
 
 }  // namespace vevor
