@@ -89,12 +89,18 @@ jamais, sans passer son temps à redémarrer. Bouton « Redémarrer la carte » 
 
 ## 6. Suites ouvertes (dites franchement)
 
-1. **La cause du mutisme SPI au démarrage n'est pas expliquée au niveau matériel** : le symptôme est
-   établi (0xFF sur tout le bus, 1 démarrage sur 2) et le remède mesuré (redémarrage), mais départager
-   « quartz qui démarre tard » de « liaison SPI marginale » demande un test physique : **couper
-   vraiment l'alimentation** de la carte et vérifier que la puce répond à chaque fois. Si c'est le
-   quartz, la correction durable est d'alimenter le module CC1101 **par un GPIO**, pour que le
-   firmware le cycle en alimentation au lieu de jouer un redémarrage à pile ou face.
+1. **La panne de fin de journée n'est PAS résolue et n'est plus logicielle.** Mesuré le 01/10 au
+   soir : deux états alternent, aucun ne reçoit — **A** `Chip ID: 0xFFFF` (puce absente du bus SPI,
+   `radio EN ECHEC`) et **B** `Chip ID: 0x0014` mais `PLL lock failed, retrying calibration`
+   (`radio=ok`, des `captures`, **0 trame**). Ce qui a été testé sans succès : ré-armement à chaud
+   (9 tentatives), **coupure d'alimentation 5 s**, **coupure 30 s** (la durée ne change rien),
+   redémarrage à chaud (renvoie en A). Hypothèse soutenue par les mesures : le **quartz 26 MHz du
+   module** ne repart pas de façon fiable après une perturbation d'alimentation, et le démarrage de
+   l'ESP32-C3 suffit à la provoquer — quand le quartz survit (une heure entière à 180 trames cet
+   après-midi), tout fonctionne. À contrôler sur place, dans l'ordre : liaisons SPI (fils Dupont
+    CLK/MOSI/MISO/CS + masse) à refaire en soudé, découplage du module (100 nF + 10 µF), tenue de son
+   alimentation pendant le démarrage de l'ESP32, remplacement du module. Le garde-fou logiciel reste
+   utile (il récupère quand un démarrage atteint l'état sain) mais il ne fabrique pas l'état sain.
 2. **Duplication d'outillage** : `key_from_yaml()` existe encore en plusieurs copies (sans bug connu
    après vérification), et `maybe_await` en trois exemplaires — à factoriser dans `tools/_common.py`.
 3. Les variantes de diagnostic `vevor-7in1-v1/v2/v3.yaml` ont été **supprimées** (obsolètes, et v1/v3

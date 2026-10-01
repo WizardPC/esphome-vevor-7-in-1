@@ -1256,3 +1256,36 @@ Deux cycles `flash → 5 min → 12 min`, avec le garde-fou final :
 
 Total de la séquence : 72 trames reçues pendant les 34 minutes de l'expérience, dont aucune perdue
 après récupération. Le binaire mesuré (6706e62f) est celui flashé sur la carte.
+
+## Itération 16 — deux états de panne, et la piste du quartz (01/10/2026, nuit)
+
+**Constat de la soirée** : vers 21:16, la carte est passée dans un état où elle ne reçoit plus, et
+depuis elle n'en est plus sortie — alors que la même carte avait tourné une heure entière à 180
+trames l'après-midi (18:48→19:06).
+
+**Deux états mesurés, jamais un troisième qui reçoive** :
+
+| État | Signature au journal | Interprétation |
+|---|---|---|
+| A | `CC1101 found! Chip ID: 0xFFFF`, `SANTE radio=EN ECHEC` | la puce ne répond pas sur le SPI (MISO reste haut) : elle n'est jamais configurée |
+| B | `Chip ID: 0x0014` mais `PLL lock failed, retrying calibration`, `SANTE radio=ok`, `captures` qui montent, `trames=0` | la puce répond, entre en RX sans se caler, ne démodule rien d'utilisable |
+
+**Ce qui ne répare rien (mesuré)** : ré-armement à chaud jusqu'à 9 fois d'affilée (échec à chaque
+fois) ; **coupure d'alimentation 5 s** (donne l'état B) ; **coupure de 30 s** (même état B — la durée
+ne change rien) ; redémarrage à chaud (renvoie en état A). Le seul remède connu reste le redémarrage,
+et ce soir il n'atteint plus l'état sain.
+
+**Hypothèse retenue** : le quartz 26 MHz du module ne repart pas de façon fiable après une
+perturbation d'alimentation — et le démarrage de l'ESP32-C3 lui-même suffit à la provoquer (la
+réception fonctionne quand le quartz a survécu au redémarrage de l'ESP32, elle meurt quand il
+s'arrête). Cohérent avec le fil TI E2E « CC1101 not responding to SPI » (des 1 partout, quartz qui
+n'oscille pas au départ) et avec le fait que le composant ESPHome lit `PARTNUM`/`VERSION` une seule
+fois puis se déclare en échec.
+
+**Pistes matérielles à contrôler sur place** (ordre de probabilité) : liaisons SPI Dupont (CLK/MOSI/
+MISO/CS + masse) à refaire en soudé ; découplage du module (100 nF + 10 µF) ; alimentation du module
+et sa tenue pendant le démarrage de l'ESP32 (oscilloscope) ; remplacement du module si le quartz est
+en cause.
+
+**Veille en place** : 60 fenêtres de 55 s classant l'état (A / B / C-sain) pour savoir si la carte
+retombe d'elle-même sur l'état sain (malchance) ou reste bloquée (matériel).

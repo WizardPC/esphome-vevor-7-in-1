@@ -327,11 +327,11 @@ interval:
             id(rearmer_radio).execute();
             return;
           }
-          // Redémarrage : seul remède mesuré au mutisme SPI (l'état de la puce s'inverse d'un
-          // démarrage à l'autre). Quatre tentatives rapprochées, puis on continue à une par 30 min
-          // — la carte ne cesse jamais d'essayer de revenir, sans pour autant passer son temps à
-          // redémarrer.
-          if (id(g_reboots_radio) < 4 || (muettes % 90) == 0) {
+          // Redémarrage : seul remède mesuré (l'état de la puce change d'un démarrage à l'autre ;
+          // quand son quartz tourne, tout fonctionne — mesuré sur une heure entière à 180 trames).
+          // Dix tentatives rapprochées (une toutes les ~3,5 min), puis une par 15 min : la carte ne
+          // renonce jamais, sans passer son temps à redémarrer.
+          if (id(g_reboots_radio) < 10 || (muettes % 45) == 0) {
             id(g_reboots_radio) = id(g_reboots_radio) + 1;
             ESP_LOGE("v7in1", "aucune trame depuis %d min (radio %s, captures=%u) — redémarrage "
                               "n°%d (seul remède mesuré)",
