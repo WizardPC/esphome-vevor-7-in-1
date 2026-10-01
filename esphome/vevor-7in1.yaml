@@ -249,6 +249,21 @@ vevor_7in1:
           id(uv_index).publish_state(f.uv_index);
           id(light_lux).publish_state(f.lux);
           ESP_LOGI("v7in1", "V7IN1 OK %s", vevor::to_json(f).c_str());
+# Ré-armement radio : UNE seule implémentation, appelée par le bouton ET par la surveillance
+# automatique (interval de 60 s plus bas). C'est l'entrée en RX qui retente le verrouillage PLL
+# (cc1101.cpp : enter_calibrated_ avec PLL_LOCK_RETRIES) — donc le seul levier à chaud contre une
+# puce restée en IDLE après un démarrage raté.
+script:
+  - id: rearmer_radio
+    then:
+      - cc1101.reset: radio
+      - cc1101.set_frequency: ${freq_mhz}MHz
+      - cc1101.set_modulation_type: 2-FSK
+      - cc1101.set_symbol_rate: ${symbol_rate}
+      - cc1101.set_fsk_deviation: ${deviation_khz}kHz
+      - cc1101.set_filter_bandwidth: ${bw_khz}kHz
+      - cc1101.begin_rx: radio
+
 # Lecture à distance des compteurs internes du composant : sans ça, « combien de captures ? »
 # n'est lisible que dans les battements de cœur du log (et pas dans un relevé d'entités).
 interval:
@@ -259,6 +274,36 @@ interval:
           id(valid_sensor).publish_state(id(vevor_rx).get_frames());
           id(rejected_sensor).publish_state(id(vevor_rx).get_rejected());
           id(duplicates_sensor).publish_state(id(vevor_rx).get_duplicates());
+  # SURVEILLANCE DE LA RADIO (60 s) — pourquoi : mesuré le 01/10, la carte se réveille SOURDE après
+  # certains OTA (0 capture pendant toute la session alors que la station émet). Cause trouvée dans
+  # cc1101.cpp (ESPHome 2026.9.1) : si l'entrée en RX échoue au démarrage, le composant se marque
+  # en échec et la puce reste en IDLE — plus rien sur GDO0. Ces lignes partent AVANT que l'API soit
+  # joignable, donc elles sont invisibles depuis l'extérieur : c'est ce qui a rendu le défaut
+  # difficile à voir. Ici on rend l'état lisible et la carte se répare seule.
+  - interval: 60s
+    then:
+      - lambda: |-
+          static uint32_t dernier = 0;
+          static int muettes = 0;
+          const uint32_t c = id(vevor_rx).get_captures();
+          if (c != dernier) {
+            dernier = c;
+            muettes = 0;
+            return;
+          }
+          muettes++;
+          ESP_LOGI("v7in1", "SANTE radio=%s captures=%u muet depuis %d min",
+                   id(radio).is_failed() ? "EN ECHEC" : "ok", (unsigned) c, muettes);
+          if (muettes == 3 || (muettes > 3 && (muettes % 6) == 0)) {
+            ESP_LOGW("v7in1", "AUCUNE capture depuis %d min — ré-armement radio automatique",
+                     muettes);
+            id(rearmer_radio).execute();
+          }
+          if (muettes >= 30 && id(radio).is_failed()) {
+            ESP_LOGE("v7in1", "radio EN ÉCHEC et muette depuis %d min — redémarrage de la carte",
+                     muettes);
+            App.safe_reboot();
+          }
 
 button:
   # Instrument : demande la journalisation des impulsions de la PROCHAINE capture (64 durées en
@@ -280,15 +325,10 @@ button:
     entity_category: config
     on_press:
       then:
-        # `cc1101.reset` rejoue la séquence complète de remise à zéro + configuration ; les
-        # setters qui suivent réécrivent explicitement chaque réglage, puis on relance la RX.
-        - cc1101.reset: radio
-        - cc1101.set_frequency: ${freq_mhz}MHz
-        - cc1101.set_modulation_type: 2-FSK
-        - cc1101.set_symbol_rate: ${symbol_rate}
-        - cc1101.set_fsk_deviation: ${deviation_khz}kHz
-        - cc1101.set_filter_bandwidth: ${bw_khz}kHz
-        - cc1101.begin_rx: radio
+        # Une seule implémentation de la séquence : le script `rearmer_radio` (voir plus haut). Le
+        # bouton et la surveillance automatique doivent réarmer EXACTEMENT pareil, sinon on ne sait
+        # plus ce qu'on a testé.
+        - script.execute: rearmer_radio
 number:
   - platform: template
     name: "Fréquence CC1101"
