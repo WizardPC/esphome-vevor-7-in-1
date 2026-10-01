@@ -21,7 +21,9 @@ Sans pull-up, la ligne CS **flotte pendant tout le démarrage de l'ESP32**, avan
 la configure en sortie : la puce peut y voir des sélections parasites et se retrouver dans l'état
 **indéterminé** que décrit la datasheet (§4.9 / Table 18). Cela collerait exactement avec des
 symptômes qui varient d'un démarrage à l'autre. **Correction appliquée au YAML** (avec explication en
-commentaire) ; reste à la flasher et à mesurer.
+commentaire) ; reste à la flasher et à mesurer. **Voir toutefois la CORRECTION de 02h00 en fin de
+note : ce réglage n'agit qu'après le boot ; le correctif réel de la fenêtre de démarrage est un
+pull-up EXTERNE de 10 kΩ sur CS.**
 
 ## Le contrôle par le témoin (00h50, heure de Paris) — le résultat qui a orienté la correction
 
