@@ -136,3 +136,35 @@ palliatif logiciel le plus ciblé contre des écritures perdues.
 consécutifs, avec des compteurs de captures alternant (85, 19, 85, 142, 84, 13, 88, 19, 86, 19) —
 deux états se succèdent, aucun ne décode. La carte s'est dégradée au cours de la soirée : elle
 décodait 180 trames en une heure à 15h58, plus rien après 21h16. Le pull-up seul n'a pas suffi.
+
+## 01h40 (heure de Paris) — état A à nouveau, et un moyen d'observer les lignes de démarrage
+
+`logs/reapplique_200khz.log` — le bouton « Réappliquer la config radio » **pendant** une capture
+(astuce utile pour la suite : au démarrage, les lignes d'identité et de contrôle des écritures
+tombent avant que l'API ne les reçoive, donc les captures les ratent ; ce bouton les fait tomber
+dans la fenêtre, et il ne redémarre pas la carte) :
+
+```
+[W][cc1101:183]: CC1101 muet sur le SPI — lecture 1/4 (Chip ID: 0xFFFF, status 0xFF) : CHIP_RDYn HAUT = alimentation ou quartz pas prêts
+[E][cc1101:192]: identité CC1101 illisible après 4 relectures (4 fois CHIP_RDYn haut)
+```
+
+Donc à 01h40 la carte est repassée en **état A** (la puce ne répond plus du tout) après avoir été en
+état B à 01h24 (elle répondait, avec des écritures perdues). Le balancier continue, et il est
+maintenant clair qu'il ne dépend pas du firmware (le témoin y est soumis aussi).
+
+**Test à 200 kHz : non concluant** dans cette fenêtre (l'état A empêche toute écriture) — à refaire
+en état B. Le binaire est en place (`build/variants/nous_prod.ota.bin`) ; le contrôle des écritures
+dir le taux de reprises.
+
+## Dispositif laissé en place pour la fin de nuit
+
+- `build/veille_etats.sh` lancé à 01h42 pour 240 cycles (~5 h, jusqu'à ~07h00 heure de Paris) :
+  interroge la carte toutes les ~75 s SANS la redémarrer, classe l'état (SAIN / A / B) et recopie les
+  registres non pris dans `logs/veille_ecritures_hors_prises.txt`. C'est ce fichier qui donnera le
+  taux d'états pour le bilan du matin.
+- `build/loterie_etats.sh` : même chose mais AVEC redémarrage à chaque cycle (mesure du taux de
+  démarrages sains) — utilisé à 01h10 : 0/10 sains, puis le cycle a été arrêté pour tester le
+  200 kHz.
+- Bilan de 7h30 : tâche cron `8655473a3e94` (« Bilan nuit vevor-7in1 »), livrée dans ce fil, qui lit
+  cette note et les journaux pour composer le compte rendu (heure de Paris, fait vs hypothèse).
