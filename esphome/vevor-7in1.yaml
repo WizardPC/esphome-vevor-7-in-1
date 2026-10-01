@@ -116,7 +116,9 @@ external_components:
   - source:
       type: local
       path: components
-    components: [vevor_7in1]
+    # cc1101 : copie LOCALE du composant d'ESPHome, modifiée pour relire l'identité de la puce
+    # jusqu'à 20 fois (~5 s) au lieu d'une seule, et journaliser CHIP_RDYn (voir cc1101.cpp).
+    components: [vevor_7in1, cc1101]
 
 spi:
   clk_pin: GPIO4
