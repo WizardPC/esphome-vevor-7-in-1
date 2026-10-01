@@ -168,3 +168,55 @@ dir le taux de reprises.
   200 kHz.
 - Bilan de 7h30 : tâche cron `8655473a3e94` (« Bilan nuit vevor-7in1 »), livrée dans ce fil, qui lit
   cette note et les journaux pour composer le compte rendu (heure de Paris, fait vs hypothèse).
+
+---
+
+## Recherches rendues (02h00, heure de Paris) — avec une CORRECTION de mon analyse de 01h00
+
+**Correction importante, à lire avant d'agir :** j'ai écrit plus haut que le pull-up déclaré dans le
+YAML (`cs_pin: mode: {output: true, pullup: true}`) était « la » correction. **C'est faux** : ce
+réglage n'active le pull-up interne qu'au `setup()` de la broche, donc **après** la fenêtre de
+démarrage de l'ESP32. Or sur ESP32-C3 la broche GPIO7 est en **haute impédance au reset** (IE, sans
+WPU — Table 2-1 de la datasheet Espressif), et c'est précisément cette fenêtre qui est suspecte. Le
+réglage YAML est donc inoffensif mais **ne couvre pas le problème** ; il ne faut pas s'appuyer sur
+lui. Par ailleurs l'observation « témoin 11 trames / nous 0 » reste **confondue** par la loterie par
+démarrage, elle ne prouve pas une différence de firmware.
+
+**Le correctif réel de cette fenêtre est matériel : un pull-up EXTERNE de 10 kΩ de CS (GPIO7) au
+3,3 V.** C'est la mesure qui agit pendant le reset/boot, et c'est la pratique de la carte de
+référence ESP32-C3 + CC1101 (hallard : « IO8 CSn … active low, 10K pullup »).
+
+### Liste matérielle pour le matin (par ordre de rentabilité)
+
+1. **Pull-up externe 10 kΩ** de CS (GPIO7) au 3,3 V — agit pendant le boot, contrairement au réglage YAML.
+2. **Alimentation du module séparée** de la broche 3,3 V du SuperMini (LDO dédié ou 5 V) — les clones
+   de SuperMini sont documentés avec un régulateur plafonné à ~250 mA et un rail qui s'effondre sous
+   les pics. C'est le changement prévu par l'utilisateur.
+3. **Découplage** : 100 nF au plus près du VCC du module, + 10 à 100 µF (470 µF cité sur les clones de
+   SuperMini) si le rail est partagé avec le Wi-Fi.
+4. **Vérifier que DCOUPL (broche du régulateur interne) n'est PAS relié au 3,3 V** — erreur de schéma
+   relevée par TI, elle rend la puce erratique. Il ne doit y avoir qu'un condensateur de découplage.
+5. Refaire les liaisons courtes et la masse commune si l'occasion se présente.
+6. (Vérifié, rien à faire) Nos broches SPI sont GPIO4/5/6/7 et GDO0 sur GPIO3 : aucune sur les
+   GPIO8/9/10 du flash.
+
+### Palliatifs logiciels restants, non encore appliqués
+
+- Après un `FSCAL1 == 0x3F`, relancer la calibration (`SCAL`) en boucle jusqu'au verrouillage
+  (datasheet §22.1) ; le détecteur de verrouillage seul n'est pas fiable (errata SWRZ020E).
+- Réécrire `TEST0`/la calibration après un réveil de veille (TEST0 n'est pas retenu en SLEEP).
+- Respecter la Table 22 : ≥150 µs entre CS bas et le premier front d'horloge après mise en veille
+  (notre séquence de reset attend 5 ms, donc conforme à ce point ; la question reste ouverte pour les
+  écritures de registres enchaînées).
+- Cas TI voisin du nôtre, résolu par la valeur de `FSCAL2` (0x0A au lieu de 0x2A) : notre lecture donne
+  justement `FSCAL2=0x0A`, donc rien à changer de ce côté.
+
+### Sources utiles pour la suite
+
+- ESPHome issues #16876 (« même câblage, OK en Arduino, muet en ESPHome, aucun log ») et #18551
+  (`Chip ID 0x0014`, SPI sain, échecs intermittents) ; RadioLib #173 (mauvais bus SPI utilisé).
+- TI E2E 111152 (SPI renvoyant 0xFF au boot jusqu'à ce que le quartz démarre), 15770 (nets DCouple et
+  DGuard permutés → SO jamais bas), 1237481 (DCOUPL relié au 3,3 V), 118780 (CS togglée en cours de
+  transaction → seule la status byte revient).
+- Datasheet CC1101 SWRS061I §10.1, §19.1.2, Table 18/21/22 ; errata SWRZ020E (détecteur de
+  verrouillage PLL non fiable, FSCAL1 = test valide) ; DN503 SWRA112B.
