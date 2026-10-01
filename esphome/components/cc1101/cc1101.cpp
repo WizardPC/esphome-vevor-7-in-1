@@ -246,6 +246,33 @@ void CC1101Component::configure() {
     this->mark_failed();
     return;
   }
+
+  // MODIFICATION LOCALE — état de la calibration VCO/PLL APRÈS l'entrée en RX.
+  // Pourquoi : l'errata TI SWRZ020E dit que le détecteur de verrouillage PLL « n'est pas fiable à
+  // 100 % » et que le test fiable est FSCAL1 != 0x3F. Sur ce montage, il arrive que la puce réponde,
+  // se déclare prête (CHIP_RDYn bas) et que ses registres soient relus CONFORMES à ce qu'on a écrit
+  // — et qu'elle ne démodule pourtant rien du tout (aucune livraison RMT pendant dix minutes). Si
+  // FSCAL1 vaut 0x3F, la calibration a échoué : c'est une signature matérielle (quartz,
+  // alimentation, adaptation d'antenne), pas logicielle — et ça oriente le fer à souder, pas le code.
+  {
+    this->read_(Register::FSCAL1);
+    const uint8_t fscal1 = this->state_.FSCAL1;
+    this->read_(Register::FSCAL2);
+    const uint8_t fscal2 = this->state_.FSCAL2;
+    this->read_(Register::FSCAL0);
+    const uint8_t fscal0 = this->state_.FSCAL0;
+    this->read_(Register::MARCSTATE);
+    const uint8_t marc = this->state_.MARC_STATE;
+    if (fscal1 == 0x3F) {
+      ESP_LOGE(TAG, "CALIBRATION VCO ECHOUEE : FSCAL1=0x3F (FSCAL2=0x%02X FSCAL0=0x%02X, "
+                    "MARCSTATE=0x%02X) — puce configuree mais incapable de demoduler",
+               fscal2, fscal0, marc);
+    } else {
+      ESP_LOGI(TAG, "calibration VCO : FSCAL1=0x%02X (valide), FSCAL2=0x%02X, FSCAL0=0x%02X, "
+                    "MARCSTATE=0x%02X",
+               fscal1, fscal2, fscal0, marc);
+    }
+  }
 }
 
 void CC1101Component::call_listeners_(const std::vector<uint8_t> &packet, float freq_offset, float rssi, uint8_t lqi) {

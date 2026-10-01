@@ -10,6 +10,9 @@ substitutions:
   # (registre lu au démarrage du témoin : 868 349 824 Hz). Ce n'est plus une hypothèse de
   # départ : c'est la valeur mesurée du seul récepteur qui entend la station (voir
   # state/PROGRESS.md, itération 7).
+  # Retour à 868,35 : valeur validée (180 trames en une heure le 01/10 à 14:58) et celle du
+  # projet de référence. Le test à 868,30 n'a rien donné, et il est valide puisque le
+  # contrôle des écritures montre que les registres FREQ2/1/0 sont bien appliqués.
   freq_mhz: "868.35"
   # Déviation et bande passante : valeurs du montage témoin (70 kHz / 100 kHz), identiques aux
   # nôtres depuis l'itération 4-5. Ce ne sont donc PAS les suspects : le montage témoin décode
@@ -134,6 +137,17 @@ cc1101:
   # montage témoin qui décode n'a, lui, qu'un seul périphérique sur ce bus.
   cs_pin:
     number: GPIO7
+    # `mode` AVEC PULL-UP — c'est LA différence trouvée le 02/10 à 00h55 en comparant au firmware de
+    # référence, qui déclare exactement ceci : `cs_pin: {number: GPIO7, mode: {output: true,
+    # pullup: true}}`. Sans pull-up, la ligne CS FLOTTE pendant tout le démarrage de l'ESP32 (avant
+    # que le firmware ne configure la broche en sortie) : la puce peut y voir des sélections
+    # parasites et se retrouver dans l'état INDÉTERMINÉ que décrit la datasheet (§4.9 / Table 18),
+    # ce qui collait exactement avec nos symptômes variables d'un démarrage à l'autre (0xFFFF au
+    # démarrage, ou puce prête mais qui ne démodule rien). Le pull-up maintient CS inactif (haut)
+    # tant que personne ne le pilote.
+    mode:
+      output: true
+      pullup: true
   # PAS de `gdo0_pin` ici, volontairement : le composant cc1101 appellerait un
   # `pin_mode(FLAG_INPUT)` DIFFÉRÉ sur la broche, donc après que remote_receiver a configuré
   # sa voie RMT — et le RMT ne capturait alors plus rien (constaté : sonde voyant la broche
@@ -378,9 +392,11 @@ number:
     min_value: 430.0
     max_value: 930.0
     step: 0.005
+    # `restore_value: true` rejouait la valeur MÉMORISÉE (868,35) au démarrage, donc elle écrasait
+    # le réglage compilé : c'est ce qui a rendu les tests de fréquence ambigus. On aligne tout.
     initial_value: 868.35
     optimistic: true
-    restore_value: true
+    restore_value: false
     entity_category: config
     on_value:
       then:
