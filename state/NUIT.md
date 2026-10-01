@@ -110,3 +110,29 @@ l'utilisateur (changement d'alimentation le matin).
 **Mesures de taux en cours cette nuit** (douze démarrages, `logs/loterie_apres_pullup.log`) : le
 pull-up sur CS appliqué à 01h02 n'a pas suffi dans la session qui a suivi, donc la question est
 maintenant quantitative — quel taux de démarrages sains, avec et sans pull-up.
+
+## 01h30 (heure de Paris) — les écritures perdues reviennent à leur valeur d'USINE
+
+Test « écriture vérifiée + réessais » (`logs/test_ecriture_verifiee.log`, binaire `9d158a9`) :
+
+```
+[01:24:13] [W][cc1101:236]: registre 0x10 NON PRIS apres 4 essais (voulu 0xC8)
+[01:24:13] [I][cc1101:239]: configuration : 2 registre(s) repris apres relecture, 1 definitivement non pris
+[01:24:13] [E][cc1101:267]: ECRITURE NON PRISE MDMCFG4 : ecrit 0xC8, relu 0x8C
+```
+
+**Lecture décisive** : `0x8C` est la **valeur d'usine** de MDMCFG4, et `0x22` (vu plus tôt) celle de
+MDMCFG3. Autrement dit ces écritures **n'atteignent pas la puce du tout** : elle conserve ses
+registres de réinitialisation. Les réessais automatiques récupèrent la majorité des registres
+(« 2 repris ») mais pas MDMCFG4, qui résiste à quatre tentatives. Une puce dont le débit/la bande
+passante et la fréquence ne sont pas ceux demandés ne démodule rien — à aucune fréquence, ce qui
+explique définitivement le balayage muet.
+
+**Piste testée ensuite** : abaisser la cadence SPI de 1 MHz à 200 kHz (`logs/test_spi_200khz.log`).
+1 MHz est conforme à la puce (6,5 MHz max) mais peut ne pas l'être à notre câblage ; c'est le
+palliatif logiciel le plus ciblé contre des écritures perdues.
+
+**Taux mesuré après le pull-up sur CS** (`logs/loterie_apres_pullup.log`) : 0 démarrage sain sur 10
+consécutifs, avec des compteurs de captures alternant (85, 19, 85, 142, 84, 13, 88, 19, 86, 19) —
+deux états se succèdent, aucun ne décode. La carte s'est dégradée au cours de la soirée : elle
+décodait 180 trames en une heure à 15h58, plus rien après 21h16. Le pull-up seul n'a pas suffi.

@@ -196,12 +196,48 @@ void CC1101Component::configure() {
 
   this->initialized_ = true;
 
+  // MODIFICATION LOCALE — écriture VÉRIFIÉE, réessayée jusqu'à ce qu'elle prenne.
+  //
+  // Pourquoi : mesuré le 02/10 à 01h02, la puce répond parfaitement en LECTURE (identité 0x0014,
+  // registres relus) mais certaines ÉCRITURES se perdent — MDMCFG3 écrit 0xC0 relu 0x22, FREQ0
+  // écrit 0xE8 relu 0xEC, MDMCFG4 écrit 0xC8 relu 0x8C — et dans une autre session les huit mêmes
+  // registres se relisaient tous conformes. C'est intermittent. Une puce dont les registres ne
+  // prennent pas ne démodule rien, à aucune fréquence : c'est ce qui rendait le balayage de
+  // fréquence muet et la réception impossible. On relit donc CHAQUE registre après l'avoir écrit et
+  // on le réécrit tant qu'il ne prend pas (la lecture, elle, est fiable). Les registres TEST0/1/2
+  // ne se relisent pas de façon fiable : écrits une fois, sans vérification.
+  uint8_t non_prises = 0;
+  uint8_t reprises = 0;
   for (uint8_t i = 0; i <= static_cast<uint8_t>(Register::TEST0); i++) {
     if (i == static_cast<uint8_t>(Register::FSTEST) || i == static_cast<uint8_t>(Register::AGCTEST)) {
       continue;
     }
-    this->write_(static_cast<Register>(i));
+    const uint8_t voulu = this->state_.regs()[i];
+    if (i > 0x2B) {  // TEST0/1/2 : écriture simple, relecture non fiable
+      this->write_(static_cast<Register>(i));
+      continue;
+    }
+    bool pris = false;
+    for (uint8_t essai = 0; essai < 4 && !pris; essai++) {
+      this->write_(static_cast<Register>(i));
+      this->read_(static_cast<Register>(i));
+      if (this->state_.regs()[i] == voulu) {
+        pris = true;
+        if (essai > 0) {
+          reprises++;
+        }
+      } else {
+        this->state_.regs()[i] = voulu;  // on repart de la valeur voulue pour l'essai suivant
+      }
+    }
+    if (!pris) {
+      non_prises++;
+      this->state_.regs()[i] = voulu;
+      ESP_LOGW(TAG, "registre 0x%02X NON PRIS apres 4 essais (voulu 0x%02X)", i, voulu);
+    }
   }
+  ESP_LOGI(TAG, "configuration : %u registre(s) repris apres relecture, %u definitivement non pris",
+           (unsigned) reprises, (unsigned) non_prises);
   this->set_output_power(this->output_power_requested_);
 
   // MODIFICATION LOCALE — CONTRÔLE DES ÉCRITURES (relire ce qu'on vient d'écrire).
