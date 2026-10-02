@@ -1292,10 +1292,9 @@ retombe d'elle-même sur l'état sain (malchance) ou reste bloquée (matériel).
 
 ## 02/10 — intervention matérielle de l'utilisateur (matin)
 
-- **Pull-up sur CS (GPIO7) : 100 kΩ** au 3,3 V, soudé. (Valeur prévue : 10 kΩ, comme la carte de
-  référence ; l'utilisateur a posé 100 kΩ. Le niveau est bien défini au repos et le temps
-  d'établissement reste de l'ordre de la µs — c'est 10× plus faible, donc moins immunisé au bruit,
-  mais ça ne bloque pas le test. À reprendre en 10 kΩ si le résultat reste mauvais.)
+- **Pull-up sur CS (GPIO7) : 10 kΩ** au 3,3 V, soudé — exactement la valeur de la carte de
+  référence ESP32-C3 + CC1101. (L'utilisateur a d'abord annoncé 100 kΩ, puis corrigé : c'est bien
+  10 kΩ.)
 - **Condensateur : 10 µF** — la valeur attendue pour le découplage du module.
 - Mesure d'après-soudure : redémarrage à froid **sans reflash** (pour exercer réellement un démarrage
   avec le nouveau câblage), puis fenêtre d'écoute de 8 min → `logs/apres_soudure.log`.
