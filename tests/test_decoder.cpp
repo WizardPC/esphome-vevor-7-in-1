@@ -54,6 +54,11 @@ static void test_vectors() {
                                                                     std::string(reason) + ")"));
     if (!v.valid) {
       expect(std::strlen(reason) > 0, name + " : un motif de rejet doit être renseigné");
+      // Le MOTIF précis compte : attribuer un rejet à la mauvaise branche de la porte de
+      // plausibilité (« direction » au lieu de « vent », p. ex.) passerait sinon inaperçu.
+      expect(std::strcmp(reason, v.reject_reason) == 0,
+             name + " : motif attendu « " + std::string(v.reject_reason) + " », obtenu « " +
+                 std::string(reason) + " »");
       continue;
     }
 
@@ -103,6 +108,29 @@ static void test_rtl433_reference() {
   expect(f.battery_low, "batterie faible (0x9d)");
 }
 
+// --- 2ter. ANCRAGE EXTERNE de la branche « lux ×10 » (bit 15 posé) -------------------------
+// La trame de rtl_433 ancrée juste au-dessus a le bit 15 CLAIR (chemin ×1) : la branche ×10
+// n'était donc ancrée par AUCUNE source extérieure, et une erreur de facteur commune à l'encodeur
+// Python (tests/frames.py) ET au C++ (vevor_protocol.h) passait les 204 vérifications (revue
+// round 2, constat BLOQUANT). Ici les 21 octets sont ÉCRITS EN DUR et la valeur attendue est
+// CALCULÉE À LA MAIN — sans passer par decode_reference(), donc extérieure au couple
+// encodeur/décodeur : une erreur commune aux deux ne peut plus « s'auto-valider ».
+//   lux visé = 98 000 lx  (≥ 0x8000 → branche ×10)
+//   lux_raw  = 0x8000 | (98 000 / 10) = 0x8000 | 9 800 = 0x8000 | 0x2648 = 0xA648
+//   émission : b[16] = ((0xA648 >> 8) + 1) & 0xFF = 0xA6 + 1 = 0xA7
+//              b[17] = ((0xA648 & 0xFF) + 1) & 0xFF = 0x48 + 1 = 0x49
+//   décodage : 0xA7 - 1 = 0xA6 ; 0x49 - 1 = 0x48  ⇒  (0xA648) ; bit 15 posé
+//              ⇒ (0xA648 & 0x7FFF) × 10 = 0x2648 × 10 = 9 800 × 10 = 98 000 lx
+static void test_lux_x10_anchor() {
+  printf("Ancrage externe de la branche lux ×10 (valeur calculée à la main)\n");
+  const uint8_t raw[21] = {0xaa, 0x00, 0x1a, 0x2b, 0x1d, 0x02, 0xac, 0x48, 0x01, 0x1c, 0x07,
+                           0x01, 0xd7, 0x01, 0x37, 0x0c, 0xa7, 0x49, 0x40, 0x72, 0x41};
+  vevor::Frame f;
+  const char *reason = "";
+  expect(vevor::decode(raw, f, &reason), "la trame lux ×10 doit être acceptée");
+  expect(f.lux == 98000, "lux = 98 000 lx ((0xA648 & 0x7FFF) × 10 = 9 800 × 10, à la main)");
+}
+
 // --- 2bis. Porte de plausibilité : trame « bien formée » mais fausse -------------------------
 // Deux trames RÉELLES relevées dans une fenêtre d'une heure le 01/10 (logs/fenetre_1h_cond) :
 // elles passaient en-tête + checksum + compteur, et pourtant tous leurs octets de valeur valent
@@ -127,6 +155,9 @@ static void test_plausibility() {
   expect(!vevor::decode(fausse1, f, &reason),
          "trame à décalage de bits n° 1 refusée (direction 779° impossible)");
   expect(std::strcmp(reason, "direction") == 0, "motif de refus = direction, pas un rejet muet");
+  // `f` vient d'être rempli par une trame VALIDE juste au-dessus : une trame refusée ne doit PAS
+  // rester marquée valide (revue round 2 : `out.valid` était posé AVANT la porte de plausibilité).
+  expect(!f.valid, "trame refusée : `valid` reste faux (aucun marquage résiduel)");
 
   // Trame fautive n° 2 : direction 835°, même signature.
   const uint8_t fausse2[21] = {0xaa, 0x00, 0x84, 0xcb, 0x16, 0x02, 0xba, 0x38, 0x02, 0x62, 0x24,
@@ -210,10 +241,23 @@ static void test_pulse_chain() {
     expect(f.id == s.id, name + " : id");
     expect_near(f.temp_c, s.temp_c, 0.06f, name + " : température");
     expect_near(f.rain_mm, s.rain_mm, 0.06f, name + " : pluie");
-    // Période et polarité retenues : les AFFICHER ne prouve rien, il faut les éprouver. Les
-    // scénarios nominaux doivent sortir à 90 µs en polarité normale, et le scénario à polarité
-    // inversée doit réellement sortir inversé — sinon la bascule de polarité n'est pas testée.
-    expect(period_used == 90, name + " : période bit retenue = 90 us");
+    // Polarité retenue : les AFFICHER ne prouve rien, il faut l'éprouver — le scénario à polarité
+    // inversée doit réellement sortir inversé, sinon la bascule de polarité n'est pas testée.
+    //
+    // Période retenue : on n'exige PAS « == 90 ». Les candidats {90, 88, 89, 87} encadrent la vraie
+    // période à ±2 µs et sont indiscernables sur des suites de bits courtes : c'est toujours le
+    // PREMIER candidat qui décodable qui gagne, donc exiger 90 ne teste que l'ORDRE de la liste
+    // (une simple permutation cassait 7 assertions sans qu'aucun décodage ne soit faux — revue
+    // round 2, §2.6). Ce qui doit être vrai ici : un candidat de la liste a été retenu, et la
+    // trame est correcte (assertions ci-dessus). La SÉLECTION réelle du bon candidat est éprouvée
+    // dans test_period_selection().
+    bool period_is_candidate = false;
+    for (size_t c = 0; c < vevor::PERIOD_CANDIDATE_COUNT; c++) {
+      if (period_used == vevor::PERIOD_CANDIDATES[c]) {
+        period_is_candidate = true;
+      }
+    }
+    expect(period_is_candidate, name + " : période retenue membre des candidats");
     const bool want_inverted = name.find("polarite_inversee") != std::string::npos;
     expect(inverted == want_inverted,
            name + " : polarité retenue " + (inverted ? "inversée" : "normale"));
@@ -294,15 +338,168 @@ static void test_stitching() {
          "un morceau seul ne produit pas de trame (d'où le recollage)");
 }
 
+// --- 7. Trou inter-rafales : le SAUT doit être réellement exercé ----------------------------
+// `timings_to_bits` SAUTE une impulsion trop longue (un trou entre deux rafales) au lieu de la
+// convertir en bits. Round 2 : le scénario « trou inter-rafales » se décodait IDENTIQUEMENT avec
+// MAX_RUN_BITS porté à 100000 — donc le saut n'était pas exercé. On exige ici que le trou n'ajoute
+// AUCUN bit : convertir les durées AVEC le trou et SANS lui doit donner le même nombre de bits (et
+// les mêmes bits). Si le saut disparaît (seuil ≥ 8000 / 90 ≈ 88), le trou ajoute ~88 bits et
+// l'assertion tombe — la contre-épreuve qui manquait.
+static void test_hole_skip() {
+  printf("Trou inter-rafales : saut réellement exercé\n");
+  const VevorPulseScenario *trou = nullptr;
+  for (int i = 0; i < VEVOR_PULSE_COUNT; i++) {
+    if (std::strcmp(VEVOR_PULSE_VECTORS[i].name, "impulsions_trou_inter_rafales") == 0) {
+      trou = &VEVOR_PULSE_VECTORS[i];
+    }
+  }
+  expect(trou != nullptr, "le scénario « trou inter-rafales » existe");
+  if (trou == nullptr) {
+    return;
+  }
+  std::vector<int32_t> avec(trou->timings, trou->timings + trou->count);
+  std::vector<int32_t> sans;
+  for (int32_t t : avec) {
+    if (t >= -4000 && t <= 4000) {  // le trou mesure -8000 : on le retire pour la comparaison
+      sans.push_back(t);
+    }
+  }
+  expect(sans.size() + 1 == avec.size(), "exactement une impulsion de trou a été retirée");
+  std::vector<uint8_t> bits_avec(vevor::MAX_BITS);
+  std::vector<uint8_t> bits_sans(vevor::MAX_BITS);
+  const size_t n_avec = vevor::timings_to_bits(avec.data(), avec.size(), 90, false,
+                                               bits_avec.data(), bits_avec.size());
+  const size_t n_sans = vevor::timings_to_bits(sans.data(), sans.size(), 90, false,
+                                               bits_sans.data(), bits_sans.size());
+  expect(n_avec == n_sans,
+         "le trou n'ajoute aucun bit (sauté, et non converti en ~88 bits de zéro)");
+  expect(n_avec == n_sans && std::memcmp(bits_avec.data(), bits_sans.data(), n_avec) == 0,
+         "les bits obtenus sont identiques avec et sans le trou");
+}
+
+// --- 8. Sélection de la période bit : le balayage des candidats continue après un échec -----
+// Deux propriétés, indépendantes de l'ORDRE de la liste de candidats :
+//  (1) CHAQUE candidat sait décoder une rafale émise à SA période → 88, 89 ET 87 sont réellement
+//      exercés (une seule rafale générée à 88 ne suffisait pas : le décodeur retombait sur 90) ;
+//  (2) le balayage CONTINUE après un candidat qui échoue : la rafale à longue suite de bits
+//      identiques (impulsions_trame_longue) est sensible à la période et n'est PAS décodable à
+//      88 µs ; le décodeur doit passer à 90 et réussir.
+static void test_period_selection() {
+  printf("Sélection de la période bit (balayage des candidats)\n");
+  std::vector<uint8_t> bits(vevor::MAX_BITS);
+  uint8_t raw[vevor::FRAME_BYTES];
+  int32_t period_used = 0;
+  bool inverted = false;
+
+  // (1) chaque candidat, SEUL, décode une rafale émise à sa période.
+  int exerces = 0;
+  for (int i = 0; i < VEVOR_PULSE_COUNT; i++) {
+    const VevorPulseScenario &s = VEVOR_PULSE_VECTORS[i];
+    if (!s.valid || s.period_us <= 0) {
+      continue;
+    }
+    const int32_t un[1] = {s.period_us};
+    period_used = 0;
+    const bool ok = vevor::decode_timings(s.timings, s.count, un, 1, bits.data(), bits.size(),
+                                          raw, &period_used, &inverted);
+    expect(ok && period_used == s.period_us,
+           std::string(s.name) + " : décodable avec le SEUL candidat " +
+               std::to_string(s.period_us) + " us");
+    if (s.period_us == 88 || s.period_us == 89 || s.period_us == 87) {
+      exerces++;
+    }
+  }
+  expect(exerces >= 3, "les candidats 88, 89 ET 87 ont tous été réellement exercés");
+
+  // (2) balayage après échec, sur la rafale sensible à la période.
+  const VevorPulseScenario *longue = nullptr;
+  for (int i = 0; i < VEVOR_PULSE_COUNT; i++) {
+    if (std::strcmp(VEVOR_PULSE_VECTORS[i].name, "impulsions_trame_longue") == 0) {
+      longue = &VEVOR_PULSE_VECTORS[i];
+    }
+  }
+  expect(longue != nullptr, "le scénario à longue suite de bits existe");
+  if (longue == nullptr) {
+    return;
+  }
+  const int32_t seul88[1] = {88};
+  const int32_t sans90[2] = {88, 87};
+  const int32_t recherche[2] = {88, 90};
+  period_used = 0;
+  expect(!vevor::decode_timings(longue->timings, longue->count, seul88, 1, bits.data(),
+                                bits.size(), raw, &period_used, &inverted),
+         "rafale longue : le candidat 88 SEUL échoue (elle est vraiment sensible à la période)");
+  expect(!vevor::decode_timings(longue->timings, longue->count, sans90, 2, bits.data(),
+                                bits.size(), raw, &period_used, &inverted),
+         "rafale longue : sans le candidat 90, aucun candidat ne décode (88 et 87 échouent)");
+  period_used = 0;
+  expect(vevor::decode_timings(longue->timings, longue->count, recherche, 2, bits.data(),
+                               bits.size(), raw, &period_used, &inverted) && period_used == 90,
+         "rafale longue : le balayage CONTINUE après l'échec de 88 et atteint 90");
+}
+
+// --- 9. Politique de recollage : un MORCEAU se recolle, une rafale COMPLÈTE non -------------
+// Le composant ne recolle que si `vevor::is_fragment(taille)` est vrai (prédicat partagé avec le
+// test). Les bornes (MIN_TIMINGS = 40, MAX_FRAGMENT_TIMINGS = 160) n'étaient testées nulle part, et
+// recoller une rafale COMPLÈTE faisait relire la PRÉCÉDENTE (mesuré le 01/10 : 60 trames pour 31
+// mesures distinctes). On éprouve les deux cas : rafale livrée en DEUX morceaux → recollage ;
+// capture complète → PAS de recollage.
+static void test_fragment_policy() {
+  printf("Politique de recollage (morceau vs rafale complète)\n");
+  // bornes du prédicat : 40 inclus, 160 inclus, au-delà non.
+  expect(!vevor::is_fragment(39), "39 impulsions : trop court, pas un morceau");
+  expect(vevor::is_fragment(40), "40 impulsions : morceau (borne basse incluse)");
+  expect(vevor::is_fragment(160), "160 impulsions : morceau (borne haute incluse)");
+  expect(!vevor::is_fragment(161), "161 impulsions : n'est plus un morceau");
+  // tailles RÉELLES mesurées sur ce montage : morceaux 96 et 82 ; rafale complète 176-184.
+  expect(vevor::is_fragment(96) && vevor::is_fragment(82),
+         "les deux morceaux mesurés (96 + 82) seront recollés");
+  expect(!vevor::is_fragment(184),
+         "une rafale complète mesurée (184) n'est PAS un morceau : jamais recollée");
+  expect(!vevor::is_fragment(204), "204 impulsions : capture complète, jamais recollée");
+
+  // Cas « DEUX MORCEAUX » : la rafale nominale coupée en deux, chaque moitié étant un morceau,
+  // puis recollée — c'est exactement la décision du composant (fragment ET morceau précédent).
+  const VevorPulseScenario *nominal = nullptr;
+  for (int i = 0; i < VEVOR_PULSE_COUNT; i++) {
+    if (std::strcmp(VEVOR_PULSE_VECTORS[i].name, "impulsions_nominales") == 0) {
+      nominal = &VEVOR_PULSE_VECTORS[i];
+    }
+  }
+  expect(nominal != nullptr, "le scénario nominal de référence existe");
+  if (nominal == nullptr) {
+    return;
+  }
+  const size_t n = nominal->count;
+  const size_t k = n / 2;
+  expect(vevor::is_fragment(k) && vevor::is_fragment(n - k),
+         "les deux moitiés de la rafale nominale sont des morceaux");
+  std::vector<int32_t> out(n);
+  const size_t m = vevor::stitch_fragments(nominal->timings, k, nominal->timings + k, n - k,
+                                           out.data(), out.size());
+  std::vector<uint8_t> bits(vevor::MAX_BITS);
+  uint8_t raw[vevor::FRAME_BYTES];
+  int32_t period_used = 0;
+  bool inverted = false;
+  expect(m == n && vevor::decode_timings(out.data(), m, vevor::PERIOD_CANDIDATES,
+                                         vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(),
+                                         raw, &period_used, &inverted),
+         "deux morceaux recollés : la trame est retrouvée");
+}
+
 int main() {
   printf("=== Tests du décodeur Vevor 7-en-1 (sans matériel) ===\n\n");
   test_vectors();
   test_rtl433_reference();
+  test_lux_x10_anchor();
   test_plausibility();
   test_robustness();
   test_reasons();
   test_pulse_chain();
   test_stitching();
+  test_period_selection();
+  test_hole_skip();
+  test_fragment_policy();
 
   printf("\n%d vérifications, %d échec(s)\n", g_checks, g_failures);
   if (g_failures == 0) {

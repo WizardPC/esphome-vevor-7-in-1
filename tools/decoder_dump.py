@@ -18,16 +18,24 @@ et les 8 décalages de bit.
 
 Usage :
     tools/decoder_dump.py logs/dump_brut.log [--json logs/dump_decode.json]
+
+Code retour :
+    0  au moins une capture lue ; « 0 trame valide » est un RÉSULTAT négatif ;
+    2  échec technique (fichier illisible) ;
+    3  MESURE NULLE : aucune capture (aucune ligne « capture # »/« impulsions ») — rien n'a été mesuré.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import pathlib
-import re as _re
-import re
 import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _common import (ANSI, RC_ERREUR, RC_MESURE_NULLE, RC_OK,  # noqa: E402
+                     atomic_write_json)
+
+import re
 
 PERIODS = (90, 88, 89, 87)          # mêmes candidats que le firmware
 MAX_RUN_BITS = 64
@@ -42,8 +50,7 @@ def lit_dumps(chemin: pathlib.Path) -> list[list[int]]:
     captures: list[list[int]] = []
     courant: list[int] = []
     total_attendu = None
-    _ansi = _re.compile(r"\x1b\[[0-9;]*m")
-    for ligne in _ansi.sub("", chemin.read_text(encoding="utf-8", errors="replace")).splitlines():
+    for ligne in ANSI.sub("", chemin.read_text(encoding="utf-8", errors="replace")).splitlines():
         m = CAPTURE_RE.search(ligne)
         if m:
             if courant:
@@ -103,15 +110,31 @@ def trame_dans_bits(bits: str):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("dump", type=pathlib.Path)
-    ap.add_argument("--json", type=pathlib.Path, default=None)
+    ap.add_argument("--json", default=None, help="rapport JSON (relatif = racine du projet)")
     args = ap.parse_args()
 
-    captures = lit_dumps(args.dump)
+    if not args.dump.exists():
+        print(f"# MESURE NULLE — fichier absent : {args.dump}", file=sys.stderr)
+        return RC_MESURE_NULLE
+    try:
+        captures = lit_dumps(args.dump)
+    except OSError as exc:
+        print(f"# ERREUR lecture {args.dump}: {exc}", file=sys.stderr)
+        return RC_ERREUR
+
+    if not captures:
+        print(f"# MESURE NULLE — aucune capture dans {args.dump} : rien n'a été mesuré "
+              "(ni « capture # », ni « impulsions »)", file=sys.stderr)
+        return RC_MESURE_NULLE
+
     print(f"{len(captures)} capture(s) lue(s) dans {args.dump}")
     rapport = []
     for nc, durees in enumerate(captures, 1):
-        print(f"\ncapture {nc} : {len(durees)} durées, "
-              f"de {min(abs(x) for x in durees)} à {max(abs(x) for x in durees)} µs")
+        if durees:
+            lo, hi = min(abs(x) for x in durees), max(abs(x) for x in durees)
+            print(f"\ncapture {nc} : {len(durees)} durées, de {lo} à {hi} µs")
+        else:
+            print(f"\ncapture {nc} : 0 durée")
         trouve = None
         for periode in PERIODS:
             for inverser in (False, True):
@@ -138,12 +161,13 @@ def main() -> int:
                       f"{' '.join(f'{x:02x}' for x in octets)}")
         rapport.append({"capture": nc, "nb_durees": len(durees), "trame": trouve})
 
-    if args.json:
-        args.json.write_text(json.dumps(rapport, indent=2, ensure_ascii=False), encoding="utf-8")
-        print(f"\nrapport écrit : {args.json}")
     valides = sum(1 for r in rapport if r["trame"])
+    if args.json:
+        print(f"\nrapport écrit (atomique) : {atomic_write_json(args.json, rapport)}")
     print(f"\n{valides} capture(s) sur {len(rapport)} portent une trame VALIDE")
-    return 0
+    if valides == 0:
+        print("# AUCUNE TRAME valide dans les captures (mesure faite) — résultat négatif", file=sys.stderr)
+    return RC_OK
 
 
 if __name__ == "__main__":

@@ -12,19 +12,22 @@ attend donc d'avoir reçu quelque chose, sinon on lirait des vides et on conclur
 
 Usage:
     tools/read_state.py [--host 172.16.0.205] [--json logs/state.json]
+
+Code retour :
+    0  au moins un état d'entité reçu ;
+    2  échec technique (connexion, exception) ;
+    3  MESURE NULLE : aucun état reçu — rien n'a été mesuré.
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from scan_freq import Device, key_from_yaml  # noqa: E402  (outil voisin, même API)
-
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+from _common import (Device, RC_ERREUR, RC_MESURE_NULLE, RC_OK,  # noqa: E402
+                     atomic_write_json, resolve_key)
 
 
 async def run(host: str, port: int, key: str | None) -> dict:
@@ -48,18 +51,24 @@ def main() -> int:
     ap.add_argument("--host", default="172.16.0.205")
     ap.add_argument("--port", type=int, default=6053)
     ap.add_argument("--key", default=None)
-    ap.add_argument("--json", default=None)
+    ap.add_argument("--json", default=None, help="fichier JSON (relatif = racine du projet)")
     a = ap.parse_args()
-    rep = asyncio.run(run(a.host, a.port, a.key or key_from_yaml()))
+    try:
+        rep = asyncio.run(run(a.host, a.port, resolve_key(a.key)))
+    except SystemExit:
+        raise
+    except Exception as exc:
+        print(f"# ERREUR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return RC_ERREUR
     print(f"# {rep['recues']}/{rep['entites']} entités avec une valeur")
     for name, v in rep["valeurs"].items():
         print(f"  {name:24s} = {v}")
     if a.json:
-        p = ROOT / a.json
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(rep, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"-> {p}")
-    return 0 if rep["recues"] else 2
+        print(f"-> {atomic_write_json(a.json, rep)}")
+    if not rep["recues"]:
+        print("# MESURE NULLE — aucun état d'entité reçu : rien n'a été mesuré", file=sys.stderr)
+        return RC_MESURE_NULLE
+    return RC_OK
 
 
 if __name__ == "__main__":

@@ -13,24 +13,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import inspect
 import pathlib
-import re
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _common import (atomic_write_text, key_from_yaml,  # noqa: E402
+                     maybe_await)
 
 from aioesphomeapi import APIClient
-
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-
-
-def key_from_yaml(path: pathlib.Path) -> str:
-    m = re.search(r"api_key:\s*(\S+)", path.read_text(encoding="utf-8"))
-    if not m:
-        raise SystemExit("api_key introuvable dans secrets.yaml")
-    return m.group(1).strip("\"'")
-
-
-async def maybe_await(value):
-    return await value if inspect.isawaitable(value) else value
 
 
 async def main() -> int:
@@ -40,7 +30,7 @@ async def main() -> int:
     ap.add_argument("--out", default="logs/dump_pulses.log")
     args = ap.parse_args()
 
-    client = APIClient(args.host, 6053, "", noise_psk=key_from_yaml(ROOT / "esphome" / "secrets.yaml"))
+    client = APIClient(args.host, 6053, "", noise_psk=key_from_yaml())
     await client.connect(login=True)
     infos, _ = await client.list_entities_services()
     by_name = {getattr(i, "name", ""): i for i in infos}
@@ -67,9 +57,7 @@ async def main() -> int:
 
     await asyncio.sleep(args.seconds)
 
-    out = ROOT / args.out
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("\n".join(lines), encoding="utf-8")
+    out = atomic_write_text(args.out, "\n".join(lines))
 
     for name in ("Fréquence CC1101", "Captures RMT", "Trames valides", "Trames rejetées",
                  "Doublons ignorés"):

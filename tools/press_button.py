@@ -8,42 +8,39 @@ l'appui (témoin d'horodatage utilisé pour découper la fenêtre avant/après).
 
 Usage:
     tools/press_button.py --name "Réappliquer la config radio" [--seconds 300] [--out logs/x.log]
+
+Code retour :
+    0  fenêtre capturée, au moins une ligne de log reçue ;
+    2  échec technique (connexion, bouton introuvable, exception) ;
+    3  MESURE NULLE : connexion réussie mais AUCUNE ligne de log reçue.
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
-import inspect
 import pathlib
-import re
+import sys
 import time
 
-from aioesphomeapi import APIClient
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _common import (RC_ERREUR, RC_MESURE_NULLE, RC_OK,  # noqa: E402
+                     atomic_write_text, key_from_yaml, maybe_await)
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-
-
-def key_from_yaml(path: pathlib.Path) -> str:
-    m = re.search(r"api_key:\s*(\S+)", path.read_text(encoding="utf-8"))
-    if not m:
-        raise SystemExit("api_key introuvable dans secrets.yaml")
-    return m.group(1).strip("\"'")
-
-
-async def maybe_await(value):
-    return await value if inspect.isawaitable(value) else value
+from aioesphomeapi import APIClient  # noqa: E402
 
 
 async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="172.16.0.205")
+    ap.add_argument("--key", default=None, help="clé API base64 (défaut: env ESPHOME_API_KEY ou YAML)")
     ap.add_argument("--name", required=True, help="nom exact du bouton (voir --list-buttons)")
     ap.add_argument("--seconds", type=float, default=300.0)
-    ap.add_argument("--out", default=None)
+    ap.add_argument("--out", default=None, help="fichier de sortie (relatif = racine du projet)")
     ap.add_argument("--list-buttons", action="store_true")
     args = ap.parse_args()
 
-    client = APIClient(args.host, 6053, "", noise_psk=key_from_yaml(ROOT / "esphome" / "secrets.yaml"))
+    key = args.key or key_from_yaml()
+    client = APIClient(args.host, 6053, "", noise_psk=key)
     await client.connect(login=True)
     infos, _ = await client.list_entities_services()
     buttons = {getattr(i, "name", ""): i for i in infos if type(i).__name__ == "ButtonInfo"}
@@ -51,12 +48,14 @@ async def main() -> int:
         for name in sorted(buttons):
             print(f"  {name}")
         await client.disconnect()
-        return 0
+        return RC_OK
 
     button = buttons.get(args.name)
     if button is None:
-        print("boutons disponibles :", ", ".join(sorted(buttons)) or "(aucun)")
-        raise SystemExit(f"bouton « {args.name} » introuvable")
+        print("boutons disponibles :", ", ".join(sorted(buttons)) or "(aucun)", file=sys.stderr)
+        await client.disconnect()
+        print(f"# ERREUR : bouton « {args.name} » introuvable", file=sys.stderr)
+        return RC_ERREUR
 
     lines: list[str] = []
 
@@ -73,22 +72,28 @@ async def main() -> int:
 
     await asyncio.sleep(args.seconds)
     t1 = time.strftime("%H:%M:%S", time.gmtime())
-    print(f"[{t1} UTC] fin de fenêtre ({args.seconds:.0f} s)")
+    print(f"[{t1} UTC] fin de fenêtre ({args.seconds:.0f} s) — {len(lines)} ligne(s) reçue(s)")
 
     if args.out:
-        out = ROOT / args.out
-        out.parent.mkdir(parents=True, exist_ok=True)
-        header = f"# appui « {args.name} » a {t0} UTC, fenetre {args.seconds:.0f} s (fin {t1} UTC)\n"
-        out.write_text(header + "\n".join(lines), encoding="utf-8")
-        print(f"-> {out}")
+        header = f"# appui « {args.name} » a {t0} UTC, fenetre {args.seconds:.0f} s (fin {t1} UTC)"
+        print(f"-> {atomic_write_text(args.out, header + '\n' + '\n'.join(lines) + '\n')}")
 
     for text in lines:
         if any(k in text for k in ("capture #", "impulsion", "trame extraite", "V7IN1", "GDO0",
                                    "PLL", "cc1101", "CC1101")):
             print("  LOG:", text.strip()[:300])
     await client.disconnect()
-    return 0
+    if not lines:
+        print("# MESURE NULLE — aucune ligne de log reçue : rien n'a été mesuré", file=sys.stderr)
+        return RC_MESURE_NULLE
+    return RC_OK
 
 
 if __name__ == "__main__":
-    raise SystemExit(asyncio.run(main()))
+    try:
+        raise SystemExit(asyncio.run(main()))
+    except SystemExit:
+        raise
+    except Exception as exc:
+        print(f"# ERREUR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        raise SystemExit(RC_ERREUR)

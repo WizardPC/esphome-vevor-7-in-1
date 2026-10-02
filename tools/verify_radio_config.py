@@ -13,11 +13,13 @@ grandeurs physiques obtenues avec les formules du datasheet utilisées par dump_
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import pathlib
 import re
 import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _common import atomic_write_json  # noqa: E402
 
 XTAL = 26000000.0
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -173,7 +175,7 @@ def main() -> int:
 
     res["ok"] = ok
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(res, indent=2, ensure_ascii=False))
+    atomic_write_json(OUT, res)
 
     print(f"# rapport -> {OUT}")
     print(f"freq   : {f_hz/1e6:.3f} MHz demandé -> {f_actual/1e6:.6f} MHz "

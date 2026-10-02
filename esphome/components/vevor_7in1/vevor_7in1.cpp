@@ -21,6 +21,12 @@ void Vevor7in1::dump_receiver_config_() {
 }
 
 void Vevor7in1::loop() {
+  // Garde-fou : si setup() n'a pas trouvé de remote_receiver — ou a marqué le composant en échec —
+  // `receiver_` est nul et le battement de cœur (dump_receiver_config_) le déréférencerait. setup()
+  // le teste déjà ; loop() doit le tester aussi (revue round 1, S5 — non corrigé jusqu'ici).
+  if (this->receiver_ == nullptr || this->is_failed()) {
+    return;
+  }
   const uint32_t now = millis();
   if (now - this->last_report_ms_ < HEARTBEAT_MS) {
     return;
@@ -112,9 +118,10 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
 
   // Une capture est un MORCEAU de rafale si elle est trop courte pour en porter une entière :
   // mesuré sur ce montage, une rafale utile fait 176 à 184 impulsions, et le RMT du C3 la coupe
-  // parfois en deux (96 + 82, 94 + 70…). C'est la seule situation où recoller a un sens.
-  const bool fragment = timings.size() >= vevor::MIN_TIMINGS &&
-                        timings.size() <= vevor::MAX_FRAGMENT_TIMINGS;
+  // parfois en deux (96 + 82, 94 + 70…). C'est la seule situation où recoller a un sens. Le
+  // prédicat vit dans includes/vevor_protocol.h (testable hors matériel) ; le test l'éprouve aux
+  // bornes dans test_fragment_policy().
+  const bool fragment = vevor::is_fragment(timings.size());
 
   uint8_t raw[vevor::FRAME_BYTES];
   int32_t period_used = 0;

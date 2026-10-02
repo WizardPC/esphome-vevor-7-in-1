@@ -21,7 +21,7 @@ et un décodeur Python indépendant**, et recoupement avec un second récepteur.
 | `esphome/components/vevor_7in1/` | composant C++ : écoute `remote_receiver`, impulsions → trame |
 | `esphome/includes/vevor_protocol.h` | protocole (durées → bits → octets → valeurs), **testable hors matériel** |
 | `esphome/secrets.yaml.example` | modèle à copier en `esphome/secrets.yaml` (non versionné) |
-| `tests/` | 198 vérifications hors carte (nominal, polarité inversée, capture tronquée, gigue, biais, bruit, recollage) |
+| `tests/` | 377 vérifications hors carte (nominal, polarité inversée, capture tronquée, gigue, biais, bruit, recollage, porte de plausibilité) |
 | `tools/` | build, flash, capture de logs, évaluation, balayage de fréquence, synthèse de fenêtre, comparaison A/B |
 | `evidence/` | rapports JSON versionnés : résultat d'une fenêtre, comparaison témoin/nous (voir `evidence/README.md`) |
 | `requirements.txt` | dépendances de la machine qui pilote la carte (ESPHome, aioesphomeapi) |
@@ -30,6 +30,8 @@ et un décodeur Python indépendant**, et recoupement avec un second récepteur.
 | `state/DONE.md` | état final, preuves, suites |
 
 ## Câblage
+
+### Liaisons (c'est le montage qui fonctionne)
 
 | ESP32-C3 SuperMini | CC1101 (module) | Signal |
 |---|---|---|
@@ -44,6 +46,72 @@ et un décodeur Python indépendant**, et recoupement avec un second récepteur.
 
 Antenne : l'antenne spirale fournie suffit à moins de 15 m. Pour de la portée, un brin λ/4
 (≈ 8,6 cm pour 868 MHz) soudé sur ANT fonctionne nettement mieux.
+
+### Résistance et condensateur — ce qui est SOUDÉ (02/10/2026)
+
+Symptôme traité : la puce **perdait des écritures de registres de façon intermittente** — un registre
+relu à sa **valeur d'usine** (`MDMCFG4` écrit `0xC8` relu `0x8C`, `MDMCFG3` écrit `0xC0` relu
+`0x22`), donc une puce jamais configurée qui ne démodulait rien, à aucune fréquence. Les lectures,
+elles, restaient fiables : le défaut était bien dans le LIEN, pas dans la puce. Après ces deux
+composants, le contrôle embarqué est passé de « 1 registre définitivement non pris » à **« 0 registre
+définitivement non pris » sur quatre cycles d'affilée**.
+
+- **Résistance 10 kΩ** entre **CSN (GPIO7)** et **3,3 V**, soudée au plus près de la broche CSN du
+  module. Pourquoi : au reset, les GPIO de l'ESP32-C3 sont en **haute impédance** (Table 2-1 du
+  datasheet Espressif : IE, sans WPU) — sans pull-up, la ligne CS flotte pendant tout le démarrage,
+  la puce peut y voir des sélections parasites et partir dans l'état indéterminé que décrit la
+  datasheet (§4.9). 4,7 à 10 kΩ convient ; 10 kΩ est la valeur de la carte de référence ESP32-C3 +
+  CC1101. **L'option YAML `cs_pin: mode: {pullup: true}` ne remplace pas cette résistance** : elle
+  n'est appliquée qu'au `setup()` de la broche, donc après la fenêtre de démarrage.
+- **Condensateur 10 µF** entre **VCC et GND du module** (découplage des appels de courant).
+
+### Recommandé, pas encore monté
+
+- **100 nF** céramique au plus près de la broche VCC du module — c'est lui qui agit sur les fronts
+  rapides ; à associer au 10 µF, pas à mettre à la place.
+- **Alimentation du module séparée** de la broche 3V3 du SuperMini : LDO 3,3 V dédié (≥ 300 mA)
+  alimenté en 5 V, **masse commune obligatoire** (une masse flottante est pire que le défaut). Les
+  clones de SuperMini plafonnent autour de 250 mA et leur rail s'effondre sous les pics Wi-Fi.
+- **22 Ω en série sur SCLK** (et éventuellement MOSI/CS) si les fils restent longs.
+- **Ne rien ajouter sur le quartz** : quartz et capacités de charge sont déjà dans le module, y
+  toucher dérègle la fréquence. Rien non plus sur le chemin RF entre la puce et l'antenne.
+- Vérifier que **DCOUPL n'est pas relié au 3,3 V** (erreur de schéma relevée par TI). Sur un module
+  il n'est normalement pas accessible : à contrôler sur une carte à puce nue.
+- **Ne jamais alimenter en 5 V**, et ne jamais déclarer un second périphérique SPI sur le bus de la
+  puce.
+
+### Couper l'alimentation du module par un transistor (piste, NON montée)
+
+Sur ce montage, **un démarrage sur deux lève une puce muette** (`Chip ID: 0xFFFF`, toutes les
+lectures SPI à 0xFF) : elle n'est alors jamais configurée et reste en IDLE. Un reset logiciel ne la
+récupère pas (trois tentatives, trois échecs) ; une **vraie coupure d'alimentation**, si. Piloter
+l'alimentation du module depuis un GPIO donnerait donc au firmware le seul remède qui fonctionne —
+et le cycle serait immédiat, au lieu des dix minutes que met la reprise actuelle.
+
+```
+        3,3 V ──┬───────────┬────────────┬──── source du P-MOSFET
+                │           │            │
+            [10 kΩ]      [100 nF]     [10 µF]        (10 kΩ = grille tirée au 3,3 V ⇒ éteint)
+                │           │            │
+                │           └────────────┴──── drain ⇒ VCC du module CC1101
+                │
+   GPIO libre ──[1 kΩ]── grille du P-MOSFET
+```
+
+- **P-MOSFET à niveau logique** en série sur le VCC du module (ex. AO3401, IRLML6402) : source au
+  3,3 V, drain vers le module. Grille tirée au 3,3 V par **10 kΩ** (module **éteint** par défaut au
+  démarrage, donc puce propre au boot) et pilotée par un **GPIO libre** à travers **1 kΩ**.
+  GPIO à l'état **bas = module alimenté** ; laisser le GPIO en haute impédance = module éteint.
+- **Vérifier que le transistor conduit à Vgs = −3,3 V** : un MOSFET non « logic level » ne s'ouvre
+  pas à cette tension. Prendre un modèle dont Vgs(th) est inférieur à 1,5 V.
+- Garder le **10 µF** (et le 100 nF) **côté module**, c'est-à-dire après le transistor.
+- **Variante plus simple mais moins propre** : commuter la **masse** du module (N-MOSFET ou NPN
+  2N2222, grille/base pilotée par le GPIO à travers 1 kΩ). Dans ce cas les lignes SPI viennent
+  piloter une puce non alimentée : ajouter **100 Ω en série sur SCLK / MOSI / CS** pour limiter le
+  courant dans les diodes de protection.
+- Côté firmware : une sortie GPIO, un cycle **éteint ≥ 300 ms puis rallumé**, puis ré-initialisation
+  du composant radio. La datasheet demande une rampe de 0 à 1,8 V en ≤ 5 ms et une coupure d'au
+  moins 1 ms — un cycle de quelques centaines de millisecondes les respecte largement.
 
 ## Mise en route
 

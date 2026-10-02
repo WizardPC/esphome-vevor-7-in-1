@@ -12,122 +12,25 @@ Usage:
     scan_freq.py --host 192.168.2.50 --set 868.30    # règle juste la fréquence
 
 Un palier doit durer au moins ~25 s : la station n'émet qu'une rafale toutes les 20 s.
+
+Code retour :
+    0  balayage mesuré ; un total de 0 trame est un RÉSULTAT (« aucune trame »), pas un échec ;
+    2  échec technique : connexion, exception, ou ÉCRITURE DE FRÉQUENCE NON PRISE (relue ≠ demandée) ;
+    3  MESURE NULLE : l'entité « Trames valides » n'existe pas / aucun état reçu — rien n'a été mesuré.
 """
 from __future__ import annotations
 
 import argparse
-import asyncio
-import json
 import math
-import os
 import pathlib
-import re
 import statistics
 import sys
 import time
+import asyncio
 
-import aioesphomeapi
-
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-DEFAULT_YAML = ROOT / "esphome" / "vevor-7in1.yaml"
-
-# ANCRÉ au début du nom, volontairement : `fr[ée]quence` sans ancre matchait aussi
-# « Offset fréquence » (un capteur), et `key_of()` prend le premier nom qui correspond dans
-# l'ordre de livraison des entités. Un `number_command` envoyé à la clé d'un capteur est
-# silencieusement ignoré par l'appareil : le réglage de fréquence ne faisait RIEN, sans aucune
-# erreur. Ne jamais désancrer ce motif.
-FREQ_NAME_RE = re.compile(r"^\s*fr[ée]quence", re.I)  # « Fréquence CC1101 »
-VALID_RE = re.compile(r"trames valides", re.I)
-REJECT_RE = re.compile(r"trames rejet", re.I)
-RSSI_RE = re.compile(r"rssi", re.I)
-
-
-def key_from_yaml() -> str | None:
-    """Clé de chiffrement de l'API : lue dans le YAML en résolvant `!secret <nom>`.
-
-    Le YAML ne contient que `key: !secret api_key` : la valeur est dans esphome/secrets.yaml.
-    """
-    if not DEFAULT_YAML.exists():
-        return None
-    text = DEFAULT_YAML.read_text(encoding="utf-8", errors="replace")
-    # Même piège que dans capture_logs.py : `(\S+)` ne prenait que le premier mot, donc
-    # "!secret" seul au lieu de "!secret api_key".
-    m = re.search(r"encryption:\s*\n(?:[ \t].*\n)*?[ \t]+key:\s*(.+?)\s*$", text, re.M)
-    if not m:
-        return None
-    val = m.group(1).strip().strip("\"'")
-    if val.startswith("!secret"):
-        parts = val.split(None, 1)
-        name = parts[1] if len(parts) > 1 else ""
-        secrets = DEFAULT_YAML.parent / "secrets.yaml"
-        if name and secrets.exists():
-            sm = re.search(rf"^{re.escape(name)}:\s*(\S+)",
-                           secrets.read_text(encoding="utf-8", errors="replace"), re.M)
-            if sm:
-                return sm.group(1).strip().strip("\"'")
-        return None
-    return val or None
-
-
-class Device:
-    def __init__(self, host: str, port: int, key: str | None):
-        self.host, self.port, self.key = host, port, key
-        # noise_psk = chiffrement ESPHome ; passer la clé en 3e position la traitait comme un
-        # mot de passe -> « Connection requires encryption ».
-        self.cli = aioesphomeapi.APIClient(
-            host, port, None, noise_psk=None if key in (None, "", "None") else key
-        )
-        self.state: dict[int, float] = {}
-        self.keys: dict[str, int] = {}
-
-    async def __aenter__(self) -> "Device":
-        await self.cli.connect(login=True)
-        info = await self.cli.device_info()
-        self.info = info
-        entities, _ = await self.cli.list_entities_services()
-        for e in entities:
-            name = getattr(e, "name", "") or ""
-            self.keys[name] = e.key
-            if hasattr(e, "state"):
-                self.state[e.key] = e.state
-        self.cli.subscribe_states(lambda s: self.state.__setitem__(s.key, getattr(s, "state", None)))
-        return self
-
-    async def __aexit__(self, *exc) -> None:
-        await self.cli.disconnect()
-
-    def key_of(self, pattern: re.Pattern) -> int | None:
-        for name, k in self.keys.items():
-            if pattern.search(name):
-                return k
-        return None
-
-    def get(self, name: str) -> float | None:
-        k = self.keys.get(name)
-        return self.state.get(k) if k is not None else None
-
-    def set_freq(self, mhz: float) -> None:
-        k = self.key_of(FREQ_NAME_RE)
-        if k is None:
-            raise SystemExit("entité « Fréquence CC1101 » introuvable — firmware à jour ? (--list)")
-        self.cli.number_command(k, mhz)
-
-    def counts(self) -> tuple[float, float, float | None]:
-        # NaN = capteur jamais publié (aucune trame depuis le démarrage) : à traiter comme 0,
-        # sinon int(NaN) fait planter le palier (ValueError: cannot convert float NaN to integer).
-        def num(v) -> float:
-            try:
-                return 0.0 if v is None or math.isnan(float(v)) else float(v)
-            except (TypeError, ValueError):
-                return 0.0
-
-        rssi = self.get("RSSI")
-        try:
-            if rssi is None or math.isnan(float(rssi)):
-                rssi = None
-        except (TypeError, ValueError):
-            rssi = None
-        return num(self.get("Trames valides")), num(self.get("Trames rejetées")), rssi
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _common import (Device, RC_ERREUR, RC_MESURE_NULLE, RC_OK,  # noqa: E402
+                     VALID_RE, atomic_write_json, resolve_key)
 
 
 async def do_list(dev: Device) -> None:
@@ -136,21 +39,34 @@ async def do_list(dev: Device) -> None:
         print(f"{k:>6}  {name}")
 
 
-async def do_set(dev: Device, mhz: float) -> None:
+async def do_set(dev: Device, mhz: float) -> int:
+    """Règle la fréquence ET LA RELIT. Sans relecture, une commande perdue (mauvaise clé
+    d'entité) était annoncée comme réussie. L'entité est `optimistic: true` : si elle ne
+    relit pas la valeur demandée, la commande n'est pas arrivée."""
     dev.set_freq(mhz)
     await asyncio.sleep(1.5)
-    # Contrôle de l'écriture : sans lui, une commande perdue (mauvaise clé d'entité) était
-    # annoncée comme réussie. L'entité est `optimistic: true`, donc si elle ne relit pas la
-    # valeur demandée, c'est que la commande n'est pas arrivée.
     got = dev.get("Fréquence CC1101")
     print(f"# fréquence réglée sur {mhz} MHz — entité relue : {got}")
-    if got is None or abs(float(got) - mhz) > 0.001:
-        print(f"# ATTENTION : la carte n'a pas pris la valeur (lue {got}) — voir FREQ_NAME_RE",
+    try:
+        ok = got is not None and abs(float(got) - mhz) <= 0.001
+    except (TypeError, ValueError):
+        ok = False
+    if not ok:
+        print(f"# ERREUR : la carte n'a PAS pris la valeur (lue {got!r}) — voir FREQ_RE",
               file=sys.stderr)
-        return 0
+        return RC_ERREUR
+    return RC_OK
 
 
-async def scan(dev: Device, start: float, stop: float, step: float, dwell: float, settle: float) -> list[dict]:
+async def scan(dev: Device, start: float, stop: float, step: float,
+               dwell: float, settle: float) -> list[dict] | None:
+    """Renvoie les paliers mesurés, ou None si RIEN n'a pu être mesuré (entité absente)."""
+    # Sans l'entité « Trames valides », aucun compteur n'est lisible : mesurer serait un
+    # mensonge. On refuse de conclure (RC_MESURE_NULLE côté main).
+    if not dev.has(VALID_RE):
+        print("# MESURE NULLE : entité « Trames valides » absente — aucun compteur à lire",
+              file=sys.stderr)
+        return None
     freqs = []
     f = start
     while f <= stop + 1e-9:
@@ -202,39 +118,46 @@ def main() -> int:
     ap.add_argument("--step", type=float, default=0.05)
     ap.add_argument("--dwell", type=float, default=25.0, help="secondes par palier (>=25 recommandé)")
     ap.add_argument("--settle", type=float, default=1.0)
-    ap.add_argument("--out", default=None)
+    ap.add_argument("--out", default=None, help="rapport JSON (relatif = racine du projet)")
     args = ap.parse_args()
 
-    key = args.key or os.environ.get("ESPHOME_API_KEY") or key_from_yaml()
+    key = resolve_key(args.key)
 
-    async def run() -> list[dict]:
+    async def run() -> tuple[int, list[dict] | None]:
         async with Device(args.host, args.port, key) as dev:
             if args.list:
                 await do_list(dev)
-                return []
+                return RC_OK, []
             if args.set_mhz is not None:
-                await do_set(dev, args.set_mhz)
-                return []
-            return await scan(dev, args.start, args.stop, args.step, args.dwell, args.settle)
+                return await do_set(dev, args.set_mhz), []
+            rows = await scan(dev, args.start, args.stop, args.step, args.dwell, args.settle)
+            return (RC_MESURE_NULLE if rows is None else RC_OK), rows
 
     try:
-        rows = asyncio.run(run())
+        rc, rows = asyncio.run(run())
+    except SystemExit:
+        raise
     except Exception as exc:
         print(f"# ERREUR: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 2
+        return RC_ERREUR
 
-    if rows:
-        best = max(rows, key=lambda r: (r["frames"], -(r["rssi_mean"] or -999)))
-        print(f"\n# meilleur palier: {best['freq_mhz']} MHz "
-              f"({int(best['frames'])} trames, rssi_moy={best['rssi_mean']})")
-        total = sum(r["frames"] for r in rows)
-        if total == 0:
-            print("# AUCUN signal sur toute la plage : vérifier SPI/alim, puis déviation, "
-                  "bande passante, syncword, câblage et antenne (voir MISSION.md § ordre de diagnostic)")
-        if args.out:
-            pathlib.Path(args.out).write_text(json.dumps({"rows": rows, "best": best}, indent=2), encoding="utf-8")
-            print(f"# rapport écrit: {args.out}")
-    return 0
+    if not rows:
+        if rc == RC_MESURE_NULLE:
+            print("# MESURE NULLE — rien n'a été mesuré (pas de compteur lisible)", file=sys.stderr)
+        return rc
+
+    best = max(rows, key=lambda r: (r["frames"], -(r["rssi_mean"] or -999)))
+    print(f"\n# meilleur palier: {best['freq_mhz']} MHz "
+          f"({int(best['frames'])} trames, rssi_moy={best['rssi_mean']})")
+    total = sum(r["frames"] for r in rows)
+    if total == 0:
+        print("# AUCUNE TRAME sur toute la plage (mesure faite) : vérifier SPI/alim, puis "
+              "déviation, bande passante, syncword, câblage et antenne "
+              "(voir MISSION.md § ordre de diagnostic)")
+    if args.out:
+        p = atomic_write_json(args.out, {"rows": rows, "best": best})
+        print(f"# rapport écrit (atomique): {p}")
+    return rc
 
 
 if __name__ == "__main__":

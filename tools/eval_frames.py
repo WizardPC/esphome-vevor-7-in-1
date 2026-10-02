@@ -24,13 +24,11 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
-import re
 import sys
 from collections import defaultdict
 
-RAW_RE = re.compile(r"RAW[ :=]+((?:[0-9a-fA-F]{2}[ \t]+){20}[0-9a-fA-F]{2})")
-OK_RE = re.compile(r"OK[ :=]+(\{.*\})")
-TS_RE = re.compile(r"^\[(\d{2}:\d{2}:\d{2})\]")
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _common import OK_RE, RAW_RE, TS_RE, atomic_write_json  # noqa: E402  (motifs partagés)
 
 # Pas du compteur TX de la station : MESURÉ, environ +1,95 par seconde (+39 sur une rafale de
 # 20 s) — c'est un compteur interne qui avance avec le TEMPS, pas un compteur de rafales. Le pas
@@ -313,7 +311,7 @@ def main() -> int:
 
     print(json.dumps(report, ensure_ascii=False, indent=2))
     if args.json_out:
-        pathlib.Path(args.json_out).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_json(args.json_out, report)
 
     print("\n=== RÉSUMÉ ===", file=sys.stderr)
     print(

@@ -15,27 +15,15 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import inspect
-import json
 import pathlib
-import re
+import sys
 import time
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _common import (atomic_write_json, key_from_yaml,  # noqa: E402
+                     maybe_await)
+
 from aioesphomeapi import APIClient
-
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-
-
-def key_from_yaml(path: pathlib.Path) -> str:
-    text = path.read_text(encoding="utf-8")
-    m = re.search(r"api_key:\s*(\S+)", text)
-    if not m:
-        raise SystemExit("api_key introuvable dans secrets.yaml")
-    return m.group(1).strip("\"'")
-
-
-async def maybe_await(value):
-    return await value if inspect.isawaitable(value) else value
 
 
 async def main() -> int:
@@ -46,7 +34,7 @@ async def main() -> int:
     ap.add_argument("--out", default="logs/scan_async.json")
     args = ap.parse_args()
 
-    key = key_from_yaml(ROOT / "esphome" / "secrets.yaml")
+    key = key_from_yaml()
     client = APIClient(args.host, 6053, "", noise_psk=key)
     await client.connect(login=True)
 
@@ -93,10 +81,7 @@ async def main() -> int:
             f"rejetées {rejected} (+{row['delta_rejetees']})"
         )
 
-    out = ROOT / args.out
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(results, indent=1, ensure_ascii=False), encoding="utf-8")
-    print(f"-> {out}")
+    print(f"-> {atomic_write_json(args.out, results)}")
     await client.disconnect()
     return 0
 

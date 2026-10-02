@@ -123,26 +123,51 @@ def decode_reference(b: list[int]) -> dict:
     }
 
 
-def _scenarios() -> list[tuple[str, list[int], bool]]:
-    """(nom, trame brute, attendue valide)."""
-    out: list[tuple[str, list[int], bool]] = []
+def _scenarios() -> list[tuple[str, list[int], bool, str]]:
+    """(nom, trame brute, attendue valide, motif de rejet attendu — "" si la trame est valide)."""
+    out: list[tuple[str, list[int], bool, str]] = []
     sample = [int(x, 16) for x in RTL433_SAMPLE.split()]
-    out.append(("reference_rtl433", sample, True))
-    out.append(("nominal", encode(), True))
-    out.append(("temperatures_negatives", encode(temp_c=-12.3, humidity=91), True))
-    out.append(("pluie_maximale_encodable", encode(rain_mm=15209.8), True))
-    out.append(("lux_eleve_x10", encode(lux=98000, uv=11), True))
-    out.append(("compteur_tx_ff", encode(tx_counter=0xFF), True))
-    out.append(("batterie_faible", encode(battery_low=True), True))
-    out.append(("vent_nul", encode(wind_kmh=0.0, gust_kmh=0.0, wind_dir_deg=0), True))
+    out.append(("reference_rtl433", sample, True, ""))
+    out.append(("nominal", encode(), True, ""))
+    out.append(("temperatures_negatives", encode(temp_c=-12.3, humidity=91), True, ""))
+    out.append(("pluie_maximale_encodable", encode(rain_mm=15209.8), True, ""))
+    out.append(("lux_eleve_x10", encode(lux=98000, uv=11), True, ""))
+    out.append(("compteur_tx_ff", encode(tx_counter=0xFF), True, ""))
+    out.append(("batterie_faible", encode(battery_low=True), True, ""))
+    out.append(("vent_nul", encode(wind_kmh=0.0, gust_kmh=0.0, wind_dir_deg=0), True, ""))
+    # BORNES HAUTES de la porte de plausibilité, ACCEPTÉES. La porte est un garde-fou contre les
+    # trames à décalage de bits, pas un filtre à valeurs normales : aucune valeur PHYSIQUEMENT
+    # possible ne doit être refusée. La borne vent est celle qui était faussement rejetée
+    # (1500 ticks / 8,333 = 180,007 > 180,0) ; la comparaison se fait désormais à la borne, avec
+    # une marge d'arrondi (vevor_protocol.h, WIND_LIMIT_MARGE_KMH).
+    out.append(("vent_180_accepte", encode(wind_kmh=180.0), True, ""))
+    out.append(("rafale_180_acceptee", encode(gust_kmh=180.0), True, ""))
+    out.append(("humidite_100_acceptee", encode(humidity=100), True, ""))
+    out.append(("uv_16_accepte", encode(uv=16), True, ""))
+    out.append(("direction_359_acceptee", encode(wind_dir_deg=359), True, ""))
+    out.append(("temperature_60_acceptee", encode(temp_c=60.0), True, ""))
+    out.append(("temperature_moins40_acceptee", encode(temp_c=-40.0), True, ""))
+    # Chaque BRANCHE de la porte, éprouvée par une trame de test : bien formée (en-tête + checksum
+    # + compteur) mais physiquement impossible → refusée AVEC le motif correspondant. Avant ces
+    # vecteurs, seule la branche « direction » était couverte par une trame (revue round 2, §4).
+    out.append(("humidite_101_rejetee", encode(humidity=101), False, "humidite"))
+    out.append(("temperature_70_rejetee", encode(temp_c=70.0), False, "temperature"))
+    out.append(("temperature_moins45_rejetee", encode(temp_c=-45.0), False, "temperature"))
+    out.append(("vent_200_rejete", encode(wind_kmh=200.0), False, "vent"))
+    # Le plus PETIT cran encodable au-dessus de la borne : 1501 ticks / 8,333 = 180,13 > 180,01
+    # (borne + marge) → refusé. C'est la contre-épreuve serrée du faux rejet corrigé juste au-dessus.
+    out.append(("vent_premier_cran_au_dessus_rejete", encode(wind_kmh=180.13), False, "vent"))
+    out.append(("rafale_200_rejetee", encode(gust_kmh=200.0), False, "vent"))
+    out.append(("uv_20_rejete", encode(uv=20), False, "uv"))
+    out.append(("uv_negatif_rejete", encode(uv=-1), False, "uv"))
     # ATTENTION : le décodeur de rtl_433 — et donc le nôtre — exige `b[1] == 0` exactement.
     # Les stations de cette famille émettent type de capteur = 0 et canal = 0 ; exiger 0 est un
     # filtre à bruit volontaire. Une trame à canal non nul doit donc être REJETÉE, et ce
     # scénario verrouille ce comportement (il ne doit pas être « assoupli » par mégarde).
-    out.append(("canal_non_nul_rejete", encode(channel=1, sensor_id=0x7C41), False))
-    out.append(("checksum_corrompu", encode(corrupt_checksum=True), False))
-    out.append(("compteur_incoherent", encode(bad_counter=True), False))
-    out.append(("en_tete_invalide", encode(bad_header=True), False))
+    out.append(("canal_non_nul_rejete", encode(channel=1, sensor_id=0x7C41), False, "en-tete"))
+    out.append(("checksum_corrompu", encode(corrupt_checksum=True), False, "checksum"))
+    out.append(("compteur_incoherent", encode(bad_counter=True), False, "compteur_tx"))
+    out.append(("en_tete_invalide", encode(bad_header=True), False, "en-tete"))
     return out
 
 
@@ -202,23 +227,30 @@ def _biased(timings: list[int], bias_us: int) -> list[int]:
     return out
 
 
-def _pulse_scenarios() -> list[tuple[str, list[int], bool, dict]]:
-    """(nom, durées d'impulsions, attendu valide, valeurs de contrôle)."""
+def _pulse_scenarios() -> list[tuple[str, list[int], bool, dict, int]]:
+    """(nom, durées d'impulsions, attendu valide, valeurs de contrôle, période d'émission)."""
     frame = encode(sensor_id=0x84CB, temp_c=14.2, humidity=86, wind_kmh=11.2, gust_kmh=12.8,
                    wind_dir_deg=283, rain_mm=57.8, uv=0, lux=0, tx_counter=0x40)
     values = decode_reference(frame)
     bits = bits_from_bytes(list(PULSE_PREAMBLE) + frame)
-    out: list[tuple[str, list[int], bool, dict]] = []
+    out: list[tuple[str, list[int], bool, dict, int]] = []
 
-    out.append(("impulsions_nominales", timings_from_bits(bits, 90), True, values))
-    out.append(("impulsions_polarite_inversee", timings_from_bits(bits, 90, invert=True), True, values))
-    out.append(("impulsions_periode_88us", timings_from_bits(bits, 88), True, values))
+    out.append(("impulsions_nominales", timings_from_bits(bits, 90), True, values, 90))
+    out.append(("impulsions_polarite_inversee", timings_from_bits(bits, 90, invert=True), True,
+                values, 90))
+    # Chaque période CANDIDATE reçoit une rafale émise à SA période : le décodeur doit savoir la
+    # décoder quand elle est le seul candidat (exercice réel de 88, 89 ET 87 — voir
+    # test_period_selection). Générer une seule rafale à 88 ne suffisait pas : le décodeur
+    # retombait sur 90, et l'assertion « == 90 » ne testait que l'ordre de la liste.
+    out.append(("impulsions_periode_88us", timings_from_bits(bits, 88), True, values, 88))
+    out.append(("impulsions_periode_89us", timings_from_bits(bits, 89), True, values, 89))
+    out.append(("impulsions_periode_87us", timings_from_bits(bits, 87), True, values, 87))
     # Capture qui commence au MILIEU du préambule : cas courant, le RMT démarre quand la rafale a
     # déjà commencé. Le décodeur ne doit pas exiger le préambule entier pour autant.
-    out.append(("impulsions_capture_tronquee", timings_from_bits(bits[13:], 90), True, values))
+    out.append(("impulsions_capture_tronquee", timings_from_bits(bits[13:], 90), True, values, 90))
     # Trou inter-rafales dans la capture : à SAUTER, pas à considérer comme une capture perdue.
     out.append(("impulsions_trou_inter_rafales", timings_from_bits(bits, 90, gap_us=PULSE_GAP_US),
-                True, values))
+                True, values, 90))
     # Gigue de ±2 % sur chaque impulsion : ce que produisent deux horloges indépendantes
     # (émetteur + RMT à 1 MHz). La tolérance de l'arrondi par impulsion est ABSOLUE (±45 µs,
     # soit une demi-période) : une erreur proportionnelle ne peut donc pas dépasser ~5 % sur la
@@ -228,28 +260,38 @@ def _pulse_scenarios() -> list[tuple[str, list[int], bool, dict]]:
     rnd = random.Random(20260930)
     jittered = [round(t * (1.0 + rnd.uniform(-0.02, 0.02)))
                 for t in timings_from_bits(bits, 90)]
-    out.append(("impulsions_gigue_2pct", jittered, True, values))
+    out.append(("impulsions_gigue_2pct", jittered, True, values, 90))
     # Biais ABSOLU sur toutes les impulsions (récepteur mal centré) : ±30 µs, dans la tolérance
     # d'une demi-période. C'est la forme d'erreur réellement observée sur ce montage (impulsions
     # mesurées à 86 et 267 µs au lieu de 90 et 270 → −4 et −3 µs), et celle que le projet de
     # référence corrige par une liste de décalages. Notre arrondi par impulsion l'absorbe
     # directement, sans liste de candidats.
     out.append(("impulsions_biais_bas_30us", _biased(timings_from_bits(bits, 90), -30), True,
-                values))
+                values, 90))
     out.append(("impulsions_biais_haut_30us", _biased(timings_from_bits(bits, 90), 30), True,
-                values))
+                values, 90))
+    # Trame à LONGUE suite de bits identiques (id = 0, température négative, humidité nulle →
+    # 28 bits consécutifs) : c'est la seule forme SENSIBLE À LA PÉRIODE, car une suite courte se
+    # décode pareil à 87, 88, 89 et 90 µs. Elle sert à prouver que le balayage des candidats
+    # CONTINUE après un échec (test_period_selection) : à 88 µs cette rafale ne se décode PAS,
+    # à 90 µs oui.
+    longue = encode(sensor_id=0x0000, temp_c=-30.0, humidity=0, wind_kmh=0.0, gust_kmh=0.0,
+                    wind_dir_deg=0, rain_mm=0.0, uv=0, lux=0, tx_counter=0)
+    out.append(("impulsions_trame_longue",
+                timings_from_bits(bits_from_bytes(list(PULSE_PREAMBLE) + longue), 90), True,
+                decode_reference(longue), 90))
     # Trop court pour porter une trame (seuil MIN_TIMINGS = 40 impulsions).
-    out.append(("impulsions_trop_courtes", timings_from_bits(bits, 90)[:20], False, {}))
+    out.append(("impulsions_trop_courtes", timings_from_bits(bits, 90)[:20], False, {}, 0))
     # Accroche trouvée mais trame corrompue : le checksum doit refuser.
     bad = encode(sensor_id=0x84CB, temp_c=14.2, corrupt_checksum=True)
     out.append(("impulsions_checksum_invalide",
-                timings_from_bits(bits_from_bytes(list(PULSE_PREAMBLE) + bad), 90), False, {}))
+                timings_from_bits(bits_from_bytes(list(PULSE_PREAMBLE) + bad), 90), False, {}, 0))
     # Bruit pur : aucune trame ne doit en sortir (le bruit ne fabrique pas un checksum valide).
     for seed in (1, 2, 3):
         noise = random.Random(seed)
         durations = [noise.randint(-600, 600) for _ in range(200)]
         durations[0] = PULSE_LEAD_GAP_US
-        out.append((f"impulsions_bruit_{seed}", durations, False, {}))
+        out.append((f"impulsions_bruit_{seed}", durations, False, {}, 0))
     return out
 
 
@@ -268,11 +310,12 @@ def emit_pulses(path: pathlib.Path) -> int:
         "  uint16_t id;",
         "  float temp_c;",
         "  float rain_mm;",
+        "  int32_t period_us;",
         "};",
         "",
     ]
     rows = []
-    for index, (name, timings, valid, values) in enumerate(_pulse_scenarios()):
+    for index, (name, timings, valid, values, period) in enumerate(_pulse_scenarios()):
         array = f"PULSE_{index}"
         body = ", ".join(str(int(t)) for t in timings)
         lines += [
@@ -282,10 +325,10 @@ def emit_pulses(path: pathlib.Path) -> int:
         if valid:
             rows.append(
                 f'  {{"{name}", {array}, {len(timings)}, true, {values["id"]}, '
-                f'{values["temp_c"]}f, {values["rain_mm"]}f}},'
+                f'{values["temp_c"]}f, {values["rain_mm"]}f, {period}}},'
             )
         else:
-            rows.append(f'  {{"{name}", {array}, {len(timings)}, false, 0, 0.0f, 0.0f}},')
+            rows.append(f'  {{"{name}", {array}, {len(timings)}, false, 0, 0.0f, 0.0f, 0}},')
     lines += [
         "static const VevorPulseScenario VEVOR_PULSE_VECTORS[] = {",
     ] + rows + [
@@ -343,12 +386,13 @@ def emit_vectors(path: pathlib.Path) -> int:
         "  int uv;",
         "  uint32_t lux;",
         "  uint8_t tx_counter;",
+        "  const char *reject_reason;",
         "};",
         "",
         "static const VevorVector VEVOR_VECTORS[] = {",
     ]
     count = 0
-    for name, raw, valid in _scenarios():
+    for name, raw, valid, reason in _scenarios():
         values = decode_reference(raw) if valid else {}
         raw_txt = ", ".join(f"0x{x:02x}" for x in raw)
         if valid:
@@ -357,10 +401,11 @@ def emit_vectors(path: pathlib.Path) -> int:
                 f'{"true" if values["battery_low"] else "false"}, {values["temp_c"]}f, '
                 f'{values["humidity"]}, {values["wind_kmh"]}f, {values["gust_kmh"]}f, '
                 f'{values["wind_dir_deg"]}, {values["rain_mm"]}f, {values["uv"]}, '
-                f'{values["lux"]}, {values["tx_counter"]}}},'
+                f'{values["lux"]}, {values["tx_counter"]}, ""}},'
             )
         else:
-            row = f'  {{"{name}", {{{raw_txt}}}, false, 0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0}},'
+            row = (f'  {{"{name}", {{{raw_txt}}}, false, 0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, '
+                   f'"{reason}"}},')
         lines.append(row)
         count += 1
     lines += ["};", "", f"static const int VEVOR_VECTOR_COUNT = {count};", ""]

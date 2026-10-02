@@ -10,8 +10,8 @@
   "cadence_min_s": 20,
   "cadence_max_s": 20,
   "trous_sup_30s": [],
-  "rejets": 0,
-  "raisons_rejet": [],
+  "rejets_firmware": 0,
+  "raisons_rejet_firmware": [],
   "ids": [
     33995
   ],
@@ -31,6 +31,10 @@
     2.4,
     16.8
   ],
+  "wind_dir_deg": [
+    240,
+    310
+  ],
   "pluie_mm": [
     59.2
   ],
@@ -42,6 +46,8 @@
     19890,
     38160
   ],
+  "pluie_decroissante": false,
+  "valeurs_hors_plage": [],
   "emissions_par_10min": {
     "890-900 min": 5,
     "900-910 min": 30,
@@ -50,5 +56,10 @@
     "930-940 min": 30,
     "940-950 min": 30,
     "950-960 min": 25
-  }
+  },
+  "verdict": "PASS",
+  "motifs_fail": [],
+  "rapport": "evidence/rapport_fenetre_1h.json",
+  "rapport_logfile": "logs/verif_garde_fou_60min.log",
+  "rapport_verdict": "PASS"
 }

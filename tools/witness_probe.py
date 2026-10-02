@@ -24,6 +24,9 @@ import sys
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _common import atomic_write_text  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -79,7 +82,7 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         lines.append(f"# /events interrompu: {type(exc).__name__}: {exc}")
 
-    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    atomic_write_text(out, "\n".join(lines) + "\n")
 
     print(f"fichier         : {out}")
     print(f"lignes SSE      : {len(lines)}")

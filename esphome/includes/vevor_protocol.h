@@ -63,8 +63,20 @@ inline bool checksum_ok(const uint8_t *b) {
 
 inline bool counter_ok(const uint8_t *b) { return b[20] == (uint8_t)(b[18] + 1); }
 
+// Limite physique de la porte de plausibilité (km/h) et marge de comparaison. L'encodeur écrit
+// 1500 ticks pour 180 km/h ; or 1500 / 8,333f = 180,007 — STRICTEMENT au-dessus de 180,0f. Sans
+// marge, une rafale LÉGITIME à 180 km/h était donc refusée (faux rejet mesuré par la revue
+// round 2). La marge absorbe l'erreur d'arrondi de cette division ; une trame à décalage de bits
+// (≈ 360 km/h) la dépasse de très loin et reste refusée.
+static constexpr float WIND_LIMIT_KMH = 180.0f;
+static constexpr float WIND_LIMIT_MARGE_KMH = 0.01f;
+
 // `in` : 21 octets utiles (synchronisation déjà faite par le CC1101 en mode packet).
 inline bool decode(const uint8_t *in, Frame &out, const char **reason) {
+  // `valid` décrit CETTE trame, pas la précédente : remis à faux dès l'entrée, pour qu'une trame
+  // REFUSÉE ne puisse jamais ressortir marquée valide (revue round 2 : `out.valid` était posé
+  // AVANT la porte de plausibilité).
+  out.valid = false;
   if (in[0] != 0xAA || in[1] != 0x00) {
     *reason = "en-tete";
     return false;
@@ -103,8 +115,6 @@ inline bool decode(const uint8_t *in, Frame &out, const char **reason) {
   uint16_t lux_raw = (uint16_t)((b[16] << 8) | b[17]);
   out.lux = (lux_raw & 0x8000) ? (uint32_t)((lux_raw & 0x7FFF) * 10) : lux_raw;
 
-  out.valid = true;
-
   // PORTE DE PLAUSIBILITÉ — une trame PEUT passer en-tête + checksum + compteur et être fausse.
   // Mesuré le 01/10 sur une fenêtre d'une heure : 2 trames publiées sur 181 (1,6 %) portaient un
   // décalage d'un bit à l'extraction, ce qui DOUBLE tous les octets de valeur (un décalage d'un
@@ -125,8 +135,11 @@ inline bool decode(const uint8_t *in, Frame &out, const char **reason) {
     return false;
   }
   // Bornes hautes larges mais finies : un anémomètre de station domestique ne dépasse pas ces
-  // valeurs, alors qu'un décalage de bits les double.
-  if (out.wind_kmh > 180.0f || out.gust_kmh > 180.0f) {
+  // valeurs, alors qu'un décalage de bits les double. Comparaison À LA BORNE avec marge d'arrondi
+  // (WIND_LIMIT_MARGE_KMH) : 1500 ticks / 8,333f = 180,007 pour un 180 km/h LÉGITIME — sans cette
+  // marge, la porte refusait une trame valide (faux rejet de la revue round 2).
+  if (out.wind_kmh > WIND_LIMIT_KMH + WIND_LIMIT_MARGE_KMH ||
+      out.gust_kmh > WIND_LIMIT_KMH + WIND_LIMIT_MARGE_KMH) {
     *reason = "vent";
     return false;
   }
@@ -134,6 +147,11 @@ inline bool decode(const uint8_t *in, Frame &out, const char **reason) {
     *reason = "uv";
     return false;
   }
+
+  // La trame a franchi TOUTE la porte : elle est valide, et seulement maintenant. Poser `valid`
+  // AVANT les contrôles laissait ressortir une trame REFUSÉE marquée `valid == true` (revue
+  // round 2 — le composant ne lit pas ce champ, mais le contrat du décodeur était faux).
+  out.valid = true;
   return true;
 }
 
@@ -180,6 +198,15 @@ static constexpr size_t MIN_TIMINGS = 40;
 // plus large fait relire la rafale PRÉCÉDENTE — mesuré le 01/10 : 60 trames publiées pour
 // 31 mesures distinctes, chaque compteur TX exactement deux fois.
 static constexpr size_t MAX_FRAGMENT_TIMINGS = 160;
+
+// Vrai UNIQUEMENT pour une capture trop courte pour porter une rafale ENTIÈRE : c'est la seule
+// situation où recoller a un sens. Le composant appelle CE prédicat (vevor_7in1.cpp) et le test
+// l'exerce aux bornes. Une rafale complète (mesuré sur ce montage : 176 à 184 impulsions) n'est
+// donc jamais mémorisée comme morceau, donc jamais recollée devant la suivante — c'est ce qui a
+// supprimé la double publication du 01/10 (60 trames pour 31 mesures distinctes).
+inline bool is_fragment(size_t count) {
+  return count >= MIN_TIMINGS && count <= MAX_FRAGMENT_TIMINGS;
+}
 
 // Périodes bit essayées à chaque capture, dans l'ordre. Les valeurs encadrent tout ce qu'on
 // sait du protocole : 90 µs (valeur publiée, et période du montage témoin qui décode cette

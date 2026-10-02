@@ -8,6 +8,11 @@ Cette commande passe par un chemin INDÉPENDANT du démarrage : elle force une �
 fréquence (action `set_frequency` du composant), sans reflasher et sans redémarrer.
 
 Usage: tools/regler_frequence.py [--mhz 868.35] [--seconds 150]
+
+Code retour :
+    0  écriture prise (relue) et fenêtre mesurée ;
+    2  échec technique : entité absente, connexion, ou ÉCRITURE NON PRISE (relue ≠ demandée) ;
+    3  MESURE NULLE : aucun log reçu — rien n'a été mesuré.
 """
 from __future__ import annotations
 
@@ -18,7 +23,8 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from capture_logs import key_from_yaml  # noqa: E402  (résolution de la clé API, une seule copie)
+from _common import (FREQ_RE, RC_ERREUR, RC_MESURE_NULLE, RC_OK,  # noqa: E402
+                     key_from_yaml)
 
 from aioesphomeapi import APIClient  # noqa: E402
 
@@ -27,10 +33,10 @@ async def run(host: str, port: int, key: str, mhz: float, seconds: float) -> int
     cli = APIClient(host, port, None, noise_psk=key)
     await cli.connect(login=True)
     entities, _ = await cli.list_entities_services()
+    # Entité ANCRÉE : ne pas confondre avec « Offset fréquence » (capteur).
     cible = None
     for e in entities:
-        nom = getattr(e, "name", "")
-        if "quence CC1101" in nom:
+        if FREQ_RE.search(getattr(e, "name", "") or ""):
             cible = e
             break
     if cible is None:
@@ -38,21 +44,46 @@ async def run(host: str, port: int, key: str, mhz: float, seconds: float) -> int
         for e in entities:
             print("   -", getattr(e, "name", "?"), file=sys.stderr)
         await cli.disconnect()
-        return 2
+        return RC_ERREUR
+
+    etats = {e.key: getattr(e, "state", None) for e in entities if hasattr(e, "state")}
+    compteur = {"logs": 0}
 
     def horodate(txt: str) -> str:
         return f"[{datetime.datetime.now(datetime.timezone.utc):%H:%M:%S}] {txt}"
 
     def sur_log(message) -> None:
-        print(horodate(message.message.decode(errors="replace")[:170]), flush=True)
+        compteur["logs"] += 1
+        txt = message.message.decode(errors="replace") if isinstance(message.message, bytes) else str(message.message)
+        print(horodate(txt[:170]), flush=True)
+
+    def sur_etat(state) -> None:
+        etats[state.key] = getattr(state, "state", None)
 
     cli.subscribe_logs(sur_log)
+    cli.subscribe_states(sur_etat)
     await asyncio.sleep(2)
     print(horodate(f"réglage de {cible.name} = {mhz} MHz (écriture fraîche des registres FREQ2/1/0)"))
     await cli.number_command(cible.key, mhz)
+    await asyncio.sleep(1.5)
+    got = etats.get(cible.key)
+    try:
+        pris = got is not None and abs(float(got) - mhz) <= 0.001
+    except (TypeError, ValueError):
+        pris = False
+    print(horodate(f"relecture de {cible.name} : {got!r}"))
     await asyncio.sleep(seconds)
     await cli.disconnect()
-    return 0
+
+    if not pris:
+        print(f"# ERREUR : la carte n'a PAS pris la fréquence {mhz} MHz (relue {got!r})",
+              file=sys.stderr)
+        return RC_ERREUR
+    if compteur["logs"] == 0:
+        print("# MESURE NULLE — écriture prise mais aucun log reçu : rien n'a été mesuré",
+              file=sys.stderr)
+        return RC_MESURE_NULLE
+    return RC_OK
 
 
 def main() -> int:
@@ -63,8 +94,14 @@ def main() -> int:
     ap.add_argument("--mhz", type=float, default=868.35)
     ap.add_argument("--seconds", type=float, default=150)
     args = ap.parse_args()
-    key = key_from_yaml(pathlib.Path(args.yaml))
-    return asyncio.run(run(args.host, args.port, key, args.mhz, args.seconds))
+    try:
+        key = key_from_yaml(pathlib.Path(args.yaml))
+        return asyncio.run(run(args.host, args.port, key, args.mhz, args.seconds))
+    except SystemExit:
+        raise
+    except Exception as exc:
+        print(f"# ERREUR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return RC_ERREUR
 
 
 if __name__ == "__main__":

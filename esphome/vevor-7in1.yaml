@@ -33,25 +33,13 @@ esphome:
       - lambda: |-
           ESP_LOGI("v7in1", "V7IN1 BOOT recepteur pret, freq=%s MHz dev=%s kHz sr=%s",
                    "${freq_mhz}", "${deviation_khz}", "${symbol_rate}");
-      # RÉ-ARMATURE DE LA RADIO, mesurée nécessaire : au démarrage qui suit un OTA, le CC1101
-      # peut rester SANS VERROUILLAGE DE PLL (« PLL lock failed, retrying calibration ») et la
-      # sortie GDO0 ne produit alors plus aucune rafale exploitable — mesuré : captures=0 pendant
-      # 55 s, alors que la même minute la carte décodait parfaitement avec les MÊMES réglages.
-      # Réécrire la configuration complète à chaud ramène la réception immédiatement (captures=25
-      # et trame décodée dès l'appui sur le bouton « Réappliquer la config radio »).
-      # On rejoue donc cette séquence au boot, quand tous les composants sont en place : c'est un
-      # contournement documenté, pas un réglage radio de plus.
+      # Ce bloc ne journalise QUE le boot (l'`ESP_LOGI` ci-dessus) : aucune action `cc1101.*`
+      # n'est exécutée au démarrage — le ré-armement radio n'y est PAS rejoué. Il est assuré par
+      # la surveillance `interval: 20s` plus bas, via le script unique `rearmer_radio`
+      # (`cc1101.reset`). Rappel mesuré : ce ré-armement est nécessaire après un OTA, le CC1101
+      # pouvant rester sans verrouillage de PLL (« PLL lock failed, retrying calibration ») et
+      # GDO0 ne produisant alors plus de rafale exploitable.
       # Priorité -100 = après tous les setup(), y compris ceux de `cc1101` et du RMT.
-      # RÉ-ARMATURE DE LA RADIO. Deux raisons mesurées, pas théoriques :
-      #  1. au démarrage qui suit un OTA, le CC1101 peut rester SANS VERROUILLAGE DE PLL
-      #     (« PLL lock failed, retrying calibration ») : `captures=0` pendant 55 s alors que la
-      #     sonde voyait la broche bouger. Réécrire la configuration à chaud ramène la réception
-      #     immédiatement (captures=25 et trame décodée à l'appui du bouton « Réappliquer la
-      #     config radio »). Le montage témoin souffre du MÊME piège : l'utilisateur a dû couper
-      #     l'alimentation pour retrouver ses trames après un OTA.
-      #  2. c'est aussi la seule initialisation qui tourne APRÈS que tous les composants sont en
-      #     place (priorité -100), donc la dernière parole sur les registres.
-      # À réactiver si elle disparaît : sans elle, un boot post-OTA est muet.
   # Le CC1101 reste actif pendant une mise à jour OTA et peut ne plus répondre après.
   # On le repasse en IDLE avant l'arrêt propre (priorité haute = exécuté tôt).
   # VARIANTE D (test) — le passage en IDLE au shutdown est DÉSACTIVÉ : c'est un candidat direct
@@ -120,7 +108,8 @@ external_components:
       type: local
       path: components
     # cc1101 : copie LOCALE du composant d'ESPHome, modifiée pour relire l'identité de la puce
-    # jusqu'à 20 fois (~5 s) au lieu d'une seule, et journaliser CHIP_RDYn (voir cc1101.cpp).
+    # (4 essais à 50 ms dans configure(), puis jusqu'à 60 relectures NON BLOQUANTES à 250 ms —
+    # ~15 s — depuis loop()) au lieu d'une seule, et journaliser CHIP_RDYn (voir cc1101.cpp).
     # 02/10 : pilote LOCAL rétabli, avec le correctif d'entrée en RX (réessais au lieu d'abandonner,
     # cf. cc1101.cpp enter_calibrated_) — c'est le test qui dit si le garde-fou peut ré-armer sans
     # condamner la session. Le test « pilote d'origine » est tombé sur un démarrage en état A et n'a
@@ -137,11 +126,11 @@ spi:
 
 cc1101:
   id: radio
-  # `allow_other_uses` RETIRÉ (test du 30/09 23:2x) : notre composant de diagnostic ne partage plus
-  # cette broche CS. Pourquoi ce test : sur le bus SPI, notre second périphérique déclarait la MÊME
-  # broche CS (GPIO7) que le `cc1101` — et sous esp-idf toutes nos lectures de registres revenaient
-  # à 0xFF (VERSION incluse), signe que les transactions de la puce pouvaient être perturbées. Le
-  # montage témoin qui décode n'a, lui, qu'un seul périphérique sur ce bus.
+  # `allow_other_uses` RETIRÉ : ce composant n'a plus aucun périphérique SPI en partage. Règle
+  # dure, mesurée (01/10/2026) : un second périphérique sur le bus du `cc1101` — même sur une
+  # broche CS libre et non câblée — rend la puce muette (0 trame et 0-4 captures RMT avec lui,
+  # 5 trames/60 s sans lui). La puce doit rester le SEUL périphérique de son bus
+  # (voir state/DONE.md §1b et l'en-tête de components/vevor_7in1/vevor_7in1.h).
   cs_pin:
     number: GPIO7
     # `mode` AVEC PULL-UP — c'est LA différence trouvée le 02/10 à 00h55 en comparant au firmware de
@@ -204,33 +193,6 @@ remote_receiver:
 vevor_7in1:
   id: vevor_rx
   receiver_id: rf_receiver
-  # Second périphérique du MÊME bus SPI, sur LA MÊME broche CS que le `cc1101` : il ne sert qu'à
-  # LIRE des registres de diagnostic (RSSI, MARCSTATE, PKTSTATUS, FREQ2/1/0). Aucune écriture
-  # n'est faite dans la puce — c'est une mesure, pas un réglage. Pourquoi : en mode série
-  # asynchrone, le composant `cc1101` ne publie aucun RSSI, donc « aucune trame » reste ambigu
-  # (pas d'énergie RF du tout, ou énergie normale mais sortie démodulée muette, ou brouilleur
-  # voisin qui sature l'AGC). Références sur cette même carte : plancher −106,2 dBm, max −95,5.
-  # Instrument de diagnostic déplacé sur une broche CS LIBRE (GPIO10, non câblée) : il partageait
-  # auparavant GPIO7 avec le `cc1101`, et sous esp-idf toutes ses lectures revenaient à 0xFF. Là,
-  # il ne peut plus toucher aux transactions de la puce : ses lectures seront du bruit, mais c'est
-  # le prix d'un bus propre — et le `cc1101` redevient le seul maître du bus SPI, comme chez le
-  # montage témoin.
-  # cs_pin RETIRÉ le 01/10 (it. 11octies) : ce composant déclarait un SECOND périphérique SPI
-  # sur le bus du cc1101. Mesuré le 01/10 en alternance témoin/nous dans les mêmes fenêtres
-  # d'émission : avec ce périphérique, 0 trame et 0-4 captures RMT ; sans lui, 5 trames/60 s et
-  # des rafales de 176-184 impulsions. Le cc1101 doit rester le SEUL périphérique du bus.
-  # Conséquence : l'inventaire de registres et la lecture RSSI/MARCSTATE ne sont plus
-  # disponibles (spi_is_ready() = false) — c'est le prix de la réception.
-  # Sonde de diagnostic RETIRÉE (test du 30/09 22:45) : elle appelle `pin_mode(FLAG_INPUT)` sur
-  # GPIO3, la même broche que la voie RMT du `remote_receiver`. Or nous avons déjà documenté ce
-  # piège sur ce montage (« un pin_mode différé après la configuration du RMT → le RMT ne capte
-  # plus rien »). Suite au constat : le signal est bien là (RSSI −104 dBm, MARCSTATE=RX, CS=1 par
-  # intermittence) mais notre RMT ne livre que 10 captures en 300 s là où le témoin en livre 23
-  # en 140 s avec la même puce et les mêmes réglages — la seule différence sur cette broche,
-  # c'est cette sonde.
-  # probe_pin:
-  #   number: GPIO3
-  #   allow_other_uses: true
   # Période bit de référence ; le composant essaie 90, 88, 89 et 87 us à chaque capture, et
   # journalise celle qui gagne.
   bit_period: 90us
@@ -282,7 +244,7 @@ globals:
     initial_value: "0"
 
 # Ré-armement radio : UNE seule implémentation, appelée par le bouton ET par la surveillance
-# automatique (interval de 60 s plus bas). C'est l'entrée en RX qui retente le verrouillage PLL
+# automatique (interval de 20 s plus bas). C'est l'entrée en RX qui retente le verrouillage PLL
 # (cc1101.cpp : enter_calibrated_ avec PLL_LOCK_RETRIES) — donc le seul levier à chaud contre une
 # puce restée en IDLE après un démarrage raté.
 script:
@@ -309,7 +271,7 @@ interval:
           id(valid_sensor).publish_state(id(vevor_rx).get_frames());
           id(rejected_sensor).publish_state(id(vevor_rx).get_rejected());
           id(duplicates_sensor).publish_state(id(vevor_rx).get_duplicates());
-  # SURVEILLANCE DE LA RADIO (60 s) — mesuré le 01/10 : un démarrage sur deux lève la puce ABSENTE
+  # SURVEILLANCE DE LA RADIO (20 s) — mesuré le 01/10 : un démarrage sur deux lève la puce ABSENTE
   # DU BUS SPI (le composant relit « Chip ID: 0xFFFF », toutes les lectures à 0xFF). Elle n'est
   # alors jamais configurée, reste en IDLE, et rien n'arrive sur GDO0 — alors que la station émet.
   # Le ré-armement à chaud est INEFFICACE (3 tentatives, 3 « Failed to verify » mesurés) ; le
@@ -346,7 +308,7 @@ interval:
           // 02/10 : 9 tentatives (3 min) laissaient trop peu de temps à une première rafale ; le
           // seuil passe à 30 (10 min) pour qu'un silence court ne fasse plus rien du tout.
           if (muettes <= 30) {
-            // 3 minutes de tentatives d'initialisation douces — c'est ce que recommande le fil TI
+            // 10 minutes de tentatives d'initialisation douces (30 × 20 s) — c'est ce que recommande le fil TI
             // « CC1101 not responding to SPI » (le quartz démarre tardivement, la puce finit par
             // répondre si on insiste) ; une tentative coûte 10 ms. Mesuré : inefficace en mode
             // « puce muette », mais gratuit et parfois suffisant en mode « radio saine ».
@@ -357,7 +319,7 @@ interval:
           }
           // Redémarrage : seul remède mesuré (l'état de la puce change d'un démarrage à l'autre ;
           // quand son quartz tourne, tout fonctionne — mesuré sur une heure entière à 180 trames).
-          // Dix tentatives rapprochées (une toutes les ~3,5 min), puis une par 15 min : la carte ne
+          // Dix redémarrages (un par cycle de ~10 min), puis un par 15 min : la carte ne
           // renonce jamais, sans passer son temps à redémarrer.
           if (id(g_reboots_radio) < 10 || (muettes % 45) == 0) {
             id(g_reboots_radio) = id(g_reboots_radio) + 1;
