@@ -8,6 +8,15 @@ Source, comme nous : `rtl_433/src/devices/vevor_7in1.c`.
 > décodeur Python). Ce document ne rapporte que des **paramètres mesurés** et des **pièges de
 > protocole**, à traiter comme des hypothèses à tester, preuve à l'appui.
 
+> **Statut au 02/10/2026** (bandeau ajouté, commit 9693dbe). Ce document est une **photo du 30/09** :
+> les hypothèses de sa section 1 ont été **tranchées depuis**. Nos réglages radio ont été **alignés sur
+> ceux du témoin** (868,35 MHz / 70 kHz / 100 kHz / 11 111 bauds) et la cause des « 0 trame » n'était
+> pas la radio mais la **cadence SPI de 200 kHz** réglée dans notre pilote `cc1101` (corrigée le
+> 02/10 ; `state/PROGRESS.md`, entrées du 02/10). La colonne « Nous (actuel) » du tableau de la
+> section 1 décrit donc l'**état du 30/09**, pas l'état actuel. Le projet `WizardPC` reste **externe** :
+> jamais recopié (seul son comportement a servi de témoin).
+
+
 ## 1. Le point le plus important : nos réglages radio sont probablement faux
 
 Configuration publiée comme fonctionnelle (station 868 MHz EU) :

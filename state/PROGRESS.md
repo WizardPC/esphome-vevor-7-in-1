@@ -5,7 +5,67 @@ Format : on ajoute une entrée en haut à chaque itération. Jamais de réécrit
 
 
 
+## 2026-10-02 — REVUE DE LA DOCUMENTATION LONGUE ET NETTOYAGE (commit 9693dbe)
+
+**Objet.** Revue de cohérence demandée le 02/10 : documentation longue/archivée, chiffres périmés,
+affirmations réfutées. Cette entrée est **ajoutée en tête** conformément à la règle du fichier ;
+**aucun texte passé n'est réécrit** — les entrées concernées reçoivent seulement un bandeau de tête.
+
+**Anomalie de structure à connaître.** Les dernières itérations (15 et 16 du 01/10) puis les sections
+du **02/10** (intervention matérielle, cause racine SPI 200 kHz, validation de 30 min) ont été
+écrites **en bas** de ce fichier, après les entrées du 30/09 et du début du 01/10, contrairement à la
+règle « une entrée en haut ». On ne réécrit pas l'historique : la présente entrée est la plus récente
+en **tête**, mais la **chronologie vraie se termine en fin de fichier** (sections « 02/10 — … »).
+
+**Chiffres remis à jour.** La suite hors matériel compte désormais **377 vérifications, 0 échec**
+(`README.md:24`, `build/message_commit4.txt`, relancée le 02/10). Les mentions historiques « 128 »
+(section PAUSE du 30/09), « 173 » (it. 7) et « 204 » (`state/DONE.md`, état du 01/10) sont des **états
+antérieurs** : ne pas les lire comme le total courant. Un bandeau a été posé sur la section PAUSE, où
+« 128 » est annoncé.
+
+**Firmware.** Recompilé `BUILD OK`, **966 400 octets** (`build/last_status.txt`). Ce binaire **n'est
+PAS flashé** : la carte tourne encore l'ancien firmware ; aucun flash n'a été fait pour cette revue.
+
+**Nettoyage d'outillage (02/10).**
+- `tools/_common.py` créé : **une seule** version de `key_from_yaml`, de `maybe_await`, **une seule**
+  table `VARIANTS`, écritures **atomiques** (`os.replace`) et chemins relatifs résolus par rapport à
+  la **racine** du projet (jamais au CWD). La duplication signalée par `state/DONE.md:104-105` est
+  supprimée (vérifié : plus qu'une seule définition de chaque).
+- **Échecs silencieux supprimés** : une mesure nulle sort désormais **code 3** (`RC_MESURE_NULLE`), une
+  absence de trame **code 0** — contrats distingués (`tools/_common.py`, `tools/count_probe.py`,
+  `tools/eval_frames.py`).
+- Sauvegarde d'ancienne production `esphome/vevor-7in1.yaml.bak-20261001` **supprimée**.
+- **En attente de décision utilisateur** : les **13 outils morts/doublons** recensés par la revue
+  round 2 (`reviews/round2/02-outillage-preuves.md` §1.7) ne sont **pas encore supprimés**.
+
+**Affirmations réfutées, désormais bannérisées.**
+- It. **11septies** (« la station n'émet que par fenêtres de quelques minutes ») et it. **11nonies**
+  (« la station émet par bouffées ») : **FAUX**. `state/DONE.md` §3 établit que les fenêtres vides
+  étaient des « carte sourde » ; la station émet **en continu toutes les 20 s**. Chaque entrée porte
+  un bandeau de tête.
+- La **cause racine** des « 0 trame » n'était ni la station, ni l'environnement de build, ni le
+  quartz : c'est la **cadence SPI de 200 kHz** que le pilote avait été réglé à utiliser (correctif du
+  02/10, SPI rétabli à 1 MHz). Voir les sections « 02/10 — CAUSE RACINE » et « 02/10 — VALIDATION »
+  en fin de fichier.
+
+**Notes de nuit archivées.** `state/NUIT.md` et `state/BILAN_NUIT_20261002.md` (rédigées avant la
+cause racine) sont **déplacées** en `state/archive/2026-10-01_NUIT.md` et
+`state/archive/2026-10-02_BILAN_NUIT.md`, chacune avec un bandeau disant ce qui est réfuté et où lire
+l'état vrai. Contenu intégralement conservé (journal de diagnostic).
+
+**Références contrôlées.** `evidence/README.md` : cohérent avec `evidence/` et les outils (aucune
+correction nécessaire). `references/PROTOCOL.md`, `references/EXTERNAL_CONTEXT_WIZARDPC.md` et
+`references/HOME_ASSISTANT.md` : bandeaux de statut ajoutés (valeurs radio rtl_433 ≠ config livrée ;
+table « Nous » du 30/09 périmée ; API HA non joignable sur :8123). Le projet `WizardPC` reste
+**externe**, jamais recopié.
+
 ## 2026-10-01 09:32:43-09:42:23 UTC — Itération 11nonies (session interactive) : VALIDATION 10 MIN — 60/60 TRAMES VALIDÉES, CADENCE 20,0 s, VERDICT `PASS` → objectif de MISSION.md ATTEINT
+
+> **BANDEAU (ajouté le 02/10, commit 9693dbe) — entrée partiellement réfutée.** La phrase de fin
+> « la station émet par bouffées (contrôle physique de l'unité extérieure recommandé) » est **fausse** :
+> `state/DONE.md` §3 établit que les fenêtres vides étaient des « carte sourde » ; la station émet
+> **en continu toutes les 20 s**. L'état vrai et la cause racine (cadence SPI 200 kHz, corrigée le
+> 02/10) sont dans `state/DONE.md` et dans les entrées du 02/10 en fin de ce fichier.
 
 **Fenêtre** : `logs/validation_prod_20261001.log` (600 s pleines), firmware de production corrigé
 (config sans second périphérique SPI, binaire `build/variants/nous_prod.ota.bin`).
@@ -91,6 +151,12 @@ par fenêtres (voir itération 11septies) : toute mesure de « 0 trame » doit �
 créneau témoin dans la même fenêtre.
 
 ## 2026-10-01 07:40-08:45 UTC — Itération 11septies (session interactive) : LE CODE TÉMOIN, CONSTRUIT ET FLASHÉ PAR L'AGENT, DÉCODE — l'environnement de build est innocenté ; la station n'ÉMET QUE PAR FENÊTRES
+
+> **BANDEAU (ajouté le 02/10, commit 9693dbe) — entrée partiellement réfutée.** La « Découverte : la
+> station n'émet que par fenêtres de quelques minutes » est **fausse** : `state/DONE.md` §3 établit que
+> les fenêtres vides correspondaient à des « carte sourde », la station émettant **en continu toutes
+> les 20 s**. Le titre et la section restent comme trace de l'hypothèse, mais ne pas s'en servir comme
+> fait. État vrai : `state/DONE.md` ; cause racine : entrées du 02/10 en fin de ce fichier.
 
 **Ce qui a été fait (et qui n'avait jamais été fait)**
 - Dépôt témoin récupéré par nos soins (`git clone https://github.com/WizardPC/esphome-vevor-7in1`, commit
@@ -734,6 +800,10 @@ question ouverte ci-dessus.
 **Prochaine action** : ne rien faire sur la carte ; **demander à l'utilisateur le résultat du test témoin** (le projet de référence décode-t-il encore, oui ou non ?). Oui → comparer sa configuration champ par champ ; non → l'environnement (position, câblage, station) est en cause. `state/PHASE` = `waiting_user_control_test` pour que la boucle ne réveille pas un flash sur le firmware témoin.
 
 ## 2026-09-30 — PAUSE : flash du projet de référence par l'utilisateur (test témoin)
+
+> **BANDEAU (ajouté le 02/10, commit 9693dbe) — chiffre remplacé.** Le décompte « **128 vérifications**
+> hors matériel » cité en fin de section (« tests/ + tools/run_tests.sh ») est un état du 30/09 ; la
+> suite en compte désormais **377, 0 échec** (`README.md:24`). Ne pas lire 128 comme le total courant.
 
 **À lire en premier si on reprend ce projet dans une nouvelle session.**
 

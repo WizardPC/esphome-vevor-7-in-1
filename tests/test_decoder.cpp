@@ -82,7 +82,7 @@ static void test_vectors() {
 // (src/devices/vevor_7in1.c, fonctions relues le 01/10/2026) et des octets de la trame : c'est
 // l'ANCRAGE EXTERNE du décodage. Sans lui, une erreur de formule présente à la fois dans
 // l'encodeur Python (tests/frames.py) et dans le C++ passerait toute la suite — mesuré : une
-// échelle de vent fausse (8,333 → 3,0) recopiée des deux côtés laissait les 173 vérifications au
+// échelle de vent fausse (8,333 → 3,0) recopiée des deux côtés laissait les 173 vérifications d'alors au
 // vert. Détail du calcul, octets utiles après les -1 sur les octets 8, 9, 11, 12, 13, 14, 16, 17 :
 //   vent   = ((b8<<8)|b9) / 8,333f  = 13 / 8,333   = 1,56 km/h
 //   rafale = b10 / 1,25f            = 3 / 1,25     = 2,4 km/h
@@ -111,7 +111,7 @@ static void test_rtl433_reference() {
 // --- 2ter. ANCRAGE EXTERNE de la branche « lux ×10 » (bit 15 posé) -------------------------
 // La trame de rtl_433 ancrée juste au-dessus a le bit 15 CLAIR (chemin ×1) : la branche ×10
 // n'était donc ancrée par AUCUNE source extérieure, et une erreur de facteur commune à l'encodeur
-// Python (tests/frames.py) ET au C++ (vevor_protocol.h) passait les 204 vérifications (revue
+// Python (tests/frames.py) ET au C++ (vevor_protocol.h) passait les 204 vérifications d'alors (revue
 // round 2, constat BLOQUANT). Ici les 21 octets sont ÉCRITS EN DUR et la valeur attendue est
 // CALCULÉE À LA MAIN — sans passer par decode_reference(), donc extérieure au couple
 // encodeur/décodeur : une erreur commune aux deux ne peut plus « s'auto-valider ».

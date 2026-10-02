@@ -4,6 +4,15 @@ Source de vérité : décodeur `vevor_7in1.c` de rtl_433 (merbanan/rtl_433, `src
 Fabricant réel : Fujian Youtong Industries. Modèles documentés : YT60231 (868 MHz EU),
 YT60234 (915 MHz US). Même protocole et même checksum entre les deux bandes.
 
+> **Statut au 02/10/2026** (bandeau ajouté, commit 9693dbe). La **table de trame** ci-dessous a été
+> vérifiée conforme à notre décodeur `esphome/includes/vevor_protocol.h` (mêmes décalages « -1 »,
+> mêmes échelles). En revanche, les valeurs de la section « Couche radio » (période bit 87 µs ≈
+> 11 494 bauds, déviation ±37 kHz, centre 915,031 MHz) sont les **mesures de rtl_433 sur une unité
+> 915 MHz** : le récepteur livré (868 MHz EU) est, lui, configuré en mode packet à **868,35 MHz /
+> 70 kHz / 100 kHz / 11 111 bauds**, valeurs du montage témoin qui décode cette station
+> (`esphome/vevor-7in1.yaml`, substitutions ; `state/PROGRESS.md`, itération 7). Ne pas confondre les
+> deux jeux de valeurs.
+
 ## Couche radio
 
 - Modulation : **2-FSK** (NRZ / PCM), pas d'OOK.
@@ -12,7 +21,9 @@ YT60234 (915 MHz US). Même protocole et même checksum entre les deux bandes.
 - Rafale : **~85 ms toutes les 20,000 s** (tous les capteurs dans chaque trame).
 - Centre mesuré 915,031 MHz pour le nominal 915,000 → **prévoir un offset de fréquence**
   (le CC1101 remonte `freq_offset` à chaque paquet : c'est notre outil de calage).
-- Preamble : `AA AA AA` puis syncword `CA CA 54`, puis la charge utile.
+- Préambule puis mot de synchronisation : motif recherché **`AA AA CA CA 54`** (soit un préambule
+  `AA…` suivi de `CA CA 54`), puis la charge utile — `references/vevor_7in1.c:68`,
+  `esphome/includes/vevor_protocol.h:27`.
 
 ## Trame
 

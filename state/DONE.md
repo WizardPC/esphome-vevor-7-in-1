@@ -19,7 +19,7 @@ SPI depuis ce composant a été supprimé (composant, schéma, YAML).
 
 **c) Filet de tests et outillage.** Ancrage externe rtl_433 complété (vent, rafale, pluie, lux
 calculés à la main depuis la source), période et polarité désormais **assertées**, recollage couvert
-(**204 vérifications, 0 échec**). Contre-épreuve : la même erreur d'échelle de vent injectée dans
+(**377 vérifications, 0 échec**). Contre-épreuve : la même erreur d'échelle de vent injectée dans
 l'encodeur Python **et** dans le C++ fait échouer la suite. `eval_frames.py` compare **trame par
 trame** le C++ et un décodeur Python indépendant ; `capture_logs.py` **écrase désormais** son fichier
 de sortie au lieu d'y ajouter (le mode AJOUT avait fait relire une fenêtre vidée comme si c'était la
@@ -47,12 +47,14 @@ IDLE et ne produit rien sur GDO0.
   lit `PARTNUM`/`VERSION` **une seule fois** puis se déclare en échec — il amplifie donc une condition
   matérielle marginale en une session entièrement sourde.
 
-**Correctif embarqué** (`esphome/vevor-7in1.yaml`) : état radio journalisé toutes les 20 s
-(`SANTE radio=ok|EN ECHEC trames=N captures=N`), 9 tentatives d'initialisation sur 3 min, puis
-**redémarrage automatique** — la station émettant **en continu toutes les 20 s, jour et nuit**
-(confirmé par l'utilisateur), tout silence prolongé est une panne du récepteur, sans ambiguïté. Après
-4 redémarrages rapprochés, la carte continue d'essayer à raison d'un par 30 min : elle ne renonce
-jamais, sans passer son temps à redémarrer. Bouton « Redémarrer la carte » ajouté.
+**Correctif embarqué** (`esphome/vevor-7in1.yaml`, `interval: 20s`) : état radio journalisé toutes
+les 20 s (`SANTE radio=ok|EN ECHEC trames=N captures=N`), puis 30 tentatives d'initialisation douces
+(30 × 20 s = 10 min) tant qu'aucune **nouvelle trame** n'est publiée, et enfin **redémarrage
+automatique**. Le redémarrage part sur le **seul silence de trames**, sans consulter `is_failed()` —
+la station émettant **en continu toutes les 20 s, jour et nuit** (confirmé par l'utilisateur), tout
+silence prolongé est une panne du récepteur, quelle qu'en soit la cause. Dix redémarrages rapprochés
+(un par cycle de ~10 min), puis repli à un redémarrage toutes les 15 min : elle ne renonce jamais,
+sans passer son temps à redémarrer. Bouton « Redémarrer la carte » ajouté.
 
 ## 3. Ce que j'ai affirmé à tort (et la règle qui en découle)
 
@@ -76,7 +78,7 @@ jamais, sans passer son temps à redémarrer. Bouton « Redémarrer la carte » 
 | Cadence et continuité | 179/179 intervalles entre 15 et 25 s (médiane 20,0 s), aucun trou > 30 s |
 | Compteur TX | avance conforme au temps écoulé : 0 doublon, 0 rafale manquée |
 | Plausibilité | pluie monotone (59,2 → 59,2 mm), aucune valeur impossible publiée |
-| Décodeur hors matériel | 204 vérifications, 0 échec, dont l'ancrage rtl_433 et le recollage |
+| Décodeur hors matériel | 377 vérifications, 0 échec, dont l'ancrage rtl_433 et le recollage |
 | Auto-guérison | essai 1 (démarrage sourd) : **0 trame** puis redémarrage automatique à 3 min, encore sourd, second redémarrage, et **21 trames retrouvées sans intervention** ; essai 2 (démarrage sain) : 15 puis 36 trames, cadence normale |
 
 ## 5. Fichiers
@@ -101,7 +103,20 @@ jamais, sans passer son temps à redémarrer. Bouton « Redémarrer la carte » 
     CLK/MOSI/MISO/CS + masse) à refaire en soudé, découplage du module (100 nF + 10 µF), tenue de son
    alimentation pendant le démarrage de l'ESP32, remplacement du module. Le garde-fou logiciel reste
    utile (il récupère quand un démarrage atteint l'état sain) mais il ne fabrique pas l'état sain.
-2. **Duplication d'outillage** : `key_from_yaml()` existe encore en plusieurs copies (sans bug connu
-   après vérification), et `maybe_await` en trois exemplaires — à factoriser dans `tools/_common.py`.
-3. Les variantes de diagnostic `vevor-7in1-v1/v2/v3.yaml` ont été **supprimées** (obsolètes, et v1/v3
-   contenaient encore le second périphérique SPI — mauvais exemple à laisser dans le dépôt).
+2. **Duplication d'outillage — FAIT (02/10/2026).** `tools/_common.py` porte désormais l'unique
+   version de `key_from_yaml()`, de `maybe_await()` et des tables de variantes ; les doublons ont été
+   retirés, les écritures sont atomiques et les échecs silencieux supprimés (voir §1c). Reste ouvert :
+   **trancher le sort des 13 outils morts/doublons** recensés par l'audit
+   (`reviews/round2/02-outillage-preuves.md`, §1.7) — supprimer, adapter au format d'entrée actuel, ou
+   archiver (p. ex. `capture_logs.sh`, supplanté par `capture_logs.py`).
+3. **Variantes de diagnostic `vevor-7in1-v1/v2/v3.yaml` : supprimées** (obsolètes, et v1/v3
+   contenaient encore le second périphérique SPI — mauvais exemple à laisser dans le dépôt). C'était
+   le dernier point de §6 : **clos**.
+4. **`evidence/ab_cycle.jsonl` est orphelin.** Il documente l'expérience qui a isolé la cause des
+   « 0 trame », mais a été produit par une version antérieure d'`ab_cycle.py` et mélange deux
+   campagnes ; les variantes v0/v1/v2 ayant été supprimées, **l'`ab_cycle.py` de HEAD ne peut plus le
+   régénérer à l'identique**. Conservé comme archive historique, non reproductible (voir
+   `evidence/README.md`).
+5. **Le binaire recompilé (BUILD OK, 966 400 octets) n'est PAS flashé sur la carte.** Le récepteur en
+   service sur `172.16.0.205` porte donc la version précédente : les nombres du garde-fou donnés plus
+   haut décrivent le `esphome/vevor-7in1.yaml` de HEAD, pas nécessairement l'appareil qui tourne.

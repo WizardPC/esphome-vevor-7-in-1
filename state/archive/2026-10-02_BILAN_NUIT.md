@@ -1,3 +1,18 @@
+> **ARCHIVE — BILAN DE TRAVAIL DATÉ, PARTIELLEMENT RÉFUTÉ** (bandeau ajouté le 02/10/2026, commit 9693dbe).
+> Ce fichier a été déplacé de `state/BILAN_NUIT_20261002.md` vers `state/archive/`. Rédigé le 02/10 à
+> 07h32, **avant** la découverte de la cause racine.
+>
+> **Ce qui est périmé ou à nuancer :** l'hypothèse « l'intégrité du lien SPI en *écriture* » (§4)
+> décrivait l'état de la nuit **sous le handicap du SPI à 200 kHz** ; les écritures perdues ont été
+> réglées par les soudures de l'utilisateur (pull-up externe 10 kΩ + 10 µF), mais ce n'était **pas** la
+> cause de la surdité. Le « taux de démarrages sains » (0/10) mesuré cette nuit n'est plus une
+> référence. La station émet **en continu** (pas par bouffées) : les fenêtres vides étaient des
+> « carte sourde » (`state/DONE.md` §3).
+>
+> **Cause racine réelle, trouvée le 02/10** : la cadence SPI de **200 kHz** du pilote `cc1101`.
+> **Pour l'état vrai : `state/DONE.md` et les entrées du 02/10 de `state/PROGRESS.md`.** Ne rien
+> corriger dans le corps : c'est une preuve horodatée.
+
 # Bilan de la nuit — récepteur Vevor 7-en-1 868 MHz (nuit du 01 au 02/10/2026)
 
 Rédigé le 02/10/2026 à 07h32 (heure de Paris), à partir des journaux. Chaque chiffre porte sa source ;

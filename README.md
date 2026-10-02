@@ -123,21 +123,25 @@ cp esphome/secrets.yaml.example esphome/secrets.yaml && $EDITOR esphome/secrets.
 tools/build.sh
 
 # 3. Flasher — USB la première fois, puis OTA par IP
-tools/flash.sh /dev/ttyUSB0
-tools/flash.sh 192.168.2.50
+#    Un ESP32-C3 flashé en USB apparaît ici en /dev/ttyACM0 (USB-Serial-JTAG du C3).
+#    /dev/ttyUSB0 peut exister mais en nœud inutilisable (c--------- ) : ne pas le viser par défaut.
+tools/flash.sh /dev/ttyACM0
+tools/flash.sh 172.16.0.205
 
 # 4. Capturer les logs de l'ESP32 (API native, port 6053 — pas de navigateur nécessaire)
-tools/capture_logs.sh 192.168.2.50 120
+#    Les outils qui ouvrent l'API tournent avec le Python du projet (.venv), où aioesphomeapi est installé.
+.venv/bin/python tools/capture_logs.py --host 172.16.0.205 --seconds 120 \
+    --out logs/capture_$(date +%Y%m%d_%H%M%S).log
 
 # 5. Évaluer les trames captées (décodeur Python indépendant + critères de validité)
 tools/eval_frames.py logs/capture_*.log --json logs/rapport.json
 
 # 6. Chercher la station : balayage de fréquence SANS reflasher
-tools/scan_freq.py --host 192.168.2.50 --list
-tools/scan_freq.py --host 192.168.2.50 --start 867.8 --stop 868.6 --step 0.05 --dwell 25
+.venv/bin/python tools/scan_freq.py --host 172.16.0.205 --list
+.venv/bin/python tools/scan_freq.py --host 172.16.0.205 --start 867.8 --stop 868.6 --step 0.05 --dwell 25
 ```
 
-## Les cinq pièges de ce montage (mesurés, pas supposés)
+## Les sept pièges de ce montage (mesurés, pas supposés)
 
 1. **Le CC1101 doit rester le SEUL périphérique du bus SPI.** Déclarer un second périphérique SPI
    dans le YAML — même avec une broche CS **libre et non câblée** — suffit à rendre la puce muette :
@@ -145,9 +149,15 @@ tools/scan_freq.py --host 192.168.2.50 --start 867.8 --stop 868.6 --step 0.05 --
    la même carte, dans les mêmes fenêtres d'émission : 0 trame/60 s avec, 5 trames/60 s sans.
    C'est ce qui a coûté le plus cher à ce projet (une instrumentation de diagnostic l'a causé) :
    **instrumenter la puce depuis le même firmware coûte la réception.**
-2. **La station émet par bouffées.** Un « 0 trame » ne prouve rien s'il n'y a pas, dans la **même
-   fenêtre**, un récepteur de référence qui décode. `tools/ab_cycle.py` alterne deux firmwares
-   (flash d'un binaire figé → attente → capture → ligne JSONL) pour comparer à conditions égales.
+2. **La station émet en CONTINU** — une rafale toutes les 20 s, jour et nuit (confirmé par
+   l'utilisateur). Un « 0 trame » n'est donc **jamais** un silence de la station : c'est le
+   récepteur. Mais un « 0 trame » ne prouve rien s'il n'y a pas, dans la **même fenêtre**, un
+   récepteur de référence qui décode — un démarrage sur deux lève la puce sourde (piège n° 7), et
+   une fenêtre vide peut donc aussi bien être une carte muette qu'une absence d'émission. Cette
+   leçon vient d'une erreur corrigée : les « phases de silence » de la station (fenêtres
+   11:36→12:36 et 13:53→14:53 le 01/10) étaient en réalité des **cartes sourdes**. `tools/ab_cycle.py`
+   alterne deux firmwares (flash d'un binaire figé → attente → capture → ligne JSONL) pour comparer
+   à conditions égales dans le temps.
 3. **Pas de `gdo0_pin` dans le bloc `cc1101`** quand `remote_receiver` consomme la même broche :
    le composant planifie un `pin_mode(INPUT)` différé qui casse la voie RMT.
 4. **`ota: encryption: {}`** fait hériter la clé API comme clé OTA (pas de mot de passe séparé à
@@ -179,11 +189,14 @@ tools/scan_freq.py --host 192.168.2.50 --start 867.8 --stop 868.6 --step 0.05 --
    configurée, reste en IDLE d'usine et ne produit rien sur GDO0. Le ré-armement à chaud
    (`reset` + réglages + `begin_rx`) **ne la récupère pas** (3 tentatives, 3 échecs) ; **le
    redémarrage, oui** — l'état de la puce s'inverse à chaque boot, car la puce garde ses registres
-   pendant que l'ESP32 redémarre. D'où la surveillance embarquée : état radio journalisé chaque
-   minute, ré-armement à 3 min, et **redémarrage automatique à 8 min — uniquement si la radio
-   s'avoue en échec**, jamais pour une station simplement à l'arrêt. Ces lignes de diagnostic
-   partaient auparavant avant que l'API soit joignable : c'est ce qui a rendu le défaut si long à
-   voir.
+   pendant que l'ESP32 redémarre. D'où la surveillance embarquée (`esphome/vevor-7in1.yaml`,
+   `interval: 20s`) : état radio journalisé toutes les 20 s (`SANTE radio=… trames=… captures=…`),
+   30 tentatives d'initialisation douces (30 × 20 s = 10 min) tant qu'aucune **nouvelle trame** n'est
+   publiée, puis **redémarrage automatique**. Le redémarrage part sur le **seul silence de trames**,
+   sans consulter `is_failed()` : comme la station émet en continu, tout silence prolongé est une
+   panne du récepteur, quelle qu'en soit la cause. Dix redémarrages rapprochés (un par cycle de
+   ~10 min), puis repli à un redémarrage toutes les 15 min. Ces lignes de diagnostic partaient
+   auparavant avant que l'API soit joignable : c'est ce qui a rendu le défaut si long à voir.
 
 ## Auto-évaluation
 
@@ -208,16 +221,19 @@ versionnés dans `evidence/` pour que les affirmations restent vérifiables apr�
 ## Accès USB depuis un conteneur LXC (Proxmox)
 
 Pour flasher en USB depuis un conteneur, passer le port série de l'hôte dans le LXC
-(`/etc/pve/lxc/<id>.conf`, puis redémarrer le conteneur) :
+(`/etc/pve/lxc/<id>.conf`, puis redémarrer le conteneur). L'ESP32-C3 se présente en
+**USB-Serial-JTAG**, donc en **`/dev/ttyACM0`** (périphérique de caractères, majeur **166**) — et
+**non** en `/dev/ttyUSB0` (majeur 188), qui peut exister sans être utilisable (`c---------`) :
 
 ```
-lxc.mount.entry: /dev/ttyUSB0 dev/ttyUSB0 none bind,optional,create=file
-lxc.cgroup2.devices.allow: c 188:* rwm
+lxc.mount.entry: /dev/ttyACM0 dev/ttyACM0 none bind,optional,create=file
+lxc.cgroup2.devices.allow: c 166:* rwm
 ```
 
-Vérifier ensuite `ls -l /dev/ttyUSB0` et l'appartenance au groupe `dialout`
-(`usermod -aG dialout <utilisateur>`). Sans cela, compilation, OTA et logs fonctionnent quand
-même, mais le tout premier flash doit se faire ailleurs (web.esphome.io ou l'add-on ESPHome).
+Vérifier ensuite `ls -l /dev/ttyACM0` (le nœud doit être `crw-rw----` et accessible) et
+l'appartenance au groupe `dialout` (`usermod -aG dialout <utilisateur>`). Sans cela, compilation,
+OTA et logs fonctionnent quand même, mais le tout premier flash doit se faire ailleurs
+(web.esphome.io ou l'add-on ESPHome).
 
 ## Licence et attributions
 

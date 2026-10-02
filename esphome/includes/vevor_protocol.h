@@ -23,7 +23,7 @@ namespace vevor {
 
 static constexpr size_t FRAME_BYTES = 21;
 // Motif d'accroche au cas où l'on décode depuis un flux brut (mode non-packet) :
-// AA AA AA CA CA 54 puis 21 octets utiles.
+// AA AA CA CA 54 puis 21 octets utiles.
 static constexpr uint8_t PREAMBLE[5] = {0xAA, 0xAA, 0xCA, 0xCA, 0x54};
 
 struct Frame {

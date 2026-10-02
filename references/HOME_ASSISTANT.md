@@ -2,6 +2,16 @@
 
 HA : `192.168.2.104`. Add-on visé : **ESPHome Device Builder** (slug `esphome`).
 
+> **Statut au 02/10/2026** (bandeau ajouté, commit 9693dbe). Les faits sur l'add-on ci-dessous (slug,
+> image, version 2026.9.1, `uart: true`, `map: config:rw`) sont des lectures de dépôt : valables comme
+> référence. **En revanche, la section « Sondage à faire dès que le token HA est disponible » n'est pas
+> applicable en l'état** : le token HA (`~/projets/vevor-7in1/.ha_token`) est désormais **présent**
+> (183 o, 30/09), mais **l'API HA sur le port 8123 ne répond pas** — mesuré le 02/10 :
+> `http://192.168.2.104:8123/api/` échoue, seul le port 80 (observateur HAOS) répond. Cohérent avec
+> `state/PROGRESS.md` (« aucun service sur 8123 », 30/09). Ne pas compter sur un recoupement météo via
+> l'API HA tant que HA Core ne réécoute pas sur 8123.
+
+
 ## Faits vérifiés sur l'add-on (lus dans `esphome/home-assistant-addon`, branche main)
 
 - `slug: esphome`, nom « ESPHome Device Builder », image `ghcr.io/esphome/esphome-hassio`,

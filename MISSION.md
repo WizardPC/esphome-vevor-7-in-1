@@ -22,7 +22,7 @@ se réécrire les fichiers sous les pieds :
 - **La boucle** : la radio et le matériel uniquement — paramètres CC1101, build, flash, captures,
   balayages de fréquence, mesures. Elle écrit ses essais dans `state/PROGRESS.md` et avance
   `state/PHASE`.
-- **La session interactive** : le décodeur (`esphome/includes/vevor_7in1.h`), l'outillage
+- **La session interactive** : le décodeur (`esphome/includes/vevor_protocol.h`), l'outillage
   d'analyse (`tools/eval_frames.py`), les tests et la documentation destinée aux autres
   utilisateurs.
 - Avant de modifier un fichier hors de son périmètre, le noter dans PROGRESS.md. En cas de
@@ -52,7 +52,7 @@ Une itération = un cycle. Ne pas reflasher sans avoir lu les logs du flash pré
 2. Modifier le firmware (`esphome/vevor-7in1.yaml`, `esphome/includes/*.h`).
 3. Compiler : `tools/build.sh` → si échec, corriger et revenir en 2.
 4. Flasher : `tools/flash.sh <ip_ou_port>` (USB la première fois, OTA ensuite).
-5. Capturer les logs : `tools/capture_logs.sh <ip> <durée_s>` → `logs/capture_*.log`.
+5. Capturer les logs : `.venv/bin/python tools/capture_logs.py --host <ip> --seconds <durée_s> --out logs/capture_*.log`.
 6. Évaluer : `tools/eval_frames.py logs/capture_*.log` → rapport JSON.
 7. Écrire dans `state/PROGRESS.md` : ce qui a marché, ce qui a échoué, la prochaine action.
    Consigner les trames brutes dans `logs/raw_frames.jsonl`.
@@ -64,9 +64,10 @@ Une itération = un cycle. Ne pas reflasher sans avoir lu les logs du flash pré
   brute. Si rien n'est capté, le dire : « pas de signal », jamais « ça doit marcher ».
 - **À lire avant de toucher à la radio** : `references/EXTERNAL_CONTEXT_WIZARDPC.md` — analyse
   (contexte, pas du code à reprendre) d'un projet fonctionnel sur le même protocole. Il donne
-  des réglages radio **mesurés** très différents des nôtres (868,35 MHz / déviation **70 kHz** /
-  bande **100 kHz** / 11 111 baud, contre 868,30 / 37 kHz / 200 kHz chez nous) : ce sont des
-  hypothèses à tester. Il documente aussi des pièges de protocole à intégrer à l'auto-évaluation
+  des réglages radio **mesurés** (868,35 MHz / déviation **70 kHz** / bande **100 kHz** /
+  11 111 baud) — exactement ceux que nous avons fini par adopter : nos anciennes valeurs
+  (868,30 MHz / 37 kHz / 200 kHz) ne décodaient rien. Ils ont servi de guide, ce ne sont plus des
+  hypothèses en attente de test. Il documente aussi des pièges de protocole à intégrer à l'auto-évaluation
   (pluie qui peut baisser avec un checksum **valide**, trames arrivant coupées, ID station qui
   change à chaque mise sous tension, rejet `vent > 0` avec `rafale == 0`, cohérence lux/UV).
 - **Ne jamais se fier à la sortie console d'un script passé dans un pipe** : `tail` et `tee`
@@ -115,3 +116,20 @@ GPIO2/GPIO8/GPIO9 sont des pins de strapping sur ESP32-C3 : on évite GPIO2 pour
   (aucun reflash nécessaire pour chercher le signal).
 
 Voir `references/HOME_ASSISTANT.md` pour l'intégration HA et ce qui est scriptable côté add-on.
+
+## Notes de relecture (02/10/2026)
+
+- **Objectif atteint, au-delà du critère.** Le critère de sortie demandait « au moins 10 trames
+  consécutives valides » : la fenêtre validée (`evidence/rapport_fenetre_1h.json`) en compte **180 en
+  une heure**, 0 rejet, verdict `PASS`. Les quatre points (réception, publication, rejet des trames
+  invalides, stabilité) sont couverts.
+- **« Pas de reboot » (objectif, point 4) se lit « pas de reboot subi ».** Le firmware redémarre
+  désormais **volontairement** comme remède au mutisme SPI intermittent (voir `state/DONE.md` §2) :
+  ce n'est pas une instabilité, c'est le garde-fou. La formulation d'origine est datée.
+- **Règles de répartition / anti-collision** : elles visaient deux agents écrivant en même temps.
+  Elles n'ont plus d'objet si une seule session travaille ; les garder quand deux processus tournent.
+- **Faits d'environnement datés** (LXC `192.168.2.167`, HA `192.168.2.104`, HA Core muet sur 8123 au
+  30/09) : à rafraîchir si l'installation change — pas des exigences du projet.
+- **Fait corrigé** : le fichier décodeur cité en tête de ce document (`esphome/includes/vevor_7in1.h`)
+  n'existait pas ; le décodeur est `esphome/includes/vevor_protocol.h` (l'en-tête `vevor_7in1.h` est
+  celui du composant, sous `esphome/components/vevor_7in1/`).
