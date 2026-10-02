@@ -553,6 +553,21 @@ static void test_forecast_spec() {
   expect_near(vevor::rain_rate_mmh(2.0f, 3600000u), 2.0f, 0.001f, "2 mm in 1 h = 2 mm/h");
   expect(vevor::rain_rate_mmh(1.0f, 0u) == 0.0f, "zero elapsed time cannot define a rate");
 
+  // ANCHORS ON REAL MEASUREMENTS — not invented values. Two frames of the validated one-hour window
+  // (evidence/rapport_fenetre_1h.json, logs/verif_garde_fou_60min.log, 01/10/2026) with the sun
+  // elevation computed for the house's latitude/longitude at that exact time. They pin where real
+  // daylight actually lands relative to the two thresholds, which synthetic ratios cannot do.
+  const float real_clear_1458 = vevor::clear_sky_lux(26.2f);
+  expect_near(38160.0f / real_clear_1458, 0.73f, 0.03f,
+              "real frame 14:58:23 UTC (lux 38 160, elevation 26.2°) -> ratio 0.73");
+  expect(vevor::classify_sky(38160.0f, 26.2f) == vevor::Forecast::SUNNY,
+         "real frame 14:58:23 UTC -> sunny (lands just above the 0.70 threshold)");
+  const float real_clear_1558 = vevor::clear_sky_lux(17.9f);
+  expect_near(19980.0f / real_clear_1558, 0.58f, 0.03f,
+              "real frame 15:58:03 UTC (lux 19 980, elevation 17.9°) -> ratio 0.58");
+  expect(vevor::classify_sky(19980.0f, 17.9f) == vevor::Forecast::PARTLY_CLOUDY,
+         "real frame 15:58:03 UTC -> partly cloudy");
+
   // Published identifiers (automations bind to these strings).
   expect(std::strcmp(vevor::forecast_name(vevor::Forecast::SUNNY), "sunny") == 0, "name: sunny");
   expect(std::strcmp(vevor::forecast_name(vevor::Forecast::PARTLY_CLOUDY), "partly_cloudy") == 0,

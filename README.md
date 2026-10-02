@@ -33,7 +33,7 @@ never touches the radio.
 | `esphome/components/cc1101/` | **Production** | local copy of ESPHome's `cc1101` component with the fixes this board needs (`README-LOCAL.md`) |
 | `esphome/secrets.yaml.example` | **Production** | template to copy to `esphome/secrets.yaml` (never versioned) |
 | `docs/wiring.svg` | **Production** | wiring diagram |
-| `tests/` | **Test** | off-board suite: independent Python encoder + C++ unit tests (426 checks, no board needed) |
+| `tests/` | **Test** | off-board suite: independent Python encoder + C++ unit tests (430 checks, no board needed) |
 | `tools/` | **Test** | build, flash, log capture, independent evaluation, frequency scan, A/B comparison (`tools/README.md`) |
 | `evidence/` | **Test** | versioned JSON reports backing every claim (`evidence/README.md`) |
 | `references/` | Context | protocol description + rtl_433 reference source (GPL-2.0) |
@@ -59,7 +59,9 @@ in-firmware comments are in French; this README is the English entry point.
 
 ## 1.2 Wiring
 
-Full diagram: [`docs/wiring.svg`](docs/wiring.svg). The table below is the same information in
+![Wiring diagram](docs/wiring.png)
+
+Full vector version: [`docs/wiring.svg`](docs/wiring.svg). The table below is the same information in
 text form — **wire by signal name, not by header pin number** (module boards number the 8-pin
 header differently).
 
@@ -188,6 +190,7 @@ enforces.
 | `Alerte verglas` | binary_sensor, `cold` | – | on/off | **on when outdoor temperature < 1 °C** — exactly the manual's ice alert (§1.4) |
 | `Prévision (estimation locale)` | text_sensor | – | `unknown` / `sunny` / `partly_cloudy` / `cloudy` / `rainy` / `stormy` / `snowy` | local forecast estimate — **not** the console's icon, see §1.4 |
 | `Taux de pluie (estimation)` | sensor, `precipitation_intensity` | mm/h | **0 …** (20 min window) | rain intensity estimated from the cumulative counter; the quantity the rainy/stormy split is made from |
+| `Élévation du soleil (estimation)` | sensor (diagnostic) | ° | **−90 … +90** | sun elevation used by the sky part of the estimate; published every 20 s, so it is observable even when the radio is down. `unknown` until the clock is set |
 | `ID station` | sensor (diagnostic) | – | 0 … 65 535 | station ID (hex). **It changes when the sensor's batteries are changed** |
 | `Compteur TX` | sensor (diagnostic) | – | 0 … 255 | frame counter, +1 every 20 s (used to detect missed/replayed bursts) |
 | `Trames valides` | sensor (diagnostic) | – | 0 … 4 294 967 295 | frames decoded and published since boot |
@@ -267,6 +270,12 @@ The estimate, in priority order:
 (30 frames); the first state after a boot is published after **1 minute** so the entity is not left
 empty after every restart.
 
+**Sanity-checked on real data.** Replaying the validated one-hour window (`evidence/`, 180 real
+frames, 01/10 14:58→15:58 UTC) through these rules gives measured/reference ratios between **0.55 and
+0.73** (sun elevation 26.2° → 17.9°) — 61 frames `sunny`, 119 `partly_cloudy`, none `cloudy` on an
+afternoon with broken cloud. That is not a validation of the console's icon (which is not
+receivable); it is the check that the sky proxy does not say something absurd on real measurements.
+
 **Configuration this needs**: an NTP clock (`time: platform: sntp`, self-contained — unlike the Home
 Assistant time platform it also syncs when no HA client is connected) and the `sun:` component,
 which needs your **`timezone`, `latitude`, `longitude`** — set them in the `substitutions:` block at
@@ -329,7 +338,7 @@ Steps: self-check of the independent Python encoder (it must reproduce the rtl_4
 **byte for byte**) → generation of the test frames and pulse scenarios → compilation of the C++ test
 with the compiler bundled in `.venv-dev` (zig) → execution.
 
-Current state: **426 checks, 0 failures.** The suite covers the happy path, inverted polarity,
+Current state: **430 checks, 0 failures.** The suite covers the happy path, inverted polarity,
 truncated captures, jitter, timing bias, inter-burst gaps, frame stitching (and the rule that a
 *complete* burst must never be stitched), the plausibility gate and its rejection reasons, the
 period-selection sweep, and now the whole forecast estimator (thresholds, boundaries, rain window,

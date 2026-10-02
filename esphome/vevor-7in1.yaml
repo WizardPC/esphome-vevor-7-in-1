@@ -277,6 +277,7 @@ vevor_7in1:
           // The sun position is only meaningful once the clock is set; NAN makes the estimator
           // answer "unknown" instead of computing a sun position for 1970.
           fin.sun_elevation_deg = fin.time_valid ? (float) id(sun_pos).elevation() : NAN;
+          id(sun_elevation_sensor).publish_state(fin.sun_elevation_deg);
           fin.now_ms = millis();
           const vevor::Forecast fc = id(vevor_rx).update_forecast(fin);
           id(forecast_sensor).publish_state(vevor::forecast_name(fc));
@@ -353,6 +354,10 @@ interval:
             return;
           }
           muettes++;
+          // Sun position: published here as well as on every frame, so it stays observable when the
+          // radio is down — it is the first value to check when the estimate reads "unknown".
+          id(sun_elevation_sensor).publish_state(
+              id(ntp_time).now().is_valid() ? (float) id(sun_pos).elevation() : NAN);
           ESP_LOGI("v7in1", "SANTE radio=%s trames=%u captures=%u (aucune trame depuis %d s)",
                    id(radio).is_failed() ? "EN ECHEC" : "ok", (unsigned) t,
                    (unsigned) id(vevor_rx).get_captures(), muettes * 20);
@@ -434,6 +439,15 @@ number:
         - cc1101.set_frequency: !lambda "return x * 1000000.0f;"
 
 sensor:
+  # Sun elevation actually used by the local forecast estimate. Published on every frame AND by the
+  # 20 s health interval, so it is observable even when no frame arrives — this is the value to look
+  # at first when the estimate reads "unknown" or when the sky part looks wrong.
+  - platform: template
+    name: "Élévation du soleil (estimation)"
+    id: sun_elevation_sensor
+    unit_of_measurement: "°"
+    accuracy_decimals: 1
+    entity_category: diagnostic
   - platform: template
     name: "Température extérieure"
     id: temperature

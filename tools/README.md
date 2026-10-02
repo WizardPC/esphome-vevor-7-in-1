@@ -21,7 +21,7 @@ grep -rn --exclude-dir=logs --exclude-dir=reviews --exclude-dir=.git \
 |---|---|
 | `build.sh` | compiles the firmware (`BUILD OK` / `BUILD FAIL` written to a file) |
 | `flash.sh` | uploads over OTA (USB the first time) |
-| `run_tests.sh` | off-board suite (426 checks, no board required) |
+| `run_tests.sh` | off-board suite (430 checks, no board required) |
 | `capture_logs.py` | captures logs over the native API (port 6053); `--append` to add to a file |
 | `eval_frames.py` | independent Python decoder: frame-by-frame verdict against the firmware |
 | `summarize_window.py` | window summary **generated from its report** (`--rapport`), refuses to whitewash a FAIL |

@@ -55,23 +55,42 @@ conteneur puis **contrôlé visuellement** : la première version avait des text
 chevauchaient, elle a été refaite (trois panneaux séparés : détail A, détail B, règles).
 
 **Preuves de cette itération.**
-- Suite hors matériel : **426 vérifications, 0 échec** (377 avant ; +49 sur la prévision : seuils aux
+- Suite hors matériel : **430 vérifications, 0 échec** (377 avant ; +53 sur la prévision : seuils aux
   bornes, fenêtre de pluie, remise à zéro du compteur, anti-battement, nuit, horloge non réglée).
 - `BUILD OK`, **1 005 616 octets** (`build/last_status.txt`).
 - **Flash OTA effectué** (`FLASH OK cible=172.16.0.205`), et les 3 nouvelles entités sont bien
   présentes sur la carte (`tools/read_state.py` : `Alerte verglas = False`,
   `Prévision (estimation locale)`, `Taux de pluie (estimation)`).
 - **Horloge vérifiée sur la carte** : `sntp: Synchronized time: 2026-10-03 00:23:30` (heure de Paris).
+- **Position du soleil vérifiée sur la carte et recoupée** : nouvelle entité `Élévation du soleil
+  (estimation)` publiée aussi par l'intervalle de 20 s (elle reste donc observable radio muette).
+  Lue sur la carte : **−42,119°** puis **−42,250°** ; un calcul indépendant (algorithme solaire NOAA,
+  lat/lon de la maison) donne respectivement −42,24° et −42,56° aux instants de lecture — accord à
+  ~0,1-0,3°, largement suffisant pour un partage de ciel. Vérifié aussi dans le code d'ESPHome que
+  `sun` travaille bien en **UTC** (`time_->utcnow()`) : aucun décalage de fuseau, et il renvoie NaN
+  si l'heure n'est pas réglée.
+- **Rejeu sur données réelles** de l'estimateur (fenêtre validée `logs/verif_garde_fou_60min.log`,
+  180 trames réelles du 01/10 14:58→15:58 UTC, latitude/longitude de la maison) : élévation solaire
+  calculée de 26,2° à 17,9°, rapport `lux mesuré / lux ciel clair` entre **0,55 et 0,73** → 61 trames
+  classées `sunny`, 119 `partly_cloudy`, **0 `cloudy`** (jamais d'inversion absurde) ; pas de pluie et
+  rafale ≤ 16,8 km/h dans la fenêtre, donc aucun état de précipitation — cohérent. Ce n'est pas une
+  validation de l'icône de la console (irrecevable), c'est le contrôle que le proxy de ciel ne
+  raconte pas n'importe quoi sur de vraies mesures.
 
 **Ce qui n'a PAS pu être vérifié sur la carte, et pourquoi (dit franchement).** Aucune trame n'a été
-décodée pendant les fenêtres de capture de cette itération : la puce est saine (Chip ID 0x0014,
-8 registres surveillés conformes, FSCAL1 valide) mais il subsiste **1 registre non pris après 4
-essais** (0x1D ou 0x24 selon les cycles) — le défaut de lien SPI intermittent déjà connu — et les
-captures RMT sont majoritairement du bruit (2 à 5 impulsions), avec une seule capture de 159
-impulsions en 6 min. La chaîne `V7IN1 PREV` n'a donc **pas** été observée ce soir. Ce point est
-**antérieur et indépendant** de cette itération (aucun changement radio) : la cause reste le lien
-SPI / l'antenne, pas le calcul de prévision, dont la logique est couverte par les 49 vérifications
-hors carte. À reprendre par la boucle radio quand elle sera autorisée à tourner.
+décodée pendant les fenêtres de capture de cette itération. La cause est **mesurée** et **antérieure**
+à cette itération (aucun changement radio n'a été fait) : le lien SPI continue de perdre des
+écritures de registres par intermittence — relevé du 02/10 22:45:04 :
+`ECRITURE NON PRISE FREQ0 : ecrit 0xE8, relu 0xEC` puis
+`controle des ecritures : 1 registre(s) NON pris — la configuration radio n'est pas celle demandee`
+(plus 1 ou 2 registres non pris à chaque cycle sur 0x24/0x1D/0x0F). La puce répond pourtant
+normalement (Chip ID 0x0014) et reste en RX (MARCSTATE=0x0D), mais sa configuration n'est pas celle
+demandée : les captures RMT sont alors du bruit (2 à 5 impulsions), avec une seule capture de 159
+impulsions en 6 min. La chaîne `V7IN1 PREV` n'a donc **pas** été observée ce soir. Ce n'est pas la
+logique de prévision qui est en cause (elle est couverte par 53 vérifications hors carte et par le
+rejeu sur données réelles ci-dessus) : c'est le lien SPI. Pistes déjà documentées et non montées :
+alimentation dédiée du module par LDO + 100 nF au plus près du VCC, ou coupure d'alimentation par
+P-MOSFET (README §1.2). À reprendre par la boucle radio quand elle sera autorisée à tourner.
 
 ## 2026-10-02 — REVUE DE LA DOCUMENTATION LONGUE ET NETTOYAGE (commit 9693dbe)
 
