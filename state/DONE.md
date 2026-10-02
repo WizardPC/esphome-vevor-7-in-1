@@ -138,9 +138,11 @@ La revue du 2ᵉ tour laissait deux décisions techniques ouvertes. État après
   courant des diagnostics conservés. La liste de « 13 outils morts » de la revue était fausse au moins
   pour `dump_pulses.py`, qui est l'outil du bouton « Dump impulsions » et qui a servi le jour même à
   distinguer un flux propre d'un bruit de démodulateur.
-- **M5 — transistor : en attente de confirmation** du propriétaire du montage (piste non montée, ou
-  composant réellement en place ?). Le README décrit la piste ; aucune trace d'un transistor monté
-  n'existe dans le dépôt.
+- **M5 — transistor : CONFIRMÉ, aucun transistor n'est monté** (propriétaire du montage, 02/10). Le
+  montage réel comporte exactement deux composants ajoutés, soudés directement sur les broches du
+  module CC1101 : la **résistance 10 kΩ entre VCC et CSN**, et le **condensateur 10 µF / 25 V entre
+  GND et VCC**. Le README décrit en plus, comme piste explicitement non montée, la coupure
+  d'alimentation par transistor (seul remède immédiat à un démarrage à puce sourde).
 
 Reste ouvert, et c'est du lien, pas du code : **~3 à 10 % des rafales perdues**, qui coïncident avec
 des ré-armements où un registre met deux essais à prendre (`ECRITURE NON PRISE` puis reprise). Le

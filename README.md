@@ -56,14 +56,15 @@ elles, restaient fiables : le défaut était bien dans le LIEN, pas dans la puce
 composants, le contrôle embarqué est passé de « 1 registre définitivement non pris » à **« 0 registre
 définitivement non pris » sur quatre cycles d'affilée**.
 
-- **Résistance 10 kΩ** entre **CSN (GPIO7)** et **3,3 V**, soudée au plus près de la broche CSN du
-  module. Pourquoi : au reset, les GPIO de l'ESP32-C3 sont en **haute impédance** (Table 2-1 du
-  datasheet Espressif : IE, sans WPU) — sans pull-up, la ligne CS flotte pendant tout le démarrage,
-  la puce peut y voir des sélections parasites et partir dans l'état indéterminé que décrit la
-  datasheet (§4.9). 4,7 à 10 kΩ convient ; 10 kΩ est la valeur de la carte de référence ESP32-C3 +
+- **Résistance 10 kΩ** entre **VCC du module (3,3 V)** et **CSN (GPIO7)**, soudée directement sur les
+  broches du module. Pourquoi : au reset, les GPIO de l'ESP32-C3 sont en **haute impédance**
+  (Table 2-1 du datasheet Espressif : IE, sans WPU) — sans pull-up, la ligne CS flotte pendant tout le
+  démarrage, la puce peut y voir des sélections parasites et partir dans l'état indéterminé que décrit
+  la datasheet (§4.9). 4,7 à 10 kΩ convient ; 10 kΩ est la valeur de la carte de référence ESP32-C3 +
   CC1101. **L'option YAML `cs_pin: mode: {pullup: true}` ne remplace pas cette résistance** : elle
   n'est appliquée qu'au `setup()` de la broche, donc après la fenêtre de démarrage.
-- **Condensateur 10 µF** entre **VCC et GND du module** (découplage des appels de courant).
+- **Condensateur 10 µF / 25 V** soudé directement entre **GND et VCC du module** (découplage des
+  appels de courant).
 
 ### Recommandé, pas encore monté
 
@@ -81,6 +82,11 @@ définitivement non pris » sur quatre cycles d'affilée**.
   puce.
 
 ### Couper l'alimentation du module par un transistor (piste, NON montée)
+
+**Confirmé par le propriétaire du montage le 02/10 : aucun transistor n'est soudé sur la carte.** Le
+montage réel comporte exactement deux composants ajoutés, décrits ci-dessus : la résistance de 10 kΩ
+(VCC ↔ CSN) et le condensateur de 10 µF / 25 V (GND ↔ VCC), tous deux soudés directement sur les
+broches du module CC1101. Ce qui suit est donc une **piste**, pas une description du montage.
 
 Sur ce montage, **un démarrage sur deux lève une puce muette** (`Chip ID: 0xFFFF`, toutes les
 lectures SPI à 0xFF) : elle n'est alors jamais configurée et reste en IDLE. Un reset logiciel ne la
