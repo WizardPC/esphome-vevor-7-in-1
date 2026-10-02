@@ -18,13 +18,11 @@ class CC1101Listener {
 
 class CC1101Component final : public Component,
                               public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARITY_LOW,
-                                                    spi::CLOCK_PHASE_LEADING, spi::DATA_RATE_200KHZ> {
-  // MODIFICATION LOCALE : cadence SPI abaissée de 1 MHz à 200 kHz. Pourquoi : mesuré le 02/10
-  // à 01h24, les registres MDMCFG4 et MDMCFG3 se relisaient à leur VALEUR D'USINE (0x8C et
-  // 0x22) au lieu des valeurs écrites — les écritures n'atteignaient pas la puce, même après
-  // quatre réessais. La lecture, elle, est fiable. 1 MHz reste dans les spécifications de la
-  // puce (6,5 MHz max) mais pas forcément dans celles de notre câblage ; on abaisse la
-  // cadence pour donner de la marge au lien, sans rien changer d'autre.
+                                                    spi::CLOCK_PHASE_LEADING, spi::DATA_RATE_1MHZ> {
+  // BISSECT 02/10 (après-midi) : la cadence était abaissée à 200 kHz (contre les écritures perdues
+  // de la veille, depuis réglées par le pull-up de 10 kΩ sur CS). Mesure : avec le pilote d'origine
+  // à 1 MHz le flux reçu est PROPRE (rafales 166-182 impulsions, rythme 2:1) ; avec mon pilote à
+  // 200 kHz c'est un continuum de bruit. La cadence de 1 MHz est donc rétablie ici pour l'isoler.
  public:
   CC1101Component();
 

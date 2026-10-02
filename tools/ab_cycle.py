@@ -40,6 +40,12 @@ VARIANTS = {
     "temoin": (TEMOIN / "witness-test", "witness.yaml",
                TEMOIN / "witness-test/.esphome/build/vevor-weather-station/build/firmware.ota.bin",
                "projet de référence (WizardPC/esphome-vevor-7in1), compilé par nos soins"),
+    # 02/10 — même YAML, même câblage, même garde-fou : seul le C++ du composant radio change
+    # (pilote d'ORIGINE d'ESPHome contre ma copie locale). C'est l'expérience qui dit lequel des
+    # deux rend la puce sourde : le firmware témoin, qui utilise le composant d'origine, décode.
+    "origine": (ROOT / "esphome", "vevor-7in1.yaml",
+                ROOT / "build/variants/nous_pilote_origine.ota.bin",
+                "pilote d'origine d'ESPHome, notre YAML"),
     "prod": (ROOT / "esphome", "vevor-7in1.yaml",
              ROOT / "build/variants/nous_prod.ota.bin",
              "notre firmware de production"),

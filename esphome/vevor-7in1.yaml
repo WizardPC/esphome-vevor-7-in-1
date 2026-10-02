@@ -125,6 +125,9 @@ external_components:
     # cf. cc1101.cpp enter_calibrated_) — c'est le test qui dit si le garde-fou peut ré-armer sans
     # condamner la session. Le test « pilote d'origine » est tombé sur un démarrage en état A et n'a
     # rien prouvé ; il reste à refaire sur plusieurs démarrages.
+    # BISSECT 02/10 — mon pilote modifié, mais cadence SPI revenue à 1 MHz (au lieu des 200 kHz que
+    # j'avais réglés). Le pilote d'origine, à 1 MHz, sort un flux PROPRE (rafales de 166-182
+    # impulsions à rythme 2:1) ; mon pilote sortait du bruit. On isole la cadence.
     components: [vevor_7in1, cc1101]
 
 spi:
@@ -284,14 +287,17 @@ globals:
 # puce restée en IDLE après un démarrage raté.
 script:
   - id: rearmer_radio
+    # CORRIGÉ le 02/10 — NE PAS enchaîner les actions `cc1101.set_*` : dans le composant, chacune
+    # fait `if (initialized_) { enter_idle_(); ...; enter_rx_(); }` (voir set_frequency dans
+    # cc1101.cpp). Sept actions enchaînées = sept cycles de reconfiguration complets, et le
+    # garde-fou les rejouait toutes les 20 s. La puce passait donc son temps en IDLE et en
+    # recalibration au lieu d'écouter — c'est ce qui expliquait « 0 trame alors que la station
+    # émet », et pourquoi la seule heure saine du 01/10 (où les trames arrivaient, donc où le
+    # garde-fou ne se déclenchait jamais) a donné 180 trames.
+    # `cc1101.reset` fait déjà strobe(SRES) + configure() complet, en réutilisant les valeurs de
+    # fréquence/modulation/débit déjà en mémoire : c'est tout ce qu'il faut.
     then:
       - cc1101.reset: radio
-      - cc1101.set_frequency: ${freq_mhz}MHz
-      - cc1101.set_modulation_type: 2-FSK
-      - cc1101.set_symbol_rate: ${symbol_rate}
-      - cc1101.set_fsk_deviation: ${deviation_khz}kHz
-      - cc1101.set_filter_bandwidth: ${bw_khz}kHz
-      - cc1101.begin_rx: radio
 
 # Lecture à distance des compteurs internes du composant : sans ça, « combien de captures ? »
 # n'est lisible que dans les battements de cœur du log (et pas dans un relevé d'entités).
@@ -337,12 +343,14 @@ interval:
           // sourde », ce qui autorise un redémarrage sans conditions. Le journal garde la
           // distinction (radio EN ECHEC = puce muette sur le SPI ; radio ok = chaîne RF/RMT), pour
           // savoir ce qu'on répare.
-          if (muettes <= 9) {
+          // 02/10 : 9 tentatives (3 min) laissaient trop peu de temps à une première rafale ; le
+          // seuil passe à 30 (10 min) pour qu'un silence court ne fasse plus rien du tout.
+          if (muettes <= 30) {
             // 3 minutes de tentatives d'initialisation douces — c'est ce que recommande le fil TI
             // « CC1101 not responding to SPI » (le quartz démarre tardivement, la puce finit par
             // répondre si on insiste) ; une tentative coûte 10 ms. Mesuré : inefficace en mode
             // « puce muette », mais gratuit et parfois suffisant en mode « radio saine ».
-            ESP_LOGW("v7in1", "aucune trame depuis %d s — tentative d'initialisation radio %d/9",
+            ESP_LOGW("v7in1", "aucune trame depuis %d s — tentative d'initialisation radio %d/30",
                      muettes * 20, muettes);
             id(rearmer_radio).execute();
             return;

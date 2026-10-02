@@ -72,7 +72,7 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   // Les premières captures sont détaillées, et toute capture demandée à la main l'est aussi
   // (bouton « Dump impulsions ») : les durées en clair sont la SEULE façon d'analyser la rafale
   // réelle hors de la carte, l'API ne livrant que des logs.
-  if (this->captures_ <= 3 || this->dump_requested_) {
+  if (this->captures_ <= 3 || this->dump_requested_ || this->dump_restants_ > 0) {
     int32_t shortest = 1000000;
     int32_t longest = 0;
     for (int32_t t : timings) {
@@ -87,14 +87,26 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
     ESP_LOGI(TAG, "capture #%u : %u impulsions, de %d us à %d us", (unsigned) this->captures_,
              (unsigned) timings.size(), (int) shortest, (int) longest);
 
-    std::string head;
-    for (size_t i = 0; i < timings.size() && i < 64; i++) {
-      if (i != 0) {
-        head += ' ';
+    // MODIFICATION LOCALE (02/10) — 64 durées ne couvrent PAS une rafale Vevor (~176 symboles) :
+    // le dump ne permettait donc pas de juger le flux, il s'arrêtait au premier tiers de la rafale.
+    // On journalise jusqu'à 512 durées, par tranches de 64 — une ligne unique de plusieurs kilo-octets
+    // risquerait d'être tronquée par la couche de journalisation de l'API.
+    const size_t a_dumper = timings.size() < 512 ? timings.size() : 512;
+    for (size_t debut = 0; debut < a_dumper; debut += 64) {
+      std::string tranche;
+      for (size_t i = debut; i < a_dumper && i < debut + 64; i++) {
+        if (i != debut) {
+          tranche += ' ';
+        }
+        tranche += std::to_string(timings[i]);
       }
-      head += std::to_string(timings[i]);
+      const size_t fin = (debut + 63 < a_dumper) ? debut + 63 : a_dumper - 1;
+      ESP_LOGI(TAG, "  impulsions [%u-%u] sur %u : %s", (unsigned) debut, (unsigned) fin,
+               (unsigned) a_dumper, tranche.c_str());
     }
-    ESP_LOGI(TAG, "  impulsions (64 premières) : %s", head.c_str());
+    if (this->dump_restants_ > 0) {
+      this->dump_restants_--;
+    }
     this->dump_requested_ = false;
   }
 

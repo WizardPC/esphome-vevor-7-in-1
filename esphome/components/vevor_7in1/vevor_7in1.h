@@ -103,7 +103,13 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // Déclenche la journalisation des impulsions de la PROCHAINE capture (les 64 premières
   // durées). Indispensable pour analyser le flux réel depuis l'extérieur : l'API ne livre que
   // des logs, et les captures #1 à #3 sont déjà passées quand l'API devient joignable.
-  void request_raw_dump() { this->dump_requested_ = true; }
+  // 02/10 — le dump ne relevait qu'UNE capture, celle qui suivait l'appui : on est tombé sur une
+  // capture vide et on n'a rien pu conclure. On en relève maintenant 24 d'affilée, de quoi voir
+  // ce que la puce reçoit réellement quand son compteur de captures avance.
+  void request_raw_dump() {
+    this->dump_requested_ = true;
+    this->dump_restants_ = 24;
+  }
   // Re-journalise la configuration effective du `remote_receiver` (filtre, idle, symboles RMT,
   // tolérance) et son état, une fois l'API joignable. Sans ça, on ne peut pas vérifier depuis
   // l'extérieur ce que le RMT a réellement en main : son `dump_config()` part au démarrage,
@@ -144,6 +150,8 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   bool has_last_frame_{false};
   // Vrai = journaliser les impulsions de la prochaine capture (voir request_raw_dump()).
   bool dump_requested_{false};
+  // Nombre de captures restant à journaliser après un appui sur « Dump impulsions ».
+  uint16_t dump_restants_{0};
   // Vrai = la configuration du récepteur a déjà été re-journalisée (voir dump_receiver_config_).
   bool receiver_dumped_{false};
   uint32_t heartbeats_{0};
