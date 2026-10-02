@@ -1362,3 +1362,25 @@ jusqu'à obtenir un état B avant de mesurer.
 déclenchant sa propre reconfiguration (voir `set_frequency` dans le composant) — sept cycles toutes
 les 20 s tant qu'aucune trame n'arrivait. Il ne se déclenchait jamais pendant les périodes saines, ce
 qui l'a rendu invisible. Un seul `cc1101.reset` suffit.
+
+
+## 02/10 — VALIDATION APRÈS CORRECTIF (30 minutes, à état de puce contrôlé)
+
+Mesure de 14h37 à 15h07 (heure de Paris), binaire `d4b03646` : pilote local, **SPI 1 MHz**, garde-fou
+corrigé (un seul `cc1101.reset`), pull-up 10 kΩ sur CS + 10 µF soudés par l'utilisateur.
+
+- **86 trames décodées en 30 minutes** (la station émet toutes les 20 s ⇒ 90 attendues) ;
+- **84 intervalles sur 85 à exactement 20,0 s**, le seul autre à 40 s ⇒ **98,8 % des émissions
+  décodées** ;
+- valeurs cohérentes : température 21,1-21,3 °C, humidité 57 %, vent 6-10 km/h, direction 278-279°,
+  pluie 59,2 mm (stable), ID station 33995 ;
+- **le garde-fou n'a pas déclenché une seule fois** : il ne se déclenche que sur silence, donc le
+  flux n'a jamais été interrompu ;
+- le seul intervalle raté coïncide avec un ré-armement où le registre `FSCAL2` (0x24) n'a pas pris du
+  premier coup (`ECRITURE NON PRISE`, reprise au 2e essai, calibration `FSCAL1=0x19` valide derrière).
+  Reste à gratter ~1 %, côté lien SPI, pas côté code.
+
+**Rappel de la méthode, sans laquelle cette mesure ne vaut rien :** la validation n'a été lancée
+qu'après obtention d'un **état B** (puce qui répond) — un démarrage sur deux lève une puce muette
+sur ce montage, et une fenêtre de 40 minutes tombée en état A avait déjà donné « 0 trame » sans rien
+dire du correctif (`build/valider_etat_b.sh`).
