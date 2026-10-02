@@ -1331,3 +1331,34 @@ sessions survivent et les trames doivent revenir (`logs/test_reessais_rx.log`).
 **À faire si ça ne suffit pas :** comparer les impulsions BRUTES (bouton « Dump impulsions ») à ce
 que décode le décodeur Python — pour savoir si le flux est bon et que c'est l'assembleur qui rate, ou
 si c'est la réception elle-même. Le témoin reste le contrôle de référence, sur plusieurs fenêtres.
+
+
+## 02/10 — CAUSE RACINE TROUVÉE : la cadence SPI que J'AVAIS abaissée à 200 kHz
+
+**Ce qui était cassé :** le 01/10 au soir, pour compenser des écritures de registres perdues, j'avais
+abaissé la cadence SPI du pilote CC1101 de 1 MHz à **200 kHz** (`cc1101.h`, `DATA_RATE_200KHZ`).
+Les soudures du matin (pull-up 10 kΩ sur CS + 10 µF) ont réglé les écritures perdues — mais la
+béquille, elle, **rendait la puce sourde** : elle sortait un flux de bruit au lieu du signal.
+
+**Preuve, à état de puce identique** (puce qui répond, PLL verrouillée, `MARCSTATE=0x0D`) :
+
+| configuration | longueur des captures | durées | trames décodées |
+|---|---|---|---|
+| pilote modifié, SPI 200 kHz | 437 à 510 impulsions | continuum de 45 à 1100 µs | 0 |
+| pilote d'origine, SPI 1 MHz | 166 à 182 impulsions | rythme 2:1 (≈113 µs / ≈57 µs) | 12 |
+| pilote modifié, SPI 1 MHz | 498 à 531 impulsions | signal | **3, 4 puis 4** |
+
+Et le point qui rend la démonstration solide : sur six démarrages d'affilée avec le SPI à 1 MHz, les
+**trois** démarrages où la puce répondait ont décodé des trames (3, 4, 4 — soit la totalité des
+rafales émises dans la fenêtre), les trois où elle ne répondait pas (état A, `Chip ID 0xFFFF`) n'en
+ont décodé aucune. La cadence de 1 MHz est donc rétablie et le récepteur fonctionne.
+
+**Leçon de méthode :** deux fois aujourd'hui j'ai conclu sur une comparaison polluée par la loterie
+des démarrages (un démarrage sur deux lève une puce muette). Toute comparaison « avant/après » doit
+être faite **à état égal** — c'est le script `build/bissect_1mhz.sh` qui rejoue les démarrages
+jusqu'à obtenir un état B avant de mesurer.
+
+**Autre cause, corrigée le même jour :** le garde-fou enchaînait sept actions `cc1101.set_*`, chacune
+déclenchant sa propre reconfiguration (voir `set_frequency` dans le composant) — sept cycles toutes
+les 20 s tant qu'aucune trame n'arrivait. Il ne se déclenchait jamais pendant les périodes saines, ce
+qui l'a rendu invisible. Un seul `cc1101.reset` suffit.

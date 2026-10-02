@@ -125,9 +125,9 @@ external_components:
     # cf. cc1101.cpp enter_calibrated_) — c'est le test qui dit si le garde-fou peut ré-armer sans
     # condamner la session. Le test « pilote d'origine » est tombé sur un démarrage en état A et n'a
     # rien prouvé ; il reste à refaire sur plusieurs démarrages.
-    # BISSECT 02/10 — mon pilote modifié, mais cadence SPI revenue à 1 MHz (au lieu des 200 kHz que
-    # j'avais réglés). Le pilote d'origine, à 1 MHz, sort un flux PROPRE (rafales de 166-182
-    # impulsions à rythme 2:1) ; mon pilote sortait du bruit. On isole la cadence.
+    # Pilote LOCAL (copie modifiée d'ESPHome) : relectures d'identité, contrôle des écritures,
+    # diagnostic de calibration VCO. Cadence SPI à 1 MHz — mesuré le 02/10 : à 200 kHz la puce sort
+    # un flux de bruit et ne décode rien, à 1 MHz elle décode toutes les rafales de la station.
     components: [vevor_7in1, cc1101]
 
 spi:
