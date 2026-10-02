@@ -120,3 +120,29 @@ sans passer son temps à redémarrer. Bouton « Redémarrer la carte » ajouté.
 5. **Le binaire recompilé (BUILD OK, 966 400 octets) n'est PAS flashé sur la carte.** Le récepteur en
    service sur `172.16.0.205` porte donc la version précédente : les nombres du garde-fou donnés plus
    haut décrivent le `esphome/vevor-7in1.yaml` de HEAD, pas nécessairement l'appareil qui tourne.
+
+
+## 02/10 (soir) — après intégration de la revue : M2 résolu, non-régression vérifiée
+
+La revue du 2ᵉ tour laissait deux décisions techniques ouvertes. État après intégration de la branche
+`revue/nettoyage-doc-20261002` dans `main` (fusion en avance rapide, poussée) :
+
+- **M2 — le binaire revu est flashé** (md5 `08cd2c3e`, 966 400 octets, `BUILD OK`). Validation à état
+  de puce contrôlé (`build/valider_etat_b.sh`, obtention d'un **état B** avant de mesurer), 25 min :
+  **72 trames sur 74 émissions attendues = 97,3 %**, intervalles **70 × 20 s et 1 × 60 s**,
+  écritures de registres « 0 définitivement non pris » dans la quasi-totalité des ré-armements.
+  Comparaison avec le binaire d'avant fusion, même méthode, 62 min : 170/188 = 90,4 %.
+  **Non-régression : ni sur la suite hors matériel (377 vérifications, 0 échec), ni sur la
+  compilation, ni sur la réception.**
+- **M1 — résolu par la documentation, pas par la suppression** : `tools/README.md` distingue le flux
+  courant des diagnostics conservés. La liste de « 13 outils morts » de la revue était fausse au moins
+  pour `dump_pulses.py`, qui est l'outil du bouton « Dump impulsions » et qui a servi le jour même à
+  distinguer un flux propre d'un bruit de démodulateur.
+- **M5 — transistor : en attente de confirmation** du propriétaire du montage (piste non montée, ou
+  composant réellement en place ?). Le README décrit la piste ; aucune trace d'un transistor monté
+  n'existe dans le dépôt.
+
+Reste ouvert, et c'est du lien, pas du code : **~3 à 10 % des rafales perdues**, qui coïncident avec
+des ré-armements où un registre met deux essais à prendre (`ECRITURE NON PRISE` puis reprise). Le
+levier identifié reste l'alimentation du module — alimentation séparée, puis interrupteur par
+transistor piloté par un GPIO si la loterie des démarrages persiste.
