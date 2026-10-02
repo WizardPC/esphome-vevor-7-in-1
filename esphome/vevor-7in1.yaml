@@ -121,6 +121,10 @@ external_components:
       path: components
     # cc1101 : copie LOCALE du composant d'ESPHome, modifiée pour relire l'identité de la puce
     # jusqu'à 20 fois (~5 s) au lieu d'une seule, et journaliser CHIP_RDYn (voir cc1101.cpp).
+    # 02/10 : pilote LOCAL rétabli, avec le correctif d'entrée en RX (réessais au lieu d'abandonner,
+    # cf. cc1101.cpp enter_calibrated_) — c'est le test qui dit si le garde-fou peut ré-armer sans
+    # condamner la session. Le test « pilote d'origine » est tombé sur un démarrage en état A et n'a
+    # rien prouvé ; il reste à refaire sur plusieurs démarrages.
     components: [vevor_7in1, cc1101]
 
 spi:

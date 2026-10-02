@@ -278,7 +278,13 @@ void CC1101Component::configure() {
     }
   }
 
+  // MODIFICATION LOCALE — délai de stabilisation avant l'entrée en RX.
+  // Constat du 02/10 : l'entrée en RX réussissait au démarrage à froid (la station a été reçue,
+  // +3 captures toutes les 20 s) mais échouait à chaque ré-armement à chaud. On laisse donc à la
+  // puce le temps de se remettre d'un reset logiciel avant de lui demander la réception.
+  delay(20);
   if (!this->enter_rx_()) {
+    ESP_LOGW(TAG, "Failed to enter RX state!");
     this->mark_failed();
     return;
   }
@@ -488,11 +494,23 @@ bool CC1101Component::wait_for_state_(State target_state, uint32_t timeout_ms) {
 }
 
 bool CC1101Component::enter_calibrated_(State target_state, Command cmd) {
-  // The PLL must be recalibrated until PLL lock is achieved
+  // MODIFICATION LOCALE (02/10/2026) — ne plus ABANDONNER sur un dépassement de délai.
+  //
+  // Pourquoi : mesuré après les soudures de l'utilisateur, « Failed to enter RX state! » quatre fois
+  // de suite alors que (a) les écritures de registres passaient toutes — « 0 definitivement non
+  // pris » — et que (b) la calibration se relisait valide (FSCAL1 = 0x18, MARCSTATE = 0x0D). Donc la
+  // puce était joignable et correctement configurée, et c'est ce `return false` sur un simple
+  // dépassement des 100 ms qui faisait échouer l'entrée en RX — puis mark_failed() condamnait la
+  // session entière. La datasheet (§22.1) demande de recalibrer EN BOUCLE jusqu'au verrouillage et
+  // l'errata SWRZ020E rappelle que le détecteur de verrouillage n'est pas fiable : on réessaie donc,
+  // avec une petite pause et un délai d'attente plus large.
   for (uint8_t retries = PLL_LOCK_RETRIES; retries > 0; retries--) {
     this->strobe_(cmd);
-    if (!this->wait_for_state_(target_state)) {
-      return false;
+    if (!this->wait_for_state_(target_state, 250)) {
+      ESP_LOGW(TAG, "etat %u non atteint en 250 ms, nouvel essai", static_cast<unsigned>(target_state));
+      delay(10);
+      this->enter_idle_();
+      continue;
     }
     this->read_(Register::FSCAL1);
     if (this->state_.FSCAL1 != FSCAL1_PLL_NOT_LOCKED) {

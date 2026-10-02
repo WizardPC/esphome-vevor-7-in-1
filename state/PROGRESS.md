@@ -1298,3 +1298,36 @@ retombe d'elle-même sur l'état sain (malchance) ou reste bloquée (matériel).
 - **Condensateur : 10 µF** — la valeur attendue pour le découplage du module.
 - Mesure d'après-soudure : redémarrage à froid **sans reflash** (pour exercer réellement un démarrage
   avec le nouveau câblage), puis fenêtre d'écoute de 8 min → `logs/apres_soudure.log`.
+
+## 02/10 après-midi — après les soudures (pull-up 10 kΩ sur CS + 10 µF)
+
+**Ce qui est réglé :** le lien SPI en écriture. Mesure : « configuration : 1/4/0/2 registre(s) repris
+apres relecture, **0 definitivement non pris** » sur quatre cycles consécutifs — hier soir `MDMCFG4`,
+`MDMCFG3` et `FREQ0` restaient figés à leur valeur d'usine. La puce est donc réellement configurée.
+
+**Ce qui reste, et le mécanisme identifié :**
+
+1. Le firmware témoin (composant d'ORIGINE d'ESPHome) a décodé **12 trames** le 02/10 à 12h30 sur ce
+   même matériel, même YAML (les blocs `cc1101` et `remote_receiver` sont identiques champ pour
+   champ, à `id: radio` près). Le nôtre : 0. La configuration YAML est donc hors de cause.
+2. Au démarrage, notre build REÇOIT la station : le compteur de captures avance de +3 toutes les 20 s
+   exactement (puis se fige) — la cadence de la station. Le flux arrive donc bien.
+3. Le garde-fou ré-arme toutes les 20 s tant qu'aucune trame n'est publiée (9 tentatives), et chaque
+   ré-armement échoue à entrer en RX : « Failed to enter RX state! » (4 fois mesuré). Or dans le
+   pilote, un échec d'entrée en RX appelle `mark_failed()` — **la session entière est condamnée**.
+   D'où le motif : réception correcte ~2 min, puis sourde jusqu'au redémarrage suivant.
+
+**Correctif appliqué (pilote local, `cc1101.cpp`) :**
+- `enter_calibrated_()` ne fait plus `return false` sur un dépassement d'attente : il réessaie
+  (attente portée à 250 ms, pause de 10 ms, retour en IDLE, nouvel essai) — la datasheet §22.1 demande
+  de recalibrer en boucle jusqu'au verrouillage ;
+- délai de stabilisation de 20 ms avant l'entrée en RX (le démarrage à froid réussissait, le
+  ré-armement à chaud non) ;
+- journalisation explicite de « Failed to enter RX state! » au point d'appel de `configure()`.
+
+**Test en cours :** ce pilote + le garde-fou laissé actif — si le ré-armement réussit désormais, les
+sessions survivent et les trames doivent revenir (`logs/test_reessais_rx.log`).
+
+**À faire si ça ne suffit pas :** comparer les impulsions BRUTES (bouton « Dump impulsions ») à ce
+que décode le décodeur Python — pour savoir si le flux est bon et que c'est l'assembleur qui rate, ou
+si c'est la réception elle-même. Le témoin reste le contrôle de référence, sur plusieurs fenêtres.
