@@ -6,6 +6,14 @@
 #           GPIO7->CSN, GPIO3->GDO0.   (GDO2 non connecté)
 
 substitutions:
+  # LOCAL FORECAST ESTIMATION — set these three to YOUR location and time zone.
+  # They feed the sun elevation used by the clear-sky model in includes/vevor_forecast.h. Firmware
+  # values below are the maintainer's home; a location error of even 100 km only moves the computed
+  # sun elevation by a fraction of a degree, so the sky split is insensitive to it — but a WRONG
+  # TIME ZONE makes the sun position wrong by hours, which the estimate cannot recover from.
+  timezone: "Europe/Paris"
+  latitude: "48.373"
+  longitude: "-4.170"
   # Fréquence : 868,35 MHz — celle du montage témoin qui DÉCODE cette station sur cette carte
   # (registre lu au démarrage du témoin : 868 349 824 Hz). Ce n'est plus une hypothèse de
   # départ : c'est la valeur mesurée du seul récepteur qui entend la station (voir
@@ -27,6 +35,7 @@ esphome:
   comment: "Récepteur 868 MHz Vevor 7-in-1 (YT60309) — ESP32-C3 + CC1101"
   includes:
     - includes/vevor_protocol.h
+    - includes/vevor_forecast.h
   on_boot:
     priority: -100
     then:
@@ -102,6 +111,25 @@ wifi:
     password: !secret ap_password
 
 captive_portal:
+
+# Clock and sun position — the only external data the LOCAL FORECAST ESTIMATE needs.
+# Why an NTP clock and not the Home Assistant time platform: the estimate must keep working
+# whether or not a Home Assistant client is connected to this board (the HA time platform only
+# syncs while a client is connected). SNTP is self-contained: the board reaches the internet over
+# its own Wi-Fi. The sun elevation is derived locally from this clock + the latitude/longitude
+# substitutions — no network call beyond NTP.
+time:
+  - platform: sntp
+    id: ntp_time
+    timezone: ${timezone}
+    servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+
+sun:
+  id: sun_pos
+  latitude: ${latitude}
+  longitude: ${longitude}
 
 external_components:
   - source:
@@ -234,6 +262,35 @@ vevor_7in1:
           id(uv_index).publish_state(f.uv_index);
           id(light_lux).publish_state(f.lux);
           ESP_LOGI("v7in1", "V7IN1 OK %s", vevor::to_json(f).c_str());
+
+          // --- LOCAL FORECAST ESTIMATE -------------------------------------------------------
+          // NOT the console's own icon: the console computes its 6 icons from ITS barometer
+          // (manual p.20), and no pressure is transmitted by the outdoor sensor — see the long
+          // note at the top of includes/vevor_forecast.h. This is our own estimate from the
+          // quantities we do receive; every threshold is documented in that header.
+          vevor::ForecastInputs fin;
+          fin.temp_c = f.temp_c;
+          fin.gust_kmh = f.gust_kmh;
+          fin.rain_mm = f.rain_mm;
+          fin.lux = (float) f.lux;
+          fin.time_valid = id(ntp_time).now().is_valid();
+          // The sun position is only meaningful once the clock is set; NAN makes the estimator
+          // answer "unknown" instead of computing a sun position for 1970.
+          fin.sun_elevation_deg = fin.time_valid ? (float) id(sun_pos).elevation() : NAN;
+          fin.now_ms = millis();
+          const vevor::Forecast fc = id(vevor_rx).update_forecast(fin);
+          id(forecast_sensor).publish_state(vevor::forecast_name(fc));
+          id(ice_alert).publish_state(vevor::ice_alert(f.temp_c));
+          id(rain_rate_sensor).publish_state(id(vevor_rx).forecast().rain_rate_mmh());
+          if (fin.time_valid) {
+            ESP_LOGD("v7in1", "V7IN1 PREV %s (pluie %.2f mm/h, %u echantillons, elevation %.1f deg)",
+                     vevor::forecast_name(fc), id(vevor_rx).forecast().rain_rate_mmh(),
+                     (unsigned) id(vevor_rx).forecast().rain_samples(), id(sun_pos).elevation());
+          } else {
+            ESP_LOGD("v7in1", "V7IN1 PREV %s (pluie %.2f mm/h, %u echantillons, horloge NON reglee)",
+                     vevor::forecast_name(fc), id(vevor_rx).forecast().rain_rate_mmh(),
+                     (unsigned) id(vevor_rx).forecast().rain_samples());
+          }
 globals:
   # Compteur de redémarrages effectués alors que la puce était muette sur le bus SPI. PERSISTANT
   # (restore_value) : c'est ce qui borne les tentatives, pour ne pas boucler indéfiniment sur un
@@ -429,6 +486,17 @@ sensor:
     device_class: illuminance
     state_class: measurement
     accuracy_decimals: 0
+  # Rain intensity estimated from the cumulative rain counter over a 20-minute window (mm/h). This
+  # is the intermediate quantity the rainy/stormy split is made from: exposed so the estimate can
+  # be checked against reality. 0 (i.e. "not enough data") until the window spans 5 minutes.
+  - platform: template
+    name: "Taux de pluie (estimation)"
+    id: rain_rate_sensor
+    unit_of_measurement: "mm/h"
+    device_class: precipitation_intensity
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
   - platform: template
     name: "ID station"
     id: station_id_sensor
@@ -465,8 +533,22 @@ binary_sensor:
     name: "Batterie station faible"
     id: battery_low
     device_class: battery
+  # Manual p.20 ("Ice Alert"): "When outdoor temperature is lower than 1°C/33.8°F, the snowflake
+  # icon will appear on the LCD display." Faithful to the manual, on the temperature we receive.
+  - platform: template
+    name: "Alerte verglas"
+    id: ice_alert
+    device_class: cold
 
 text_sensor:
+  # Local forecast estimate: NOT the console's icon (which is pressure-based and not transmitted
+  # by the outdoor sensor). See includes/vevor_forecast.h and README §1.4.
+  # Values: unknown | sunny | partly_cloudy | cloudy | rainy | stormy | snowy
+  - platform: template
+    name: "Prévision (estimation locale)"
+    id: forecast_sensor
+    icon: mdi:weather-partly-cloudy
+    entity_category: diagnostic
   - platform: template
     name: "Dernière trame brute"
     id: raw_sensor

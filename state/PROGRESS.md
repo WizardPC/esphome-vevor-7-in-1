@@ -5,6 +5,74 @@ Format : on ajoute une entrée en haut à chaque itération. Jamais de réécrit
 
 
 
+## 2026-10-02 22:0x-22:5x UTC — Itération 17 (session interactive) : DOCUMENTATION EN ANGLAIS, SCHEMA DE CABLAGE, TABLE DES ENTITES, PREVISION LOCALE
+
+**Demande utilisateur.** Basculer la documentation en anglais ; ajouter un schéma de câblage ;
+séparer nettement la **production** (YAML ESPHome + composants C++, intégration HA simple) de la
+partie **tests / validation / outillage** ; ajouter un tableau des entités exposées (plage min/max,
+unité, signification) ; et, l'écran de la station estimant 6 météos possibles, vérifier le manuel
+et exposer cette entité en développant le calcul.
+
+**MANUEL — ce qu'il dit exactement** (Vevor YT60309, p. 20) : la prévision est calculée par la
+**console**, à partir de **son propre baromètre** (« The built-in barometer can notice atmospheric
+pressure changes… There are 6 weather icons --- Sunny, Partly Cloudy, Cloudy, Rainy, Stormy and
+Snowy. NOTE: The accuracy of a general pressure-based forecast is about 65-70%. »). Alerte verglas,
+même page : « When outdoor temperature is lower than 1°C/33.8°F, the snowflake icon will appear ».
+Le capteur extérieur ne mesure ni ne transmet la pression (« Weather data: temperature, humidity,
+wind speed, wind direction, rainfall, UVI and light intensity ») et la trame de 21 octets n'a
+**aucun champ de pression**. **Fait, à ne pas contourner : la prévision propre de la station n'est
+pas recevable par ce montage.** (Manuel récupéré hors dépôt, non redistribué ; seules de courtes
+citations sont reprises.)
+
+**Ce qui a été implémenté à la place** — dit franchement comme une **estimation locale**, jamais
+comme l'icône de la console :
+- `esphome/includes/vevor_forecast.h` (C++ pur, testable hors carte) : pluie cumulée différenciée sur
+  une **fenêtre glissante de 20 min** (16 échantillons à 75 s, span minimal 5 min sinon « pas de
+  pluie ») → `snowy` (< 1 °C, seuil du manuel), `stormy` (≥ 7,6 mm/h WMO « forte pluie » ou rafale
+  ≥ 40 km/h), `rainy` ; sinon ciel clair : `lux` mesuré / modèle de ciel clair de Kittler/CIE
+  (133 800 × sin(elev)^1,15) → `sunny` (≥ 0,70), `partly_cloudy` (≥ 0,35), `cloudy` ; `unknown` la
+  nuit (élévation < 3°), sans horloge, ou sans historique de pluie. Anti-battement : 10 min (1 min
+  pour la première publication).
+- Entités ajoutées : `Prévision (estimation locale)` (text_sensor, 7 valeurs),
+  `Alerte verglas` (binary_sensor `cold`, `temp < 1 °C` — fidèle au manuel),
+  `Taux de pluie (estimation)` (sensor diagnostic, mm/h, la grandeur intermédiaire du calcul).
+- Horloge : **SNTP** (`time: platform: sntp`, fuseau en substitution) et composant `sun:` (lat/lon en
+  substitutions). SNTP plutôt que l'heure Home Assistant : l'estimation doit vivre même sans client
+  HA connecté.
+- L'estimateur vit **dans le composant** `vevor_7in1` (un `globals:` ESPHome n'accepte pas une classe
+  C++ libre — premier build échoué là-dessus, 3 erreurs de compilation, corrigé).
+
+**Documentation.** `README.md` réécrit **en anglais** et restructuré en deux parties explicites :
+**PART 1 — PRODUCTION** (matériel, câblage, **tableau des entités avec plage/unité/signification**,
+prévision, installation, notes HA) et **PART 2 — TESTS/VALIDATION/OUTILLAGE** (suite hors carte,
+décodeur indépendant, outils terrain, preuves versionnées, méthode), plus les 7 pièges. Traduits
+aussi : `references/PROTOCOL.md`, `tools/README.md`, `evidence/README.md`. Les journaux internes
+(`state/*`) restent en français — c'est dit dans le README.
+
+**Schéma de câblage.** `docs/wiring.svg` (+ `docs/wiring.png`) : ESP32-C3 ↔ CC1101 fil par fil,
+pull-up 10 kΩ CSN, condensateur 10 µF, antenne λ/4, encadré des règles. Rendu avec le Chromium du
+conteneur puis **contrôlé visuellement** : la première version avait des textes qui se
+chevauchaient, elle a été refaite (trois panneaux séparés : détail A, détail B, règles).
+
+**Preuves de cette itération.**
+- Suite hors matériel : **426 vérifications, 0 échec** (377 avant ; +49 sur la prévision : seuils aux
+  bornes, fenêtre de pluie, remise à zéro du compteur, anti-battement, nuit, horloge non réglée).
+- `BUILD OK`, **1 005 616 octets** (`build/last_status.txt`).
+- **Flash OTA effectué** (`FLASH OK cible=172.16.0.205`), et les 3 nouvelles entités sont bien
+  présentes sur la carte (`tools/read_state.py` : `Alerte verglas = False`,
+  `Prévision (estimation locale)`, `Taux de pluie (estimation)`).
+- **Horloge vérifiée sur la carte** : `sntp: Synchronized time: 2026-10-03 00:23:30` (heure de Paris).
+
+**Ce qui n'a PAS pu être vérifié sur la carte, et pourquoi (dit franchement).** Aucune trame n'a été
+décodée pendant les fenêtres de capture de cette itération : la puce est saine (Chip ID 0x0014,
+8 registres surveillés conformes, FSCAL1 valide) mais il subsiste **1 registre non pris après 4
+essais** (0x1D ou 0x24 selon les cycles) — le défaut de lien SPI intermittent déjà connu — et les
+captures RMT sont majoritairement du bruit (2 à 5 impulsions), avec une seule capture de 159
+impulsions en 6 min. La chaîne `V7IN1 PREV` n'a donc **pas** été observée ce soir. Ce point est
+**antérieur et indépendant** de cette itération (aucun changement radio) : la cause reste le lien
+SPI / l'antenne, pas le calcul de prévision, dont la logique est couverte par les 49 vérifications
+hors carte. À reprendre par la boucle radio quand elle sera autorisée à tourner.
+
 ## 2026-10-02 — REVUE DE LA DOCUMENTATION LONGUE ET NETTOYAGE (commit 9693dbe)
 
 **Objet.** Revue de cohérence demandée le 02/10 : documentation longue/archivée, chiffres périmés,

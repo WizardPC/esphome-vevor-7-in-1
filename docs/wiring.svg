@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 820" width="1160" height="820" font-family="DejaVu Sans, Arial, Helvetica, sans-serif">
+  <rect width="1160" height="820" fill="#ffffff"/>
+
+  <text x="34" y="40" font-size="25" font-weight="bold" fill="#111">Vevor 7-in-1 868 MHz receiver — wiring</text>
+  <text x="34" y="64" font-size="13" fill="#555">ESP32-C3 SuperMini + CC1101 868 MHz module. Wire by SIGNAL NAME: the 8-pin header numbering varies between module boards.</text>
+
+  <!-- ============ ESP32-C3 SuperMini ============ -->
+  <rect x="40" y="100" width="260" height="440" rx="10" fill="#eef4ff" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="170" y="134" font-size="17" font-weight="bold" fill="#1a365d" text-anchor="middle">ESP32-C3 SuperMini</text>
+  <text x="170" y="154" font-size="11.5" fill="#2b6cb0" text-anchor="middle">3.3 V logic · USB-C · Wi-Fi</text>
+  <line x1="40" y1="168" x2="300" y2="168" stroke="#2b6cb0" stroke-width="1"/>
+
+  <g font-size="14" fill="#1a365d" text-anchor="end">
+    <text x="286" y="207">3V3</text>
+    <text x="286" y="247">GND</text>
+    <text x="286" y="292">GPIO4</text>
+    <text x="286" y="332">GPIO6</text>
+    <text x="286" y="372">GPIO5</text>
+    <text x="286" y="412">GPIO7</text>
+    <text x="286" y="462">GPIO3</text>
+  </g>
+
+  <!-- ============ CC1101 module ============ -->
+  <text x="900" y="150" font-size="17" font-weight="bold" fill="#7b341e" text-anchor="middle">CC1101 module (868 MHz)</text>
+  <text x="900" y="169" font-size="11.5" fill="#b7791f" text-anchor="middle">2-FSK · SPI · separate ANT pad</text>
+  <rect x="760" y="182" width="280" height="328" rx="10" fill="#fff5e6" stroke="#b7791f" stroke-width="2"/>
+  <g font-size="14" fill="#7b341e">
+    <text x="778" y="207">VCC</text>
+    <text x="778" y="247">GND</text>
+    <text x="778" y="292">SCLK</text>
+    <text x="778" y="332">MOSI</text>
+    <text x="778" y="372">MISO</text>
+    <text x="778" y="412">CSN</text>
+    <text x="778" y="462">GDO0</text>
+  </g>
+  <g font-size="11.5" fill="#b7791f" text-anchor="end">
+    <text x="1030" y="207">(1)</text>
+    <text x="1030" y="247">(2)</text>
+    <text x="1030" y="292">(3)</text>
+    <text x="1030" y="332">(4)</text>
+    <text x="1030" y="372">(6)</text>
+    <text x="1030" y="412">(8)</text>
+  </g>
+
+  <!-- ============ Wires ============ -->
+  <g stroke="#333" stroke-width="2.5" fill="none">
+    <line x1="300" y1="202" x2="742" y2="202"/>
+    <line x1="300" y1="242" x2="742" y2="242"/>
+    <line x1="300" y1="287" x2="742" y2="287"/>
+    <line x1="300" y1="327" x2="742" y2="327"/>
+    <line x1="300" y1="367" x2="742" y2="367"/>
+    <line x1="300" y1="407" x2="742" y2="407"/>
+    <line x1="300" y1="457" x2="742" y2="457"/>
+  </g>
+  <g stroke="#1a365d" stroke-width="2">
+    <line x1="286" y1="202" x2="300" y2="202"/>
+    <line x1="286" y1="242" x2="300" y2="242"/>
+    <line x1="286" y1="287" x2="300" y2="287"/>
+    <line x1="286" y1="327" x2="300" y2="327"/>
+    <line x1="286" y1="367" x2="300" y2="367"/>
+    <line x1="286" y1="407" x2="300" y2="407"/>
+    <line x1="286" y1="457" x2="300" y2="457"/>
+  </g>
+  <g stroke="#7b341e" stroke-width="2">
+    <line x1="742" y1="202" x2="760" y2="202"/>
+    <line x1="742" y1="242" x2="760" y2="242"/>
+    <line x1="742" y1="287" x2="760" y2="287"/>
+    <line x1="742" y1="327" x2="760" y2="327"/>
+    <line x1="742" y1="367" x2="760" y2="367"/>
+    <line x1="742" y1="407" x2="760" y2="407"/>
+    <line x1="742" y1="457" x2="760" y2="457"/>
+  </g>
+  <g font-size="12.5" fill="#333">
+    <text x="322" y="195">3V3 — never 5 V</text>
+    <text x="322" y="235">GND — common ground</text>
+    <text x="322" y="280">SPI clock (22 Ω if the wires are long)</text>
+    <text x="322" y="320">SPI MOSI</text>
+    <text x="322" y="360">SPI MISO</text>
+    <text x="322" y="400">SPI chip select — 10 kΩ pull-up (detail A)</text>
+    <text x="322" y="450">demodulated data → remote_receiver (RMT)</text>
+    <text x="322" y="472" font-size="11.5" fill="#888">GDO2: not connected</text>
+  </g>
+
+  <!-- ============ Antenna ============ -->
+  <line x1="1040" y1="300" x2="1064" y2="300" stroke="#b7791f" stroke-width="2.5"/>
+  <line x1="1064" y1="300" x2="1064" y2="252" stroke="#b7791f" stroke-width="3"/>
+  <line x1="1048" y1="266" x2="1080" y2="266" stroke="#b7791f" stroke-width="2"/>
+  <line x1="1050" y1="276" x2="1078" y2="276" stroke="#b7791f" stroke-width="2"/>
+  <text x="1072" y="322" font-size="11.5" fill="#b7791f" text-anchor="middle">ANT</text>
+  <text x="1072" y="338" font-size="11.5" fill="#b7791f" text-anchor="middle">λ/4 = 8.6 cm</text>
+
+  <!-- ============ Detail A ============ -->
+  <rect x="34" y="570" width="340" height="222" rx="8" fill="#f2fbf5" stroke="#2f855a"/>
+  <text x="50" y="598" font-size="13.5" font-weight="bold" fill="#22543d">Detail A — pull-up on CSN : 10 kΩ</text>
+  <line x1="52" y1="626" x2="170" y2="626" stroke="#2f855a" stroke-width="2"/>
+  <text x="52" y="618" font-size="11" fill="#22543d">+3V3 (module VCC)</text>
+  <line x1="80" y1="626" x2="80" y2="650" stroke="#2f855a" stroke-width="2"/>
+  <rect x="69" y="650" width="22" height="40" fill="#ffffff" stroke="#2f855a" stroke-width="2"/>
+  <text x="97" y="674" font-size="12" fill="#22543d">10 kΩ</text>
+  <line x1="80" y1="690" x2="80" y2="746" stroke="#2f855a" stroke-width="2"/>
+  <circle cx="80" cy="746" r="4" fill="#2f855a"/>
+  <line x1="80" y1="746" x2="170" y2="746" stroke="#2f855a" stroke-width="2"/>
+  <text x="52" y="766" font-size="11" fill="#22543d">CSN (GPIO7)</text>
+  <g font-size="11" fill="#276749">
+    <text x="196" y="626">Soldered on the</text>
+    <text x="196" y="642">module pins.</text>
+    <text x="196" y="664">Without it, CS</text>
+    <text x="196" y="680">floats during boot</text>
+    <text x="196" y="696">and the chip reads</text>
+    <text x="196" y="712">its registers back</text>
+    <text x="196" y="728">at factory values.</text>
+  </g>
+
+  <!-- ============ Detail B ============ -->
+  <rect x="394" y="570" width="340" height="222" rx="8" fill="#fffaf0" stroke="#b7791f"/>
+  <text x="410" y="598" font-size="13.5" font-weight="bold" fill="#7b341e">Detail B — decoupling : 10 µF / 25 V</text>
+  <line x1="412" y1="630" x2="530" y2="630" stroke="#b7791f" stroke-width="2"/>
+  <text x="412" y="622" font-size="11" fill="#7b341e">+3V3 (module VCC)</text>
+  <line x1="440" y1="630" x2="440" y2="656" stroke="#b7791f" stroke-width="2"/>
+  <line x1="418" y1="656" x2="462" y2="656" stroke="#b7791f" stroke-width="3"/>
+  <line x1="418" y1="666" x2="462" y2="666" stroke="#b7791f" stroke-width="3"/>
+  <line x1="440" y1="666" x2="440" y2="702" stroke="#b7791f" stroke-width="2"/>
+  <line x1="412" y1="702" x2="530" y2="702" stroke="#b7791f" stroke-width="2"/>
+  <text x="412" y="720" font-size="11" fill="#7b341e">GND (module)</text>
+  <text x="474" y="664" font-size="11.5" fill="#b7791f">10 µF / 25 V</text>
+  <g font-size="11" fill="#975a16">
+    <text x="410" y="750">Soldered across the module's GND and VCC pins.</text>
+    <text x="410" y="766">A 100 nF ceramic at the VCC pin is the recommended</text>
+    <text x="410" y="782">complement (fast edges), not a replacement.</text>
+  </g>
+
+  <!-- ============ Rules ============ -->
+  <rect x="754" y="570" width="372" height="222" rx="8" fill="#f7fafc" stroke="#cbd5e0"/>
+  <text x="770" y="598" font-size="13.5" font-weight="bold" fill="#1a365d">Rules that cost measurements here</text>
+  <g font-size="11" fill="#2d3748">
+    <text x="770" y="624">• The CC1101 must stay the ONLY device on its SPI bus:</text>
+    <text x="784" y="640">one extra SPI device in the YAML silences the chip</text>
+    <text x="784" y="656">(0 frames, 0 captures, no error at all).</text>
+    <text x="770" y="680">• Never power the module from 5 V.</text>
+    <text x="770" y="704">• Optional, not fitted: switching the module's 3.3 V</text>
+    <text x="784" y="720">with a logic-level P-MOSFET (gate pulled to 3V3 by</text>
+    <text x="784" y="736">10 kΩ, driven by a free GPIO through 1 kΩ) recovers</text>
+    <text x="784" y="752">a mute chip without a reboot. See README §1.2.</text>
+  </g>
+</svg>
