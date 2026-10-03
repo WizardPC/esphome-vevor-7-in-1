@@ -49,12 +49,12 @@ void Vevor7in1::loop() {
   }
 
   ESP_LOGI(TAG,
-           "captures=%u (+%u), trames=%u, rejets=%u, réparées=%u (dont %u refusées), dernières "
-           "impulsions=%u, plus longue=%u",
+           "captures=%u (+%u), trames=%u, rejets=%u, réparées=%u (dont %u refusées), "
+           "pluie_refusee=%u, dernières impulsions=%u, plus longue=%u",
            (unsigned) this->captures_, (unsigned) (this->captures_ - this->reported_captures_),
            (unsigned) this->frames_, (unsigned) this->rejected_, (unsigned) this->repairs_,
-           (unsigned) this->repairs_rejetees_, (unsigned) this->last_pulse_count_,
-           (unsigned) this->longest_capture_);
+           (unsigned) this->repairs_rejetees_, (unsigned) this->rain_rejected_,
+           (unsigned) this->last_pulse_count_, (unsigned) this->longest_capture_);
   this->reported_captures_ = this->captures_;
 }
 
@@ -161,6 +161,36 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
 
   if (!ok) {
     return false;
+  }
+
+  // CONTINUITÉ DE LA PLUIE — contrôle d'état, appliqué à TOUTES les trames (voir pluie_plausible
+  // dans vevor_protocol.h). Mesuré le 03/10 : deux pics de pluie à 7 634,5 mm sous un ciel dégagé,
+  // qu'aucun contrôle n'arrêtait — la porte de plausibilité du protocole ne regarde pas la pluie.
+  // Une trame refusée ici ne devient PAS la référence de la suivante (last_frame_ n'est mis à jour
+  // qu'après), donc un pic ne peut pas empoisonner la comparaison.
+  {
+    vevor::Frame f;
+    vevor::Frame precedente;
+    const char *raison = "";
+    if (vevor::decode(raw, f, &raison)) {
+      float derniere = 0.0f;
+      bool connue = false;
+      if (this->has_last_frame_ && vevor::decode(this->last_frame_, precedente, &raison)) {
+        derniere = precedente.rain_mm;
+        connue = true;
+      }
+      if (!vevor::pluie_plausible(f.rain_mm, derniere, connue)) {
+        this->rain_rejected_++;
+        // Les octets BRUTS dans le message : sans eux, la trame est bloquée sans qu'on sache
+        // pourquoi, et c'est précisément ce qu'on cherche à comprendre (défaut du 03/10).
+        const std::string octets = vevor::hex_bytes(raw, vevor::FRAME_BYTES);
+        ESP_LOGW(TAG,
+                 "pluie refusée : %.1f mm alors que la trame précédente en donnait %.1f mm (hausse "
+                 "physiquement impossible) — bruts : %s",
+                 f.rain_mm, derniere, octets.c_str());
+        return false;
+      }
+    }
   }
 
   // GARDE-FOU DE CONTINUITÉ, pour les trames RÉPARÉES seulement : une trame obtenue par réparation

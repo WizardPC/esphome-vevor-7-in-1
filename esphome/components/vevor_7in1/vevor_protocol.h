@@ -89,6 +89,37 @@ inline bool continuite_ok(const Frame &f, const Frame &precedente) {
 static constexpr float WIND_LIMIT_KMH = 180.0f;
 static constexpr float WIND_LIMIT_MARGE_KMH = 0.01f;
 
+// BORNE DE PLAUSIBILITÉ DE LA PLUIE (ajoutée après un défaut constaté en production le 03/10).
+//
+// Home Assistant a enregistré deux pics de pluie à **7 634,5 mm** dans l'après-midi, sous un ciel
+// dégagé, alors que la valeur était stable à 59,2 mm avant et après — et une division par deux de
+// la même valeur (59,18 → 29,36 mm, soit 254 → 126 ticks, exactement un bit faux) deux minutes
+// avant le premier pic. La porte de plausibilité ne contrôlait PAS la pluie : direction, humidité,
+// température, vent et UV seulement. Une trame fausse — un bit de trop ou de moins à l'extraction —
+// pouvait donc publier n'importe quelle valeur de pluie sans être arrêtée par rien.
+//
+// La borne porte sur la HAUSSE seulement, et c'est délibéré. Le protocole documente un recul
+// légitime de 256 ticks (la station lit son compteur pendant un report) et la station peut remettre
+// son compteur à zéro : un contrôle qui refuserait une BAISSE rejetterait ensuite toutes les trames,
+// indéfiniment — c'est le piège classique du contrôle d'état embarqué. Une hausse, elle, est
+// TOUJOURS physiquement bornée, donc ce contrôle ne peut jamais bloquer une réception saine :
+// au pluviomètre de cette station (0,233 mm par bascule), +5 mm entre deux rafales espacées de 20 s
+// représenterait 21 bascules en 20 s, soit 15 mm/min — plus qu'aucune pluie réelle, et très loin des
+// 7 634 mm observés. Ne pas resserrer sans une mesure de pluie réelle soutenue.
+static constexpr float RAIN_MAX_HAUSSE_MM = 5.0f;
+
+// `connue` = on a une trame précédente acceptée à comparer. Sans référence, on accepte : la trame a
+// déjà passé l'en-tête, la somme, le compteur et le reste de la porte de plausibilité.
+inline bool pluie_plausible(float nouvelle, float precedente, bool connue) {
+  if (nouvelle < 0.0f) {
+    return false;
+  }
+  if (!connue) {
+    return true;
+  }
+  return (nouvelle - precedente) <= RAIN_MAX_HAUSSE_MM;
+}
+
 // `in` : 21 octets utiles (synchronisation déjà faite par le CC1101 en mode packet).
 inline bool decode(const uint8_t *in, Frame &out, const char **reason) {
   // `valid` décrit CETTE trame, pas la précédente : remis à faux dès l'entrée, pour qu'une trame

@@ -143,6 +143,9 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // trame réparée ne vaut pas une trame décodée directement, et ce chiffre doit être visible.
   uint32_t get_repairs() const { return this->repairs_; }
   uint32_t get_repairs_rejetees() const { return this->repairs_rejetees_; }
+  // Trames refusées par le contrôle de continuité de la PLUIE (hausse physiquement impossible) :
+  // c'est le compteur à surveiller pour savoir si le défaut constaté le 03/10 se reproduit.
+  uint32_t get_rain_rejected() const { return this->rain_rejected_; }
 
  protected:
   // Recolle la fin de la capture précédente au début de la courante, et fusionne les deux
@@ -162,6 +165,9 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // refusées (voir dump()). Séparées volontairement : ce sont des chiffres de qualité différente.
   uint32_t repairs_{0};
   uint32_t repairs_rejetees_{0};
+  // Trames refusées parce que la pluie montait d'un coup physiquement impossible (voir
+  // pluie_plausible). Compteur séparé : c'est un défaut de réception, pas un rejet de protocole.
+  uint32_t rain_rejected_{0};
   // Suivi pour le battement de cœur (voir loop()).
   uint32_t last_report_ms_{0};
   uint32_t reported_captures_{0};

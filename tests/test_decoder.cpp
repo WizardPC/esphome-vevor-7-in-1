@@ -724,6 +724,56 @@ static void test_captures_reelles() {
              std::to_string(VEVOR_CAPTURE_ATTENDUES) + " au moins)");
 }
 
+// --- 15. Pluie : une hausse physiquement impossible est refusée -------------------------------
+// Constaté en PRODUCTION le 03/10 (relevé Home Assistant) : deux pics de pluie à 7 634,5 mm sous un
+// ciel dégagé, alors que la valeur restait à 59,2 mm avant et après — et une division par deux
+// (59,18 → 29,36 mm, soit 254 → 126 ticks, exactement un bit faux) deux minutes avant le premier
+// pic. La porte de plausibilité du protocole ne contrôle PAS la pluie.
+// La borne porte sur la HAUSSE seulement : la station remet son compteur à zéro et le protocole
+// documente un recul légitime de 256 ticks, donc refuser une BAISSE rejetterait ensuite toutes les
+// trames, indéfiniment.
+static void test_pluie_plausible() {
+  printf("Pluie : hausse physiquement impossible refusée\n");
+  const float stable = 59.18f;
+
+  expect(vevor::pluie_plausible(59.2f, stable, true), "hausse normale (+0,02 mm) : acceptée");
+  expect(vevor::pluie_plausible(60.1f, stable, true), "hausse de 1 mm : acceptée");
+  expect(!vevor::pluie_plausible(7634.5f, stable, true),
+         "pic mesuré à 7 634,5 mm : REFUSÉ (hausse impossible)");
+  expect(!vevor::pluie_plausible(65.0f, stable, true), "hausse de 6 mm en une rafale : refusée");
+  expect(!vevor::pluie_plausible(-1.0f, stable, true), "valeur négative : refusée");
+
+  // Contre-épreuve indispensable : une BAISSE reste acceptée, y compris celle observée en
+  // production. Un contrôle de baisse bloquerait la réception pour de bon après une remise à zéro.
+  expect(vevor::pluie_plausible(29.36f, stable, true),
+         "division par deux observée (59,18 → 29,36 mm) : ACCEPTÉE");
+  expect(vevor::pluie_plausible(0.0f, stable, true), "compteur remis à zéro : accepté");
+  expect(vevor::pluie_plausible(7634.5f, 0.0f, false),
+         "première trame, sans référence : acceptée (elle a déjà passé le reste de la porte)");
+
+  // Et la preuve au niveau de la TRAME : une trame qui passe en-tête, somme, compteur ET toute la
+  // porte de plausibilité du protocole peut encore porter le pic — c'est exactement ce qui s'est
+  // produit. On la construit, puis on vérifie que c'est bien le contrôle de continuité qui l'arrête.
+  uint8_t pic[vevor::FRAME_BYTES] = {0xAA, 0x00, 0x84, 0xCB, 0x16, 0x02, 0x90, 0x50, 0x01,
+                                     0x01, 0x00, 0x02, 0x22, 0x80, 0xFF, 0x02, 0x31, 0xDF,
+                                     0x33, 0x00, 0x00};
+  uint16_t somme = 0;
+  for (int i = 0; i < 19; i++) {
+    somme += pic[i];
+  }
+  pic[19] = (uint8_t)(somme & 0xFF);
+  pic[20] = (uint8_t)(pic[18] + 1);
+  vevor::Frame f;
+  const char *raison = "";
+  expect(vevor::decode(pic, f, &raison),
+         "la trame au pic traverse en-tête, somme, compteur et porte de plausibilité du protocole");
+  expect(f.rain_mm > 7000.0f && f.rain_mm < 7700.0f,
+         "elle porte bien la pluie aberrante (7 634,5 mm attendus, " +
+             std::to_string(f.rain_mm) + " obtenus)");
+  expect(!vevor::pluie_plausible(f.rain_mm, stable, true),
+         "c'est le contrôle de continuité qui l'arrête — celui qui manquait ce jour-là");
+}
+
 int main() {
   printf("=== Tests du décodeur Vevor 7-en-1 (sans matériel) ===\n\n");
   test_vectors();
@@ -740,6 +790,7 @@ int main() {
   test_header_tolerance();
   test_periode_mesuree();
   test_captures_reelles();
+  test_pluie_plausible();
 
   printf("\n%d vérifications, %d échec(s)\n", g_checks, g_failures);
   if (g_failures == 0) {

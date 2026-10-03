@@ -1,3 +1,45 @@
+### 03/10 (suite 10) — DÉFAUT EN PRODUCTION : pics de pluie à 7 634,5 mm, et la borne qui manquait
+
+Signalé par l'utilisateur, relevé Home Assistant : deux pics de **7 634,5 mm** dans l'après-midi sous
+un ciel dégagé, la valeur restant à 59,2 mm avant et après. L'historique HA donne la chronologie
+exacte : **59,18 → 29,36 mm à 11:51:44 UTC** (une division par deux, soit **exactement −128 ticks** :
+254 → 126, un seul bit faux), puis les pics.
+
+**La cause du fait que ça passe : la porte de plausibilité ne contrôlait PAS la pluie.** Elle vérifie
+direction, humidité, température, vent et UV — jamais la pluie. Une trame cohérente portant
+n'importe quelle valeur de pluie était donc publiée telle quelle.
+
+**Correctif livré** (`pluie_plausible` dans `vevor_protocol.h`, appliqué à TOUTES les trames dans le
+composant) : la pluie ne peut pas MONTER de plus de 5 mm entre deux rafales. La borne porte sur la
+hausse seulement, et c'est délibéré : le protocole documente un recul légitime de 256 ticks (la
+station lit son compteur pendant un report) et la station peut remettre son compteur à zéro — un
+contrôle qui refuserait une BAISSE rejetterait ensuite toutes les trames, indéfiniment. Une hausse,
+elle, est toujours physiquement bornée, donc ce contrôle ne peut jamais bloquer une réception saine.
+Le message de refus journalise les **octets bruts** de la trame : sans eux on bloquerait le défaut
+sans comprendre pourquoi. Compteur `pluie_refusee=N` dans le journal périodique.
+
+**Tests : 408 vérifications, 0 échec.** Le test démontre le défaut au niveau de la trame : construite
+avec les octets `80 FF`, la trame au pic (7 634,5 mm) **franchit en-tête, somme, compteur et toute la
+porte de plausibilité du protocole** — et c'est bien le nouveau contrôle qui l'arrête. Contre-épreuve
+incluse : la division par deux observée en production et la remise à zéro du compteur restent
+ACCEPTÉES.
+
+**Hypothèse réfutée par la mesure, à ne pas rouvrir** : les réparations du décodeur ne fabriquent pas
+de trame. Sur **3 000 charges utiles aléatoires** (synchronisation et en-tête justes, soit ~1 million
+de tentatives de réparation) le décodeur ne publie **rien**. Le test à 200 charges d'hier était trop
+petit pour conclure quoi que ce soit : le porter à 3 000.
+
+**Mécanisme restant à élucider** : la division par deux est un −128 propre dans l'octet bas, et la
+trame a passé le checksum — donc la trame était COHÉRENTE, ce qui oriente vers l'émetteur ou vers une
+erreur systématique, pas vers un décalage de notre extraction. Trancher exige les octets bruts du
+prochain pic : binaire de campagne `fab3ce97` (968 624 octets, niveau DEBUG) flashé, ligne
+`V7IN1 RAW` et motifs de rejet actifs, capture de 60 min lancée à 19h00.
+
+**Leçon outillage** : ESPHome refuse un niveau par tag plus verbeux que le niveau GLOBAL (« must not
+be less severe »). La recette de campagne est donc `esphome -s niveau_journal DEBUG compile …`, la
+substitution portant sur `logger: level:` lui-même. Un `logs: {v7in1: DEBUG}` avec `level: INFO` fait
+échouer la validation — la compétence disait le contraire, elle est corrigée.
+
 ### 03/10 (suite 9) — PREUVE SUR LA CARTE : 45 trames sur 45 émissions, une seule réparation
 
 Fenêtre de 15 min avec le firmware de l'étape 1 (binaire `ec0a270c`, 958 688 octets). **45 trames
