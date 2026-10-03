@@ -12,7 +12,11 @@
     "intervalles": {
       "20": 44
     },
-    "taux": 102.3
+    "intervalles_a_20s": 44,
+    "duree_couverte_par_les_intervalles_s": 880,
+    "intervalles_attendus": 44,
+    "emissions_manquees": 0,
+    "commentaire": "Tous les intervalles observés valent 20,0 s : aucune émission manquée. Les 45 trames ont 45 compteurs TX DISTINCTS, donc aucun doublon de livraison."
   },
   "decodeur": {
     "trames_reparees_total": 1,
