@@ -92,8 +92,34 @@ def bits_depuis_durees(durees: list[int], periode: int, inverser: bool) -> str:
     return "".join(bits)
 
 
+def porte_de_plausibilite(b: bytes):
+    """Mêmes contrôles PHYSIQUES que le firmware (includes/vevor_protocol.h).
+
+    Renvoie None si la trame est plausible, sinon le nom du refus. Sans cette porte, cet outil
+    annonçait une trame « valide » pour des candidats que le firmware refuse : mesuré le 03/10,
+    une trame satisfaisant en-tête + checksum + compteur donnait une direction de 3841° et une
+    température de 3636 °C. Un tel candidat est un FAUX POSITIF, pas une réception — c'est
+    exactement le piège documenté dans vevor_protocol.h.
+    """
+    x = bytearray(b)
+    for i in (8, 9, 11, 12, 13, 14, 16, 17):   # décalage de 1 documenté sur ces octets
+        x[i] = (x[i] - 1) & 0xFF
+    if (((x[11] & 0x0F) << 8) | x[12]) > 359:
+        return "direction"
+    if b[7] > 100:
+        return "humidite"
+    temp_c = (((b[5] << 8) | b[6]) - 500) * 0.1
+    if temp_c < -40.0 or temp_c > 60.0:
+        return "temperature"
+    return None
+
+
 def trame_dans_bits(bits: str):
-    """Cherche une trame valide à tout décalage de bit. Renvoie (octets, décalage) ou None."""
+    """Cherche une trame conforme à tout décalage de bit.
+
+    Renvoie (octets, décalage, position, refus) : `refus` vaut None si la trame passe aussi la
+    porte de plausibilité, sinon la raison du refus — l'appelant ne doit PAS l'annoncer valide.
+    """
     for decalage in range(min(8, len(bits))):
         utilisable = (len(bits) - decalage) // 8 * 8
         octets = bytes(int(bits[decalage + i: decalage + i + 8], 2) for i in range(0, utilisable, 8))
@@ -103,7 +129,7 @@ def trame_dans_bits(bits: str):
                 continue
             if (sum(b[0:19]) & 0xFF) != b[19] or b[20] != ((b[18] + 1) & 0xFF):
                 continue
-            return b, decalage, i
+            return b, decalage, i, porte_de_plausibilite(b)
     return None
 
 
@@ -143,12 +169,15 @@ def main() -> int:
                     continue
                 r = trame_dans_bits(bits)
                 if r:
-                    b, decalage, position = r
-                    print(f"  >>> TRAME VALIDE : période {periode} µs, "
+                    b, decalage, position, refus = r
+                    verdict = ("TRAME VALIDE" if refus is None else
+                               f"candidat conforme en-tête+checksum+compteur, REFUSÉ par la porte ({refus})")
+                    print(f"  >>> {verdict} : période {periode} µs, "
                           f"{'inversée' if inverser else 'normale'}, décalage bit {decalage}, "
                           f"position octet {position}")
                     print(f"      brut : {' '.join(f'{x:02x}' for x in b)}")
-                    trouve = {"periode": periode, "inverse": inverser, "octets": list(b)}
+                    trouve = {"periode": periode, "inverse": inverser, "octets": list(b),
+                              "refus": refus, "valide": refus is None}
                     break
             if trouve:
                 break
@@ -161,9 +190,13 @@ def main() -> int:
                       f"{' '.join(f'{x:02x}' for x in octets)}")
         rapport.append({"capture": nc, "nb_durees": len(durees), "trame": trouve})
 
-    valides = sum(1 for r in rapport if r["trame"])
+    valides = sum(1 for r in rapport if r["trame"] and r["trame"].get("valide"))
+    conformes = sum(1 for r in rapport if r["trame"] and not r["trame"].get("valide"))
     if args.json:
         print(f"\nrapport écrit (atomique) : {atomic_write_json(args.json, rapport)}")
+    if conformes:
+        print(f"{conformes} capture(s) portent un candidat conforme en-tête+checksum+compteur\n"
+              f"mais REFUSÉ par la porte de plausibilité : FAUX POSITIF, pas une réception")
     print(f"\n{valides} capture(s) sur {len(rapport)} portent une trame VALIDE")
     if valides == 0:
         print("# AUCUNE TRAME valide dans les captures (mesure faite) — résultat négatif", file=sys.stderr)
