@@ -40,4 +40,15 @@ echo "=== 3. compilation du test C++ ==="
 echo "binaire : build/test_decoder"
 
 echo "=== 4. exécution ==="
-"$DEV/build/test_decoder"
+"$DEV/build/test_decoder" || exit 4
+
+echo "=== 5. cohérence firmware / carte Home Assistant / relevé d'entités ==="
+# Cette vérification vivait hors de la suite : un renommage d'entité ou un déplacement de fichiers
+# pouvait la casser sans que rien ne le signale. Elle est désormais une étape, et son échec est un
+# échec de la suite. Elle exige PyYAML et jinja2, présents dans l'environnement ESPHome.
+if [ -x "$ROOT/.venv/bin/python" ]; then
+  "$ROOT/.venv/bin/python" "$DEV/tools/check_ha_card.py" || exit 5
+else
+  echo "IGNORÉ : $ROOT/.venv/bin/python absent (environnement ESPHome) — étape non exécutée." >&2
+  echo "  La cohérence des entités n'a PAS été vérifiée." >&2
+fi

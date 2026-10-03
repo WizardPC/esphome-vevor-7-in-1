@@ -212,24 +212,24 @@ interval:
 button:
   # Diagnostic instruments, exposed in Home Assistant as configuration entities.
   - platform: template
-    name: "Dump impulsions"
+    name: "Dump pulses"
     id: dump_button
     entity_category: config
     on_press:
       - lambda: id(vevor_rx).request_raw_dump();
   - platform: template
-    name: "Réappliquer la config radio"
+    name: "Re-apply radio config"
     id: radio_reapply_button
     entity_category: config
     on_press:
       then:
         - script.execute: rearmer_radio
   - platform: restart
-    name: "Redémarrer la carte"
+    name: "Restart board"
 
 number:
   - platform: template
-    name: "Fréquence CC1101"
+    name: "CC1101 frequency"
     id: freq_number
     unit_of_measurement: MHz
     min_value: 430.0
@@ -245,101 +245,101 @@ number:
 
 sensor:
   - platform: template
-    name: "Température extérieure"
+    name: "Outdoor temperature"
     id: temperature
     unit_of_measurement: "°C"
     device_class: temperature
     state_class: measurement
     accuracy_decimals: 1
   - platform: template
-    name: "Humidité extérieure"
+    name: "Outdoor humidity"
     id: humidity
     unit_of_measurement: "%"
     device_class: humidity
     state_class: measurement
     accuracy_decimals: 0
   - platform: template
-    name: "Vent vitesse moyenne"
+    name: "Wind speed"
     id: wind_speed
     unit_of_measurement: "km/h"
     device_class: wind_speed
     state_class: measurement
     accuracy_decimals: 1
   - platform: template
-    name: "Vent rafale"
+    name: "Wind gust"
     id: wind_gust
     unit_of_measurement: "km/h"
     device_class: wind_speed
     state_class: measurement
     accuracy_decimals: 1
   - platform: template
-    name: "Vent direction"
+    name: "Wind direction"
     id: wind_direction
     unit_of_measurement: "°"
     state_class: measurement
     accuracy_decimals: 0
   - platform: template
-    name: "Pluie cumulée"
+    name: "Rain total"
     id: rain_total
     unit_of_measurement: "mm"
     device_class: precipitation
     state_class: measurement
     accuracy_decimals: 1
   - platform: template
-    name: "Index UV"
+    name: "UV index"
     id: uv_index
     accuracy_decimals: 0
   - platform: template
-    name: "Luminosité"
+    name: "Illuminance"
     id: light_lux
     unit_of_measurement: "lx"
     device_class: illuminance
     state_class: measurement
     accuracy_decimals: 0
   - platform: template
-    name: "ID station"
+    name: "Station ID"
     id: station_id_sensor
     accuracy_decimals: 0
     entity_category: diagnostic
   - platform: template
-    name: "Compteur TX"
+    name: "TX counter"
     id: tx_counter_sensor
     accuracy_decimals: 0
     entity_category: diagnostic
   - platform: template
-    name: "Trames valides"
+    name: "Valid frames"
     id: valid_sensor
     accuracy_decimals: 0
     entity_category: diagnostic
   - platform: template
-    name: "Trames rejetées"
+    name: "Rejected frames"
     id: rejected_sensor
     accuracy_decimals: 0
     entity_category: diagnostic
   - platform: template
-    name: "Captures RMT"
+    name: "RMT captures"
     id: captures_sensor
     accuracy_decimals: 0
     entity_category: diagnostic
   - platform: template
-    name: "Doublons ignorés"
+    name: "Duplicates ignored"
     id: duplicates_sensor
     accuracy_decimals: 0
     entity_category: diagnostic
 
 binary_sensor:
   - platform: template
-    name: "Batterie station faible"
+    name: "Station battery low"
     id: battery_low
     device_class: battery
 
 text_sensor:
   - platform: template
-    name: "Dernière trame brute"
+    name: "Last raw frame"
     id: raw_sensor
     entity_category: diagnostic
   # Verdict on the last frame handed over: "ok", or the reason it was refused.
   - platform: template
-    name: "Dernier verdict"
+    name: "Last verdict"
     id: reason_sensor
     entity_category: diagnostic

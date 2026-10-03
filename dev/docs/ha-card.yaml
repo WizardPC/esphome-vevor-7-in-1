@@ -12,17 +12,17 @@
 #     sed -i 's/jardin_station_vevor_7_en_1/vevor_7in1/g' ha-card.yaml
 #
 # Correspondance avec l'ancienne carte :
-#   sensor.esp32_weather_outside_temperature  → sensor.jardin_station_vevor_7_en_1_temperature_exterieure
-#   sensor.esp32_weather_outside_humidity     → sensor.jardin_station_vevor_7_en_1_humidite_exterieure
-#   sensor.esp32_weather_illuminance          → sensor.jardin_station_vevor_7_en_1_luminosite  (lx, jusqu'à 327 670)
-#   sensor.esp32_weather_uv_index             → sensor.jardin_station_vevor_7_en_1_index_uv     (0…16, sans unité)
-#   sensor.esp32_weather_wind_speed           → sensor.jardin_station_vevor_7_en_1_vent_vitesse_moyenne
-#   sensor.esp32_weather_wind_gust            → sensor.jardin_station_vevor_7_en_1_vent_rafale
-#   sensor.esp32_weather_wind_direction       → sensor.jardin_station_vevor_7_en_1_vent_direction  (degrés)
+#   sensor.esp32_weather_outside_temperature  → sensor.jardin_station_vevor_7_en_1_outdoor_temperature
+#   sensor.esp32_weather_outside_humidity     → sensor.jardin_station_vevor_7_en_1_outdoor_humidity
+#   sensor.esp32_weather_illuminance          → sensor.jardin_station_vevor_7_en_1_illuminance  (lx, jusqu'à 327 670)
+#   sensor.esp32_weather_uv_index             → sensor.jardin_station_vevor_7_en_1_uv_index     (0…16, sans unité)
+#   sensor.esp32_weather_wind_speed           → sensor.jardin_station_vevor_7_en_1_wind_speed
+#   sensor.esp32_weather_wind_gust            → sensor.jardin_station_vevor_7_en_1_wind_gust
+#   sensor.esp32_weather_wind_direction       → sensor.jardin_station_vevor_7_en_1_wind_direction  (degrés)
 #   binary_sensor.esp32_weather_weather_station_battery_low
-#                                             → binary_sensor.jardin_station_vevor_7_en_1_batterie_station_faible
+#                                             → binary_sensor.jardin_station_vevor_7_en_1_station_battery_low
 #   sensor.jardin_vevor_weather_station_pluie_{horaire,jour,semaine,mois}
-#                                             → sensor.jardin_station_vevor_7_en_1_pluie_cumulee (compteur CUMULÉ)
+#                                             → sensor.jardin_station_vevor_7_en_1_rain_total (compteur CUMULÉ)
 #
 # Deux ruptures assumées par rapport à l'ancienne carte :
 #   1) le compteur de pluie est CUMULÉ (0,233 mm par bascule, depuis la remise à
@@ -43,15 +43,15 @@ cards:
   # calculé (docs/forecast-rules.md §8) lève l'ambiguïté : la baisse du compteur y
   # donne un débit négatif, donc « pas de pluie ». Voir l'option B plus bas.
   - type: custom:mushroom-template-card
-    entity: sensor.jardin_station_vevor_7_en_1_temperature_exterieure
+    entity: sensor.jardin_station_vevor_7_en_1_outdoor_temperature
     primary: Prévisions météorologiques
     secondary: >-
-      {% set t = states('sensor.jardin_station_vevor_7_en_1_temperature_exterieure') | float(none) %}
-      {% set rafale = states('sensor.jardin_station_vevor_7_en_1_vent_rafale') | float(0) %}
-      {% set lux = states('sensor.jardin_station_vevor_7_en_1_luminosite') | float(0) %}
+      {% set t = states('sensor.jardin_station_vevor_7_en_1_outdoor_temperature') | float(none) %}
+      {% set rafale = states('sensor.jardin_station_vevor_7_en_1_wind_gust') | float(0) %}
+      {% set lux = states('sensor.jardin_station_vevor_7_en_1_illuminance') | float(0) %}
       {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
-      {% set pluie_mm = states('sensor.jardin_station_vevor_7_en_1_pluie_cumulee') | float(none) %}
-      {% set compteur = states.sensor.jardin_station_vevor_7_en_1_pluie_cumulee %}
+      {% set pluie_mm = states('sensor.jardin_station_vevor_7_en_1_rain_total') | float(none) %}
+      {% set compteur = states.sensor.jardin_station_vevor_7_en_1_rain_total %}
       {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
       {% set pluie = pluie_mm is not none and depuis < 1200 %}
       {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
@@ -72,12 +72,12 @@ cards:
         Indéterminé — mesures insuffisantes ({{ lux | round(0) | int }} lx)
       {% endif %}
     icon: >-
-      {% set t = states('sensor.jardin_station_vevor_7_en_1_temperature_exterieure') | float(none) %}
-      {% set rafale = states('sensor.jardin_station_vevor_7_en_1_vent_rafale') | float(0) %}
-      {% set lux = states('sensor.jardin_station_vevor_7_en_1_luminosite') | float(0) %}
+      {% set t = states('sensor.jardin_station_vevor_7_en_1_outdoor_temperature') | float(none) %}
+      {% set rafale = states('sensor.jardin_station_vevor_7_en_1_wind_gust') | float(0) %}
+      {% set lux = states('sensor.jardin_station_vevor_7_en_1_illuminance') | float(0) %}
       {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
-      {% set pluie_mm = states('sensor.jardin_station_vevor_7_en_1_pluie_cumulee') | float(none) %}
-      {% set compteur = states.sensor.jardin_station_vevor_7_en_1_pluie_cumulee %}
+      {% set pluie_mm = states('sensor.jardin_station_vevor_7_en_1_rain_total') | float(none) %}
+      {% set compteur = states.sensor.jardin_station_vevor_7_en_1_rain_total %}
       {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
       {% set pluie = pluie_mm is not none and depuis < 1200 %}
       {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
@@ -92,12 +92,12 @@ cards:
       {% elif is_state('sun.sun', 'below_horizon') %}mdi:weather-night
       {% else %}mdi:weather-cloudy-alert{% endif %}
     icon_color: >-
-      {% set t = states('sensor.jardin_station_vevor_7_en_1_temperature_exterieure') | float(none) %}
-      {% set rafale = states('sensor.jardin_station_vevor_7_en_1_vent_rafale') | float(0) %}
-      {% set lux = states('sensor.jardin_station_vevor_7_en_1_luminosite') | float(0) %}
+      {% set t = states('sensor.jardin_station_vevor_7_en_1_outdoor_temperature') | float(none) %}
+      {% set rafale = states('sensor.jardin_station_vevor_7_en_1_wind_gust') | float(0) %}
+      {% set lux = states('sensor.jardin_station_vevor_7_en_1_illuminance') | float(0) %}
       {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
-      {% set pluie_mm = states('sensor.jardin_station_vevor_7_en_1_pluie_cumulee') | float(none) %}
-      {% set compteur = states.sensor.jardin_station_vevor_7_en_1_pluie_cumulee %}
+      {% set pluie_mm = states('sensor.jardin_station_vevor_7_en_1_rain_total') | float(none) %}
+      {% set compteur = states.sensor.jardin_station_vevor_7_en_1_rain_total %}
       {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
       {% set pluie = pluie_mm is not none and depuis < 1200 %}
       {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
@@ -112,7 +112,7 @@ cards:
       {% elif is_state('sun.sun', 'below_horizon') %}indigo
       {% else %}grey{% endif %}
     badge_icon: >-
-      {% if is_state('binary_sensor.jardin_station_vevor_7_en_1_batterie_station_faible', 'on') %}
+      {% if is_state('binary_sensor.jardin_station_vevor_7_en_1_station_battery_low', 'on') %}
         mdi:battery-alert
       {% endif %}
     badge_color: red
@@ -123,32 +123,32 @@ cards:
     square: false
     cards:
       - type: custom:mushroom-template-card
-        primary: '{{ states(''sensor.jardin_station_vevor_7_en_1_temperature_exterieure'', 1) }} °C'
-        secondary: 'Humidité : {{ states(''sensor.jardin_station_vevor_7_en_1_humidite_exterieure'') }} %'
+        primary: '{{ states(''sensor.jardin_station_vevor_7_en_1_outdoor_temperature'', 1) }} °C'
+        secondary: 'Humidité : {{ states(''sensor.jardin_station_vevor_7_en_1_outdoor_humidity'') }} %'
         icon: mdi:thermometer
         icon_color: >-
-          {% set temp = states('sensor.jardin_station_vevor_7_en_1_temperature_exterieure') | float(0) %}
+          {% set temp = states('sensor.jardin_station_vevor_7_en_1_outdoor_temperature') | float(0) %}
           {% if temp < 0 %}indigo{% elif temp < 15 %}blue{% elif temp < 25 %}green{% elif temp < 32 %}orange{% else %}red{% endif %}
-        entity: sensor.jardin_station_vevor_7_en_1_temperature_exterieure
+        entity: sensor.jardin_station_vevor_7_en_1_outdoor_temperature
       - type: custom:mushroom-template-card
         primary: >-
-          {{ (states('sensor.jardin_station_vevor_7_en_1_luminosite') | float(0) / 1000) | round(2) }} klx
+          {{ (states('sensor.jardin_station_vevor_7_en_1_illuminance') | float(0) / 1000) | round(2) }} klx
         secondary: >-
-          Indice UV : {{ states('sensor.jardin_station_vevor_7_en_1_index_uv') | float(0) | round(0) | int }} (0…16)
+          Indice UV : {{ states('sensor.jardin_station_vevor_7_en_1_uv_index') | float(0) | round(0) | int }} (0…16)
         icon: mdi:white-balance-sunny
         icon_color: >-
-          {% set uv = states('sensor.jardin_station_vevor_7_en_1_index_uv') | float(0) %}
+          {% set uv = states('sensor.jardin_station_vevor_7_en_1_uv_index') | float(0) %}
           {% if uv <= 2 %}green{% elif uv <= 5 %}yellow{% elif uv <= 7 %}orange{% else %}red{% endif %}
-        entity: sensor.jardin_station_vevor_7_en_1_luminosite
+        entity: sensor.jardin_station_vevor_7_en_1_illuminance
 
   # --- 24 h de température et d'humidité ---------------------------------------
   # points_per_hour: la station émet une trame toutes les 20 s (180/h) ; 6 points/h
   # suffisent à garder la forme du signal sur 24 h sans charger la base.
   - type: custom:mini-graph-card
     entities:
-      - entity: sensor.jardin_station_vevor_7_en_1_temperature_exterieure
+      - entity: sensor.jardin_station_vevor_7_en_1_outdoor_temperature
         name: Température
-      - entity: sensor.jardin_station_vevor_7_en_1_humidite_exterieure
+      - entity: sensor.jardin_station_vevor_7_en_1_outdoor_humidity
         name: Humidité
         y_axis: secondary
     hours_to_show: 24
@@ -174,13 +174,13 @@ cards:
           title:
             value: Vent & Soleil
         indicator_sensors:
-          - sensor: sensor.jardin_station_vevor_7_en_1_vent_direction
+          - sensor: sensor.jardin_station_vevor_7_en_1_wind_direction
             state_abbreviation:
               show: false
             indicator:
               image: arrow_inward
               dynamic_style:
-                sensor: sensor.jardin_station_vevor_7_en_1_vent_vitesse_moyenne
+                sensor: sensor.jardin_station_vevor_7_en_1_wind_speed
                 bands:
                   - from_value: 0
                     color: green
@@ -201,7 +201,7 @@ cards:
                   - from_value: 0
                     show: true
         value_sensors:
-          - sensor: sensor.jardin_station_vevor_7_en_1_vent_vitesse_moyenne
+          - sensor: sensor.jardin_station_vevor_7_en_1_wind_speed
         compass:
           circle:
             background_image: /local/image/compass_home.png
@@ -219,17 +219,17 @@ cards:
       - type: vertical-stack
         cards:
           - type: custom:mushroom-entity-card
-            entity: sensor.jardin_station_vevor_7_en_1_vent_vitesse_moyenne
+            entity: sensor.jardin_station_vevor_7_en_1_wind_speed
             name: Vitesse
             icon: mdi:weather-windy
             icon_color: light-blue
           - type: custom:mushroom-entity-card
-            entity: sensor.jardin_station_vevor_7_en_1_vent_rafale
+            entity: sensor.jardin_station_vevor_7_en_1_wind_gust
             name: Rafales
             icon: mdi:weather-windy-variant
             icon_color: deep-orange
           - type: custom:mushroom-entity-card
-            entity: sensor.jardin_station_vevor_7_en_1_vent_direction
+            entity: sensor.jardin_station_vevor_7_en_1_wind_direction
             name: Direction
             icon: mdi:compass-outline
             icon_color: teal
@@ -248,15 +248,15 @@ cards:
     square: false
     cards:
       - type: custom:mushroom-template-card
-        entity: sensor.jardin_station_vevor_7_en_1_pluie_cumulee
-        primary: '{{ states(''sensor.jardin_station_vevor_7_en_1_pluie_cumulee'', 1) }} mm'
+        entity: sensor.jardin_station_vevor_7_en_1_rain_total
+        primary: '{{ states(''sensor.jardin_station_vevor_7_en_1_rain_total'', 1) }} mm'
         secondary: Cumul depuis la remise à zéro
         icon: mdi:weather-pouring
         icon_color: light-blue
       - type: custom:mushroom-template-card
-        entity: sensor.jardin_station_vevor_7_en_1_pluie_cumulee
+        entity: sensor.jardin_station_vevor_7_en_1_rain_total
         primary: >-
-          {% set c = states.sensor.jardin_station_vevor_7_en_1_pluie_cumulee %}
+          {% set c = states.sensor.jardin_station_vevor_7_en_1_rain_total %}
           {{ relative_time(c.last_changed) if c is not none and c.last_changed else 'inconnu' }}
         secondary: Dernière bascule (+0,233 mm)
         icon: mdi:water-plus-outline
@@ -268,7 +268,7 @@ cards:
     name: Cumul de pluie (7 jours)
     icon: mdi:weather-rainy
     entities:
-      - entity: sensor.jardin_station_vevor_7_en_1_pluie_cumulee
+      - entity: sensor.jardin_station_vevor_7_en_1_rain_total
         name: Cumul
         color: '#2196f3'
     hours_to_show: 168
@@ -293,16 +293,16 @@ cards:
 #
 # utility_meter:
 #   pluie_heure:
-#     source: sensor.jardin_station_vevor_7_en_1_pluie_cumulee
+#     source: sensor.jardin_station_vevor_7_en_1_rain_total
 #     cycle: hourly
 #   pluie_jour:
-#     source: sensor.jardin_station_vevor_7_en_1_pluie_cumulee
+#     source: sensor.jardin_station_vevor_7_en_1_rain_total
 #     cycle: daily
 #   pluie_semaine:
-#     source: sensor.jardin_station_vevor_7_en_1_pluie_cumulee
+#     source: sensor.jardin_station_vevor_7_en_1_rain_total
 #     cycle: weekly
 #   pluie_mois:
-#     source: sensor.jardin_station_vevor_7_en_1_pluie_cumulee
+#     source: sensor.jardin_station_vevor_7_en_1_rain_total
 #     cycle: monthly
 #
 # Puis, à la place du bloc « Pluie » ci-dessus :
@@ -369,10 +369,10 @@ cards:
 #         - name: "Vevor alerte verglas"
 #           unique_id: vevor_alerte_verglas
 #           device_class: cold
-#           state: "{{ states('sensor.jardin_station_vevor_7_en_1_temperature_exterieure') | float(99) < 1 }}"
+#           state: "{{ states('sensor.jardin_station_vevor_7_en_1_outdoor_temperature') | float(99) < 1 }}"
 
 # Option D — diagnostic de la réception (utile quand plus rien n'arrive : c'est
-# « Trames rejetées » contre « Captures RMT » qui distingue un problème de décodage
+# « Rejected frames » contre « RMT captures » qui distingue un problème de décodage
 # d'une puce muette, voir README §1.6).
 #
 #   - type: grid
@@ -380,57 +380,57 @@ cards:
 #     square: false
 #     cards:
 #       - type: custom:mushroom-entity-card
-#         entity: sensor.jardin_station_vevor_7_en_1_trames_valides
-#         name: Trames valides
+#         entity: sensor.jardin_station_vevor_7_en_1_valid_frames
+#         name: Valid frames
 #         layout: vertical
 #       - type: custom:mushroom-entity-card
-#         entity: sensor.jardin_station_vevor_7_en_1_trames_rejetees
-#         name: Trames rejetées
+#         entity: sensor.jardin_station_vevor_7_en_1_rejected_frames
+#         name: Rejected frames
 #         layout: vertical
 #       - type: custom:mushroom-entity-card
-#         entity: sensor.jardin_station_vevor_7_en_1_captures_rmt
-#         name: Captures RMT
+#         entity: sensor.jardin_station_vevor_7_en_1_rmt_captures
+#         name: RMT captures
 #         layout: vertical
 #       - type: custom:mushroom-entity-card
-#         entity: sensor.jardin_station_vevor_7_en_1_compteur_tx
-#         name: Compteur TX
+#         entity: sensor.jardin_station_vevor_7_en_1_tx_counter
+#         name: TX counter
 #         layout: vertical
 #       - type: custom:mushroom-entity-card
-#         entity: sensor.jardin_station_vevor_7_en_1_doublons_ignores
-#         name: Doublons ignorés
+#         entity: sensor.jardin_station_vevor_7_en_1_duplicates_ignored
+#         name: Duplicates ignored
 #         layout: vertical
 #       - type: custom:mushroom-entity-card
-#         entity: sensor.jardin_station_vevor_7_en_1_id_station
-#         name: ID station
+#         entity: sensor.jardin_station_vevor_7_en_1_station_id
+#         name: Station ID
 #         layout: vertical
 #       - type: custom:mushroom-entity-card
-#         entity: sensor.jardin_station_vevor_7_en_1_dernier_verdict
-#         name: Dernier verdict
+#         entity: sensor.jardin_station_vevor_7_en_1_last_verdict
+#         name: Last verdict
 #         layout: vertical
 #       - type: custom:mushroom-entity-card
-#         entity: sensor.jardin_station_vevor_7_en_1_derniere_trame_brute
-#         name: Dernière trame brute
+#         entity: sensor.jardin_station_vevor_7_en_1_last_raw_frame
+#         name: Last raw frame
 #         layout: vertical
 #       - type: custom:mushroom-entity-card
-#         entity: number.jardin_station_vevor_7_en_1_frequence_cc1101
-#         name: Fréquence CC1101
+#         entity: number.jardin_station_vevor_7_en_1_cc1101_frequency
+#         name: CC1101 frequency
 #         layout: vertical
 #
 # Les trois commandes du firmware, à portée de doigt quand la réception se tait
-# (voir README §1.6 : « Réappliquer la config radio » puis « Redémarrer la carte ») :
+# (voir README §1.6 : « Re-apply radio config » puis « Restart board ») :
 #
 #       - type: custom:mushroom-entity-card
-#         entity: button.jardin_station_vevor_7_en_1_reappliquer_la_config_radio
+#         entity: button.jardin_station_vevor_7_en_1_re_apply_radio_config
 #         name: Réappliquer la radio
 #         icon: mdi:radio-tower
 #         layout: vertical
 #       - type: custom:mushroom-entity-card
-#         entity: button.jardin_station_vevor_7_en_1_redemarrer_la_carte
+#         entity: button.jardin_station_vevor_7_en_1_restart_board
 #         name: Redémarrer
 #         icon: mdi:restart
 #         layout: vertical
 #       - type: custom:mushroom-entity-card
-#         entity: button.jardin_station_vevor_7_en_1_dump_impulsions
-#         name: Dump impulsions
+#         entity: button.jardin_station_vevor_7_en_1_dump_pulses
+#         name: Dump pulses
 #         icon: mdi:waveform
 #         layout: vertical

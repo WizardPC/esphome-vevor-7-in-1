@@ -27,7 +27,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import atomic_write_text  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
+DEV = Path(__file__).resolve().parent.parent   # dev/
+ROOT = DEV.parent                               # racine du dépôt
 
 
 def main() -> int:

@@ -39,7 +39,8 @@ try:
 except ImportError as exc:  # pragma: no cover - dépendance de l'environnement
     sys.exit(f"dépendance manquante ({exc}) — lancer avec .venv/bin/python")
 
-ROOT = Path(__file__).resolve().parent.parent
+DEV = Path(__file__).resolve().parent.parent   # dev/
+ROOT = DEV.parent                               # racine du dépôt
 CARD = DEV / "docs" / "ha-card.yaml"
 ENTITIES = DEV / "docs" / "ha-entities.txt"
 FIRMWARE = ROOT / "esphome" / "vevor-7in1.yaml"
@@ -56,7 +57,7 @@ def check(condition: bool, message: str) -> bool:
 
 
 def slugify(value: str) -> str:
-    """Translittération HA/ESPHome (« Température extérieure » → temperature_exterieure)."""
+    """Translittération HA/ESPHome (« Outdoor temperature » → outdoor_temperature)."""
     value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
 
@@ -77,10 +78,17 @@ reference = {
     for line in ENTITIES.read_text(encoding="utf-8").splitlines()
     if line.split("#")[0].strip()
 }
-probe = next((entity for entity in sorted(reference) if entity.endswith("_temperature_exterieure")), None)
+# ANCRAGE : suffixe d'identifiant qui sert à retrouver le préfixe du nom d'appareil dans le relevé.
+# Une SEULE constante, employée pour choisir la sonde ET pour la découper : les deux usages ne
+# peuvent donc plus diverger — ils l'ont fait, et la vérification prenait alors l'identifiant
+# complet pour un préfixe d'appareil. Cette valeur suit le `name:` de l'entité de température du
+# YAML : la renommer là-bas oblige à la renommer ici.
+ANCRAGE = "outdoor_temperature"
+probe = next((entity for entity in sorted(reference) if entity.endswith("_" + ANCRAGE)), None)
 if not probe:
-    sys.exit("2. docs/ha-entities.txt : impossible d'en déduire le préfixe d'appareil")
-prefix = probe.split(".", 1)[1].rsplit("_temperature_exterieure", 1)[0]
+    sys.exit(f"2. docs/ha-entities.txt : aucune entité en « _{ANCRAGE} » — impossible d'en déduire "
+             "le préfixe d'appareil (mettre ANCRAGE à jour si le nom de l'entité a changé)")
+prefix = probe.split(".", 1)[1][: -(len(ANCRAGE) + 1)]
 
 cited = sorted(set(re.findall(
     rf"\b(?:sensor|binary_sensor|text_sensor|number|button)\.{re.escape(prefix)}_[a-z0-9_]+", raw)))
@@ -207,10 +215,10 @@ header = card["cards"][0]
 TEMPLATES = {"état": header["secondary"], "icône": header["icon"], "couleur": header["icon_color"]}
 clear_40 = 133800 * math.sin(math.radians(40)) ** 1.15  # référence ciel clair à 40° (§6)
 ENTITY = {
-    "temp": f"sensor.{prefix}_temperature_exterieure",
-    "rafale": f"sensor.{prefix}_vent_rafale",
-    "lux": f"sensor.{prefix}_luminosite",
-    "pluie": f"sensor.{prefix}_pluie_cumulee",
+    "temp": f"sensor.{prefix}_outdoor_temperature",
+    "rafale": f"sensor.{prefix}_wind_gust",
+    "lux": f"sensor.{prefix}_illuminance",
+    "pluie": f"sensor.{prefix}_rain_total",
 }
 
 

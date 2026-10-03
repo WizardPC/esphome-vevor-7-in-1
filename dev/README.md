@@ -180,9 +180,10 @@ once, and that is deliberate — a table copied into two documents drifts, and t
 already drifted twice (it still described the old rain rule, and the TX counter as *+1* per frame
 instead of the measured +39). This section therefore keeps only what a newcomer does not need.
 
-* `name:` values are French in the firmware; changing them renames existing entities in an
-  already-running installation. Automations should bind to the entity `id` and the published
-  *values*, not to a display name.
+* `name:` values are **English** (they were French until 03/10/2026). Home Assistant derives the
+  entity_id from the name, so a rename creates **new entities**: the old ones become unavailable and
+  any automation or card bound to them must be updated. Automations should bind to the entity `id`
+  and the published *values*, not to a display name.
 * The station's own specifications (manual p. 26-27) are **wider** than what this firmware enforces:
   outdoor temperature −40…70 °C, humidity 1…99 %, wind 0…180 km/h, 16 directions, rain
   0…12 999 mm, UV 0…16, light 0…200 klux. The accepted ranges on the home page are the ones the
@@ -294,9 +295,9 @@ context.
   (`interval: 20s` block): on this hardware, one boot in two brings up a chip that is absent from
   the SPI bus, and a reboot is the only measured remedy. The reboot is a guard rail, not an
   instability — see pitfall 7.
-* Everything the firmware exposes is listed in §1.3; diagnose with `Trames rejetées` (a decoding
-  problem) vs `Captures RMT` (nothing reaching the chip) before touching anything.
-* `Luminosité` is in lux and can be large (up to 327 670 lx); `Index UV` has no unit and ranges
+* Everything the firmware exposes is listed in §1.3; diagnose with `Rejected frames` (a decoding
+  problem) vs `RMT captures` (nothing reaching the chip) before touching anything.
+* `Illuminance` is in lux and can be large (up to 327 670 lx); `UV index` has no unit and ranges
   0…16.
 
 ---
@@ -369,7 +370,7 @@ checked the chip's state, since one boot in two brings up a mute chip.
 | `tools/summarize_window.py` | window summary, generated from a report |
 | `tools/read_state.py` | read the board's entities over the API |
 | `tools/press_button.py` | press a firmware button (`--list-buttons`) |
-| `tools/dump_pulses.py` | fetch the raw durations of the "Dump impulsions" button |
+| `tools/dump_pulses.py` | fetch the raw durations of the "Dump pulses" button |
 | `tools/decoder_dump.py` | decode those raw durations off-board (4 periods × 2 polarities × 8 alignments) |
 | `tools/scan_freq.py`, `tools/balayer_frequence.py` | scan the frequency **without reflashing** |
 | `tools/ab_cycle.py` | alternate two frozen binaries in interleaved windows (witness / ours) |

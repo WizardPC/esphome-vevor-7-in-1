@@ -15,28 +15,28 @@
 #   2. .venv/bin/python tools/check_ha_card.py   → doit rendre 0 échec.
 
 ## Mesures
-sensor.jardin_station_vevor_7_en_1_temperature_exterieure            # Température extérieure
-sensor.jardin_station_vevor_7_en_1_humidite_exterieure              # Humidité extérieure
-sensor.jardin_station_vevor_7_en_1_luminosite                       # Luminosité (lx)
-sensor.jardin_station_vevor_7_en_1_index_uv                         # Index UV
-sensor.jardin_station_vevor_7_en_1_vent_vitesse_moyenne             # Vent vitesse moyenne
-sensor.jardin_station_vevor_7_en_1_vent_rafale                      # Vent rafale
-sensor.jardin_station_vevor_7_en_1_vent_direction                   # Vent direction (°)
-sensor.jardin_station_vevor_7_en_1_pluie_cumulee                    # Pluie cumulée (compteur)
+sensor.jardin_station_vevor_7_en_1_outdoor_temperature            # Outdoor temperature
+sensor.jardin_station_vevor_7_en_1_outdoor_humidity              # Outdoor humidity
+sensor.jardin_station_vevor_7_en_1_illuminance                       # Illuminance (lx)
+sensor.jardin_station_vevor_7_en_1_uv_index                         # UV index
+sensor.jardin_station_vevor_7_en_1_wind_speed             # Wind speed
+sensor.jardin_station_vevor_7_en_1_wind_gust                      # Wind gust
+sensor.jardin_station_vevor_7_en_1_wind_direction                   # Wind direction (°)
+sensor.jardin_station_vevor_7_en_1_rain_total                    # Rain total (counter)
 
 ## État et diagnostic
-binary_sensor.jardin_station_vevor_7_en_1_batterie_station_faible   # Batterie station faible
-sensor.jardin_station_vevor_7_en_1_id_station                       # ID station
-sensor.jardin_station_vevor_7_en_1_compteur_tx                      # Compteur TX
-sensor.jardin_station_vevor_7_en_1_trames_valides                   # Trames valides
-sensor.jardin_station_vevor_7_en_1_trames_rejetees                  # Trames rejetées
-sensor.jardin_station_vevor_7_en_1_captures_rmt                     # Captures RMT
-sensor.jardin_station_vevor_7_en_1_doublons_ignores                 # Doublons ignorés
-sensor.jardin_station_vevor_7_en_1_derniere_trame_brute             # Dernière trame brute
-sensor.jardin_station_vevor_7_en_1_dernier_verdict                  # Dernier verdict
+binary_sensor.jardin_station_vevor_7_en_1_station_battery_low   # Station battery low
+sensor.jardin_station_vevor_7_en_1_station_id                       # Station ID
+sensor.jardin_station_vevor_7_en_1_tx_counter                      # TX counter
+sensor.jardin_station_vevor_7_en_1_valid_frames                   # Valid frames
+sensor.jardin_station_vevor_7_en_1_rejected_frames                  # Rejected frames
+sensor.jardin_station_vevor_7_en_1_rmt_captures                     # RMT captures
+sensor.jardin_station_vevor_7_en_1_duplicates_ignored                 # Duplicates ignored
+sensor.jardin_station_vevor_7_en_1_last_raw_frame             # Last raw frame
+sensor.jardin_station_vevor_7_en_1_last_verdict                  # Last verdict
 
 ## Commandes
-number.jardin_station_vevor_7_en_1_frequence_cc1101                 # Fréquence CC1101
-button.jardin_station_vevor_7_en_1_dump_impulsions                  # Dump impulsions
-button.jardin_station_vevor_7_en_1_reappliquer_la_config_radio      # Réappliquer la config radio
-button.jardin_station_vevor_7_en_1_redemarrer_la_carte              # Redémarrer la carte
+number.jardin_station_vevor_7_en_1_cc1101_frequency                 # CC1101 frequency
+button.jardin_station_vevor_7_en_1_dump_pulses                  # Dump pulses
+button.jardin_station_vevor_7_en_1_re_apply_radio_config      # Re-apply radio config
+button.jardin_station_vevor_7_en_1_restart_board              # Restart board

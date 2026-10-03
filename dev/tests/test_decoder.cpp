@@ -42,7 +42,7 @@ static void expect_near(float got, float want, float tol, const std::string &lab
 
 // --- 1. Toutes les trames valides se décodent exactement comme l'encodeur l'annonce ---------
 static void test_vectors() {
-  printf("Trames valides et invalides (%d scénarios)\n", VEVOR_VECTOR_COUNT);
+  printf("Valid frames et invalides (%d scénarios)\n", VEVOR_VECTOR_COUNT);
   for (int i = 0; i < VEVOR_VECTOR_COUNT; i++) {
     const VevorVector &v = VEVOR_VECTORS[i];
     vevor::Frame f;

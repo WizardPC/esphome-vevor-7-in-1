@@ -137,14 +137,14 @@ tools (`tools/capture_logs.py`, `tools/eval_frames.py`, the A/B harness) parse i
 
 ## 10. What is kept in the YAML, and why
 
-* `button: Dump impulsions` — asks the component to log the raw pulse durations of the next capture.
+* `button: Dump pulses` — asks the component to log the raw pulse durations of the next capture.
   The API does not replay history, so without it the flow can only be analysed blindly from outside;
-* `button: Réappliquer la config radio` — runs the same `rearmer_radio` script as the watchdog, so
+* `button: Re-apply radio config` — runs the same `rearmer_radio` script as the watchdog, so
   button and watchdog can never drift apart;
-* `button: Redémarrer la carte` — a reboot is the only remedy measured against a mute chip, and
+* `button: Restart board` — a reboot is the only remedy measured against a mute chip, and
   without this button it takes a reflash, i.e. a new state lottery;
-* `number: Fréquence CC1101` — lets a frequency sweep be driven over the API in 25 s steps instead of
+* `number: CC1101 frequency` — lets a frequency sweep be driven over the API in 25 s steps instead of
   a compile-and-flash per point. `restore_value: false` on purpose: a restored value used to override
   the compiled frequency at boot and made two frequency tests ambiguous;
-* the diagnostic sensors (`Trames valides`, `Trames rejetées`, `Captures RMT`, `Doublons ignorés`,
-  `ID station`, `Compteur TX`, `Dernière trame brute`, `Dernier verdict`).
+* the diagnostic sensors (`Valid frames`, `Rejected frames`, `RMT captures`, `Duplicates ignored`,
+  `Station ID`, `TX counter`, `Last raw frame`, `Last verdict`).

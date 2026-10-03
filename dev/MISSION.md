@@ -40,7 +40,7 @@ résultat** (pas de reflash aveugle) :
 | Observation après flash + capture | Décision |
 |---|---|
 | Aucune trame valide au bout de ~5 min | Corriger la radio (fréquence, déviation, bande passante, syncword) puis **reflasher** |
-| Trames valides mais irrégulières, trous > 25 s sur 10 min | Ajuster (RSSI/antenne/déviation) puis **reflasher** |
+| Valid frames mais irrégulières, trous > 25 s sur 10 min | Ajuster (RSSI/antenne/déviation) puis **reflasher** |
 | Cadence propre ~20 s | **Laisser tourner 30 min** et vérifier la cohérence des données sur toute la fenêtre |
 | Cadence propre + cohérence OK sur 30 min | Écrire `state/DONE.md`, prévenir l'utilisateur, arrêter la boucle |
 
@@ -68,7 +68,7 @@ Une itération = un cycle. Ne pas reflasher sans avoir lu les logs du flash pré
   11 111 baud) — exactement ceux que nous avons fini par adopter : nos anciennes valeurs
   (868,30 MHz / 37 kHz / 200 kHz) ne décodaient rien. Ils ont servi de guide, ce ne sont plus des
   hypothèses en attente de test. Il documente aussi des pièges de protocole à intégrer à l'auto-évaluation
-  (pluie qui peut baisser avec un checksum **valide**, trames arrivant coupées, ID station qui
+  (pluie qui peut baisser avec un checksum **valide**, trames arrivant coupées, Station ID qui
   change à chaque mise sous tension, rejet `vent > 0` avec `rafale == 0`, cohérence lux/UV).
 - **Ne jamais se fier à la sortie console d'un script passé dans un pipe** : `tail` et `tee`
   masquent les codes retour. Lire `build/last_status.txt` (BUILD OK/FAIL) et
