@@ -130,11 +130,18 @@ Ordered by expected value, all measurable:
    pinning the behaviour on synthetic bursts before going anywhere near the board. Treat it as the
    next real piece of work, not as a quick win.
 
-2. **Reduce the jitter at the source (physical layer).** The 100 nF ceramic at the module's VCC is
-   still not fitted; decoupling affects exactly the fast edges that become our pulse widths. A 40 %
-   spread on 1-bit pulses is *not* something a decoder should have to absorb, and the console
-   decodes this station out of the box with a hardware demodulator — which is the owner's argument
-   for looking here first, and it is a good one.
+2. **Reduce the jitter at the source (physical layer).** A **10 µF bulk is already fitted** at the
+   module's VCC/GND (03/10). TI's reference application also calls for a **100 nF** at the pin — a
+   different job, not a bigger version of the same one: the 10 µF supplies the slow current demand
+   but its ESR/ESL make its impedance rise above roughly 1 MHz, so it decouples nothing at the edge
+   timescales; the small ceramic acts on the fast current spikes, and works because it is soldered
+   as short as possible across the module's pins.
+
+   **Its absence has never been measured as a cause on this board.** It was carried from the project
+   notes ("100 nF non monté" — true, but that is not a measurement). Do not present it as the lever
+   it was assumed to be. What the chip itself reports — `CHIP_RDYn` high, "supply or crystal not
+   ready" — points at supply/quartz **startup**, where the actionable lever is a supply cycle, not
+   decoupling.
 3. **Question the demodulator's settings as a measured experiment**, one variable at a time: the
    filter bandwidth (100 kHz for 70 kHz deviation is at the Carson limit), the AGC target, and the
    RMT's `filter` threshold — the last one being the reason 45-50 µs glitches can still enter the
