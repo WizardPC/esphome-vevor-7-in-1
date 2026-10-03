@@ -1,3 +1,39 @@
+### 03/10 (suite 4) — LA RÉCEPTION EST REVENUE
+
+Après les trois correctifs du jour, la carte décode à nouveau de vraies trames. Preuve, dans la
+fenêtre même où le dump des durées a été pris :
+
+```
+[I][v7in1:242]: V7IN1 OK {"id":33995,"temp_c":15.6,"humidity":80,"wind_dir_deg":289,
+                          "rain_mm":59.2,"uv_index":1,"lux":12510,...}
+captures=50 (+3), trames=2, rejets=45
+```
+
+Le décodage hors ligne de la même rafale donne exactement les mêmes valeurs (température 15,6 °C,
+humidité 80 %, direction 289°), et une réplique fidèle du décodeur C++ retrouve la trame aux périodes
+90, 88 et 89 µs. La chaîne radio → RMT → bits → trame → entité est donc de nouveau complète.
+
+**Les trois correctifs qui l'ont permise, dans l'ordre des mesures :**
+1. l'interruption GDO0 attachée avant tout retour anticipé (le chemin de secours la sautait) ;
+2. la vérification des écritures qui ne contrôle plus les registres de calibration du synthétiseur —
+   c'est ce qui a rendu le démodulateur propre (captures de 171 impulsions au lieu d'un silence ou
+   d'un continuum de bruit) ;
+3. les deux passages du CC1101 en IDLE rétablis (avant arrêt propre et pendant l'OTA).
+
+**Ce qui reste à mesurer** : le rendement de cette fenêtre est faible (2 trames publiées pour ~13
+émissions attendues) et le compteur de rejets est élevé (~50 candidats écartés — des flux de bits qui
+passent en-tête + somme + compteur mais que la porte de plausibilité physique refuse, exactement le
+faux positif que `vevor_protocol.h` documente). La référence du 01/10 était à 98,8 % : l'état de la
+puce pèse encore. Une mesure longue à état contrôlé est à refaire, sans flash au milieu.
+
+**Deux erreurs d'analyse à ne pas répéter** (elles ont chacune coûté un aller-retour) : le décompte
+des octets d'une trame décodée hors ligne a été fait de tête et faux, ce qui a fait déclarer « faux
+positif » une trame parfaitement saine ; et le journal de `tools/ab_cycle.py` est en AJOUT, donc un
+dépouillement qui ne filtre pas par horodatage relit les runs précédents. Lire le journal d'un outil
+avant d'en dépouiller le contenu.
+
+---
+
 ### 03/10 (suite 3) — YAML de production allégé, explications déplacées dans la documentation
 
 Demande du propriétaire : le fichier destiné à ESPHome Builder n'a pas besoin d'autant de détail, et
