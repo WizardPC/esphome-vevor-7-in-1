@@ -1,0 +1,40 @@
+{
+  "fenetre": {
+    "fichier": "logs/apres_periode.log",
+    "duree_s": 880,
+    "binaire_flashe": "ec0a270c (958688 octets) — etape 1 : periode mesuree + reparations bornees",
+    "firmware_identifie_par": "lignes francaises du composant, champ reparées=N (nouveau)"
+  },
+  "reception": {
+    "trames_publiees": 45,
+    "compteurs_tx_distincts": 45,
+    "emissions_attendues": 44.0,
+    "intervalles": {
+      "20": 44
+    },
+    "taux": 102.3
+  },
+  "decodeur": {
+    "trames_reparees_total": 1,
+    "reparations_refusees_total": 0,
+    "candidats_rejetes_total": 1,
+    "commentaire": "44 des 45 trames decodees DIRECTEMENT : c'est l'estimateur de periode mesuree qui fait ce travail, pas les reparations."
+  },
+  "etat_puce": {
+    "lignes_chip_id_0xFFFF": 0,
+    "commentaire": "puce presente sur le bus SPI pendant toute la fenetre."
+  },
+  "validation_independante": {
+    "methode": "ecart du compteur TX contre le temps ecoule (dt x 1,95 tick/s), regle mesuree et documentee dans la competence du projet",
+    "ecart_relatif_median": 1.0,
+    "trames_hors_tolerance": 0,
+    "intervalles_tests": 44,
+    "verdict": "OK"
+  },
+  "verificateur_du_projet": {
+    "outil": "tools/eval_frames.py",
+    "verdict": "FAIL",
+    "cause": "aucune ligne V7IN1 RAW dans le journal : elle est en DEBUG, donc retiree du binaire en production (niveau INFO). Ce n'est PAS un echec de reception (l'outil le dit lui-meme : '45 trames publiees mais aucune ligne RAW exploitable').",
+    "correctif": "niveau de journal des tags rendu substituable : esphome -s niveau_v7in1 DEBUG compile esphome/vevor-7in1.yaml"
+  }
+}
