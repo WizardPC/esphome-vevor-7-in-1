@@ -63,6 +63,24 @@ inline bool checksum_ok(const uint8_t *b) {
 
 inline bool counter_ok(const uint8_t *b) { return b[20] == (uint8_t)(b[18] + 1); }
 
+// GARDE-FOU DE CONTINUITÉ, utilisé par le composant pour les trames OBTENUES PAR RÉPARATION : une
+// trame réparée n'est publiée que si elle est cohérente avec la dernière trame acceptée — même
+// station, et des mesures qui ne sautent pas (la station est stable d'une rafale à l'autre, 20 s
+// d'écart). Mesure du 03/10 sur 200 charges utiles aléatoires (synchronisation et en-tête justes) :
+// AUCUNE trame publiée, ce qui est cohérent avec le calcul (somme 1/256 × compteur 1/256 × porte de
+// plausibilité, sur ~336 positions d'insertion). C'est donc une PRÉCAUTION à coût nul, pas une
+// nécessité mesurée — elle ferme le risque résiduel sans rien changer à ce qui passe aujourd'hui.
+inline bool continuite_ok(const Frame &f, const Frame &precedente) {
+  if (f.id != precedente.id) {
+    return false;
+  }
+  const float dt = f.temp_c > precedente.temp_c ? f.temp_c - precedente.temp_c
+                                                : precedente.temp_c - f.temp_c;
+  const int dh = f.humidity > precedente.humidity ? f.humidity - precedente.humidity
+                                                  : precedente.humidity - f.humidity;
+  return dt <= 1.0f && dh <= 5;
+}
+
 // Limite physique de la porte de plausibilité (km/h) et marge de comparaison. L'encodeur écrit
 // 1500 ticks pour 180 km/h ; or 1500 / 8,333f = 180,007 — STRICTEMENT au-dessus de 180,0f. Sans
 // marge, une rafale LÉGITIME à 180 km/h était donc refusée (faux rejet mesuré par la revue
@@ -248,15 +266,150 @@ inline size_t timings_to_bits(const int32_t *timings, size_t count, int32_t peri
   return n;
 }
 
+// Même conversion, mais la période est exprimée en DIXIÈMES de microseconde : la période mesurée
+// sur une rafale vaut 88,5 µs, qu'un entier ne peut pas représenter. La règle d'arrondi est
+// rigoureusement la même (au multiple le plus proche), simplement à cette échelle.
+inline size_t timings_to_bits_fin(const int32_t *timings, size_t count, int32_t period_x10,
+                                  bool invert, uint8_t *bits, size_t max_bits) {
+  const int32_t half = period_x10 / 2;
+  size_t n = 0;
+  for (size_t i = 0; i < count; i++) {
+    const int32_t v = timings[i];
+    const uint8_t level = (v > 0) ? 1 : 0;
+    const int32_t duration = (v > 0) ? v : -v;
+    int32_t run = (duration * 10 + half) / period_x10;
+    if (run < 1) {
+      run = 1;
+    }
+    if (run > MAX_RUN_BITS) {
+      continue;
+    }
+    for (int32_t k = 0; k < run; k++) {
+      if (n >= max_bits) {
+        return n;
+      }
+      bits[n++] = invert ? (uint8_t)(1 - level) : level;
+    }
+  }
+  return n;
+}
+
+// ---------------------------------------------------------------------------------------
+// PÉRIODE BIT MESURÉE SUR LA RAFALE (dixièmes de µs ; 0 = estimation refusée)
+// ---------------------------------------------------------------------------------------
+// Mesuré le 03/10 : cette station émet à 88,5-88,9 µs (le projet de référence la mesure à 88,3 µs).
+// La constante 90 µs héritée de rtl_433 était donc FAUSSE de 2 %, et une période fixe ne peut pas
+// convenir à la carte d'un utilisateur inconnu : le rythme dépend de l'émetteur, du quartz et du
+// démodulateur. On le MESURE donc sur chaque rafale reçue, ce qui supprime toute constante de
+// station — contrainte explicite du projet : un nouvel utilisateur ne fait que flasher.
+//
+// Méthode (validée hors ligne sur six rafales réelles : 88,5 à 88,9 µs) :
+//   1. estimation de départ : médiane des durées de la fenêtre 45-115 µs. Cette fenêtre est
+//      PROTOCOLAIRE (un bit vaut ~90 µs d'après la spec), pas propre à une station ; l'élargir
+//      au-delà ferait entrer les fronts parasites de 45-50 µs et les impulsions de deux bits ;
+//   2. consolidation : moyenne de d / round(d / T) sur les durées >= 0,55·T, trois fois. Les
+//      durées sous 0,55·T sont des parasites (un bit ne peut pas être plus court que la moitié
+//      d'une période) et sont écartées au lieu de fausser la moyenne ; la division par l'arrondi
+//      ramène les impulsions de 2, 3… bits à l'échelle d'un bit.
+// Aucune allocation : l'histogramme est statique (appelé depuis une seule tâche, la boucle
+// principale, et le test hôte est mono-thread).
+static constexpr int32_t PERIODE_MIN_X10 = 500;    // 50 µs : plus court n'est pas un bit plausible
+static constexpr int32_t PERIODE_MAX_X10 = 1500;   // 150 µs : plus long non plus
+static constexpr int32_t FENETRE_BAS_US = 45;      // borne basse de la fenêtre protocolaire
+static constexpr int32_t FENETRE_HAUT_US = 115;    // borne haute
+static constexpr int HIST_MAX_US = 400;
+
+inline int32_t estimer_periode_x10(const int32_t *timings, size_t count) {
+  static uint16_t histo[HIST_MAX_US];
+  for (int i = 0; i < HIST_MAX_US; i++) {
+    histo[i] = 0;
+  }
+  size_t utiles = 0;
+  for (size_t i = 0; i < count; i++) {
+    int32_t d = timings[i] > 0 ? timings[i] : -timings[i];
+    if (d > 0 && d < HIST_MAX_US) {
+      histo[d]++;
+      utiles++;
+    }
+  }
+  if (utiles < 20) {
+    return 0;
+  }
+  // Médiane de la fenêtre protocolaire (repli : médiane de tout, si la fenêtre est vide).
+  int64_t base = 0;
+  for (int fenetre = 0; fenetre < 2 && base == 0; fenetre++) {
+    const int bas = fenetre == 0 ? FENETRE_BAS_US : 1;
+    const int haut = fenetre == 0 ? FENETRE_HAUT_US : HIST_MAX_US - 1;
+    size_t total = 0;
+    for (int b = bas; b <= haut; b++) {
+      total += histo[b];
+    }
+    if (total < 10) {
+      continue;
+    }
+    const size_t milieu = total / 2;
+    size_t cumul = 0;
+    for (int b = bas; b <= haut; b++) {
+      cumul += histo[b];
+      if (cumul > milieu) {
+        base = b * 10;
+        break;
+      }
+    }
+  }
+  if (base <= 0) {
+    return 0;
+  }
+  // Consolidation : ramène chaque impulsion à l'échelle d'un bit et moyenne.
+  int32_t T = (int32_t) base;
+  for (int passe = 0; passe < 3; passe++) {
+    const int32_t seuil = (T * 55) / 100;
+    int64_t somme = 0;
+    size_t n = 0;
+    for (size_t i = 0; i < count; i++) {
+      const int32_t d = timings[i] > 0 ? timings[i] : -timings[i];
+      if (d < seuil) {
+        continue;
+      }
+      int32_t k = (d * 10 + T / 2) / T;   // nombre de bits de cette impulsion
+      if (k < 1) {
+        k = 1;
+      }
+      somme += (int64_t)(d * 10) / k;     // durée ramenée à un bit
+      n++;
+    }
+    if (n < 5) {
+      return 0;
+    }
+    const int32_t nouveau = (int32_t)(somme / (int64_t) n);
+    if (nouveau == T) {
+      break;
+    }
+    T = nouveau;
+  }
+  if (T < PERIODE_MIN_X10 || T > PERIODE_MAX_X10) {
+    return 0;   // estimation invraisemblable : on préfère la grille de repli
+  }
+  return T;
+}
+
 // Cherche le PROCHAIN mot de synchronisation à partir de *from_bit, puis reconstruit les
 // 21 octets qui le suivent. *from_bit est avancé après le candidat trouvé pour que l'appelant
 // puisse les énumérer tous : c'est decode() qui tranche, un alignement faux ne doit pas masquer
 // le bon.
 inline bool find_frame_candidate(const uint8_t *bits, size_t bit_count, uint8_t *out,
-                                 size_t *from_bit) {
+                                 size_t *from_bit, size_t *payload_bit = nullptr,
+                                 size_t marge = 0) {
   const size_t sync_bits = SYNC_BYTES * 8;
   const size_t frame_bits = FRAME_BYTES * 8;
-  for (size_t start = *from_bit; start + sync_bits + frame_bits <= bit_count; start++) {
+  // `marge` = 1 autorise une charge utile à UN BIT PRÈS : c'est indispensable, car une impulsion
+  // raccourcie d'un bit (le mécanisme mesuré le 03/10) allonge le flux d'un bit en moins, et sans
+  // cette marge la trame ne « rentre » plus dans la fenêtre — plus aucun candidat n'est produit, et
+  // la réparation par insertion n'est jamais atteinte. Les bits manquants au-delà du flux comptent
+  // pour 0 (déterministe) ; c'est la réparation qui rétablit la bonne valeur.
+  for (size_t start = *from_bit; start + sync_bits + frame_bits >= marge &&
+                               start + sync_bits + frame_bits - marge <= bit_count;
+       start++) {
     bool match = true;
     for (size_t i = 0; i < sync_bits; i++) {
       const uint8_t expected = (uint8_t)((SYNC_WORD[i / 8] >> (7 - (i % 8))) & 0x01);
@@ -269,10 +422,14 @@ inline bool find_frame_candidate(const uint8_t *bits, size_t bit_count, uint8_t 
       continue;
     }
     const size_t payload = start + sync_bits;
+    if (payload_bit != nullptr) {
+      *payload_bit = payload;
+    }
     for (size_t b = 0; b < FRAME_BYTES; b++) {
       uint8_t byte = 0;
       for (size_t k = 0; k < 8; k++) {
-        byte = (uint8_t)((byte << 1) | bits[payload + b * 8 + k]);
+        const size_t i = payload + b * 8 + k;
+        byte = (uint8_t)((byte << 1) | (i < bit_count ? bits[i] : 0));
       }
       out[b] = byte;
     }
@@ -282,44 +439,75 @@ inline bool find_frame_candidate(const uint8_t *bits, size_t bit_count, uint8_t 
   return false;
 }
 
-// Chaîne complète : essaie plusieurs périodes bit ET les deux polarités, puis renvoie la
-// première trame que decode() accepte (en-tête, checksum et compteur vérifiés). `raw_out`
-// reçoit les 21 octets validés ; `period_used` / `inverted_used` documentent le réglage gagnant
-// (indispensable pour savoir quoi resserrer ensuite).
-inline bool decode_timings(const int32_t *timings, size_t count, const int32_t *periods,
-                           size_t period_count, uint8_t *bits, size_t max_bits, uint8_t *raw_out,
-                           int32_t *period_used, bool *inverted_used,
-                           size_t *rejected_out = nullptr) {
-  if (count < MIN_TIMINGS) {
-    return false;
+// RÉPARATION PAR INSERTION D'UN BIT (mécanisme mesuré le 03/10).
+// Sur les rafales réelles du dump, un bit MANQUE dans la charge : une impulsion que l'arrondi a
+// comptée pour un bit alors qu'elle en valait deux — tout ce qui suit est décalé d'un bit, et les
+// valeurs doublent (02 22 devient 04 44). Le prouver : insérer un bit à la bonne position et
+// revérifier répare deux des six rafales du dump, alors qu'en SUPPRIMER un n'en réparait aucune.
+// Borné deux fois : une seule insertion, et l'en-tête + la somme + le compteur + la porte de
+// plausibilité doivent passer ensuite. C'est ce qui interdit de « réparer » une trame au hasard.
+inline bool reparer_par_insertion(const uint8_t *bits, size_t payload_bit, uint8_t *candidate) {
+  const size_t frame_bits = FRAME_BYTES * 8;
+  for (size_t q = 0; q <= frame_bits; q++) {
+    for (uint8_t insere = 0; insere < 2; insere++) {
+      uint8_t essai[FRAME_BYTES];
+      for (size_t b = 0; b < FRAME_BYTES; b++) {
+        uint8_t octet = 0;
+        for (size_t k = 0; k < 8; k++) {
+          const size_t i = b * 8 + k;
+          const uint8_t bit = (i < q) ? bits[payload_bit + i]
+                                       : ((i == q) ? insere : bits[payload_bit + i - 1]);
+          octet = (uint8_t)((octet << 1) | bit);
+        }
+        essai[b] = octet;
+      }
+      Frame f;
+      const char *raison = "";
+      if (decode(essai, f, &raison)) {
+        for (size_t i = 0; i < FRAME_BYTES; i++) {
+          candidate[i] = essai[i];
+        }
+        return true;
+      }
+    }
   }
+  return false;
+}
+
+// Essaie UNE période (en dixièmes de µs) et les deux polarités, avec les deux réparations bornées.
+// `repaired_out` distingue une trame sortie après réparation : l'appelant peut la soumettre à un
+// contrôle supplémentaire (voir vevor_7in1.cpp, garde-fou sur le compteur d'émission).
+inline bool essayer_periode(const int32_t *timings, size_t count, int32_t period_x10,
+                            uint8_t *bits, size_t max_bits, uint8_t *raw_out,
+                            bool *inverted_used, size_t *rejected_out, bool *repaired_out) {
   const size_t needed = SYNC_BYTES * 8 + FRAME_BYTES * 8;
-  for (size_t p = 0; p < period_count; p++) {
-    for (int polarity = 0; polarity < 2; polarity++) {
-      const bool invert = (polarity == 1);
-      const size_t n = timings_to_bits(timings, count, periods[p], invert, bits, max_bits);
-      // Conversion SATURÉE (le tampon est plein) : le flux est tronqué, donc plus
-      // interprétable. On écarte la tentative au lieu de décoder une suite tronquée qui
-      // pourrait passer les contrôles par hasard.
-      if (n >= max_bits) {
-        continue;
-      }
-      if (n < needed) {
-        continue;
-      }
+  for (int polarity = 0; polarity < 2; polarity++) {
+    const bool invert = (polarity == 1);
+    const size_t n = timings_to_bits_fin(timings, count, period_x10, invert, bits, max_bits);
+    // Conversion SATURÉE (le tampon est plein) : le flux est tronqué, donc plus interprétable.
+    // On accepte UN BIT DE MOINS que la trame complète : c'est exactement le cas d'une impulsion
+    // raccourcie d'un bit, que la réparation par insertion sait ensuite rétablir.
+    if (n >= max_bits || n + 1 < needed) {
+      continue;
+    }
+    // Deux passes : d'abord la charge utile complète ; si aucune trame n'en sort, on refait la
+    // recherche en tolérant un bit manquant. Les rejets ne sont comptés que sur la première passe,
+    // sinon le même candidat serait compté deux fois.
+    for (size_t marge = 0; marge < 2; marge++) {
       size_t from = 0;
+      size_t payload_bit = 0;
       uint8_t candidate[FRAME_BYTES];
       Frame frame;
       const char *reason = "";
-      while (find_frame_candidate(bits, n, candidate, &from)) {
+      while (find_frame_candidate(bits, n, candidate, &from, &payload_bit, marge)) {
         bool ok = decode(candidate, frame, &reason);
+        bool repaired = false;
         if (!ok) {
           // TOLÉRANCE D'UN BIT SUR L'OCTET D'EN-TÊTE (mesuré le 03/10) : sur les rafales du dump,
           // l'octet 0 arrive régulièrement avec UN seul bit faux (0xAB, 0xAE ou 0xEA au lieu de
           // 0xAA) tandis que les 16 octets suivants sont exacts — le front qui porte ce bit est mal
           // daté, pas la trame. Corriger ce bit constant est sûr : la somme, le compteur et la porte
-          // de plausibilité doivent ensuite passer tous les trois. Un seul bit est corrigé, jamais
-          // plus, et le candidat corrigé remplace l'original pour les appelants.
+          // de plausibilité doivent ensuite passer tous les trois. Un seul bit, jamais plus.
           uint8_t corrige[FRAME_BYTES];
           for (uint8_t k = 0; k < 8 && !ok; k++) {
             for (size_t i = 0; i < FRAME_BYTES; i++) {
@@ -331,6 +519,19 @@ inline bool decode_timings(const int32_t *timings, size_t count, const int32_t *
                 candidate[i] = corrige[i];
               }
               ok = true;
+              repaired = true;
+            }
+          }
+        }
+        if (!ok) {
+          // Puis la réparation par insertion d'un bit (voir reparer_par_insertion). Coût mesuré :
+          // 168 positions × 21 octets ≈ 28 000 opérations, soit moins d'une milliseconde à
+          // 160 MHz, et seulement pour une capture où la synchronisation a été trouvée sans trame
+          // valide.
+          if (reparer_par_insertion(bits, payload_bit, candidate)) {
+            if (decode(candidate, frame, &reason)) {
+              ok = true;
+              repaired = true;
             }
           }
         }
@@ -338,20 +539,65 @@ inline bool decode_timings(const int32_t *timings, size_t count, const int32_t *
           for (size_t i = 0; i < FRAME_BYTES; i++) {
             raw_out[i] = candidate[i];
           }
-          if (period_used != nullptr) {
-            *period_used = periods[p];
-          }
           if (inverted_used != nullptr) {
             *inverted_used = invert;
           }
+          if (repaired_out != nullptr) {
+            *repaired_out = repaired;
+          }
           return true;
         }
-        // Mot de synchronisation trouvé mais trame REFUSÉE (en-tête, checksum, compteur) :
-        // c'est le vrai compteur de bruit du décodage, distinct de « rien n'arrive à la puce ».
-        if (rejected_out != nullptr) {
+        // Mot de synchronisation trouvé mais trame REFUSÉE : c'est le vrai compteur de bruit du
+        // décodage, distinct de « rien n'arrive à la puce ».
+        if (rejected_out != nullptr && marge == 0) {
           (*rejected_out)++;
         }
       }
+    }
+  }
+  return false;
+}
+
+// Chaîne complète : mesure d'abord la période bit SUR LA RAFALE (aucune constante de station),
+// puis, si l'estimation échoue ou se trompe, essaie la grille fixe de repli — chaque candidat avec
+// les deux polarités et les réparations bornées. `period_used` est en DIXIÈMES de µs.
+inline bool decode_timings(const int32_t *timings, size_t count, const int32_t *periods,
+                           size_t period_count, uint8_t *bits, size_t max_bits, uint8_t *raw_out,
+                           int32_t *period_used, bool *inverted_used,
+                           size_t *rejected_out = nullptr, bool *repaired_out = nullptr) {
+  if (count < MIN_TIMINGS) {
+    return false;
+  }
+  if (repaired_out != nullptr) {
+    *repaired_out = false;
+  }
+  bool repaired = false;
+
+  // 1. PÉRIODE MESURÉE (chemin normal, et seul chemin valable pour une carte inconnue).
+  const int32_t mesuree = estimer_periode_x10(timings, count);
+  if (mesuree != 0 &&
+      essayer_periode(timings, count, mesuree, bits, max_bits, raw_out, inverted_used, rejected_out,
+                      &repaired)) {
+    if (period_used != nullptr) {
+      *period_used = mesuree;
+    }
+    if (repaired_out != nullptr) {
+      *repaired_out = repaired;
+    }
+    return true;
+  }
+
+  // 2. REPLI : la grille fixe, pour le cas où l'estimation est refusée (bruit) ou tombe à côté.
+  for (size_t p = 0; p < period_count; p++) {
+    if (essayer_periode(timings, count, periods[p] * 10, bits, max_bits, raw_out, inverted_used,
+                        rejected_out, &repaired)) {
+      if (period_used != nullptr) {
+        *period_used = periods[p] * 10;
+      }
+      if (repaired_out != nullptr) {
+        *repaired_out = repaired;
+      }
+      return true;
     }
   }
   return false;

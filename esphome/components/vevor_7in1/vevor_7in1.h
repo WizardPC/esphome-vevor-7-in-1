@@ -70,27 +70,36 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
     }
     this->receiver_->register_dumper(this);
     this->bits_.resize(vevor::MAX_BITS);
-    ESP_LOGI(TAG, "enregistré comme dumper PRIMAIRE (période bit nominale %u us, %u périodes "
-                  "essayées, deux polarités testées à chaque capture)",
-             (unsigned) this->bit_period_us_, (unsigned) vevor::PERIOD_CANDIDATE_COUNT);
+    // Depuis le 03/10 la période bit n'est plus supposée : elle est MESURÉE sur chaque rafale
+    // (estimer_periode_x10), ce qui rend le décodeur indépendant de la station et de la carte. La
+    // grille de PERIOD_CANDIDATES ne sert plus que de repli si l'estimation est refusée.
+    ESP_LOGI(TAG,
+             "enregistré comme dumper PRIMAIRE (période bit MESURÉE sur la rafale ; repli : %u "
+             "valeurs de %d à %d us ; deux polarités testées à chaque capture)",
+             (unsigned) vevor::PERIOD_CANDIDATE_COUNT,
+             (int) vevor::PERIOD_CANDIDATES[vevor::PERIOD_CANDIDATE_COUNT - 1],
+             (int) vevor::PERIOD_CANDIDATES[0]);
   }
 
   void loop() override;
 
   void dump_config() override {
     ESP_LOGCONFIG(TAG, "Extracteur de trames Vevor 7-en-1 :");
-    ESP_LOGCONFIG(TAG, "  période bit nominale : %u us", (unsigned) this->bit_period_us_);
-    ESP_LOGCONFIG(TAG, "  périodes essayées : %u (de %d à %d us)",
+    ESP_LOGCONFIG(TAG, "  période bit : MESURÉE sur chaque rafale (repli : %u valeurs de %d à %d us)",
                   (unsigned) vevor::PERIOD_CANDIDATE_COUNT,
                   (int) vevor::PERIOD_CANDIDATES[vevor::PERIOD_CANDIDATE_COUNT - 1],
                   (int) vevor::PERIOD_CANDIDATES[0]);
     ESP_LOGCONFIG(TAG, "  polarité : les deux essayées à chaque capture");
+    ESP_LOGCONFIG(TAG, "  réparations bornées : 1 bit d'en-tête, puis 1 bit inséré dans la charge "
+                       "(validées par somme + compteur + porte de plausibilité)");
     ESP_LOGCONFIG(TAG, "  recollage : uniquement si la capture est un MORCEAU de rafale "
                        "(< %d impulsions)", (int) vevor::MAX_FRAGMENT_TIMINGS);
     ESP_LOGCONFIG(TAG, "  captures reçues : %u, trames extraites : %u, candidats rejetés : %u, "
-                       "doublons ignorés : %u",
+                       "doublons ignorés : %u, trames réparées : %u (dont %u refusées par le "
+                       "garde-fou de continuité)",
                   (unsigned) this->captures_, (unsigned) this->frames_,
-                  (unsigned) this->rejected_, (unsigned) this->duplicates_);
+                  (unsigned) this->rejected_, (unsigned) this->duplicates_,
+                  (unsigned) this->repairs_, (unsigned) this->repairs_rejetees_);
   }
 
   // PRIMAIRE volontairement : dans `remote_base`, les dumpers secondaires ne sont appelés que
@@ -124,6 +133,10 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // checksum, compteur, en-tête. C'est le vrai compteur de bruit du décodage — distinct de
   // « aucune capture », qui veut dire que rien n'arrive à la puce.
   uint32_t get_rejected() const { return this->rejected_; }
+  // Trames sorties après une RÉPARATION bornée (voir vevor_protocol.h). Compteur séparé : une
+  // trame réparée ne vaut pas une trame décodée directement, et ce chiffre doit être visible.
+  uint32_t get_repairs() const { return this->repairs_; }
+  uint32_t get_repairs_rejetees() const { return this->repairs_rejetees_; }
 
  protected:
   // Recolle la fin de la capture précédente au début de la courante, et fusionne les deux
@@ -139,6 +152,10 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   uint32_t captures_{0};
   uint32_t rejected_{0};
   uint32_t duplicates_{0};
+  // Trames sorties après une réparation bornée, et celles que le garde-fou de continuité a
+  // refusées (voir dump()). Séparées volontairement : ce sont des chiffres de qualité différente.
+  uint32_t repairs_{0};
+  uint32_t repairs_rejetees_{0};
   // Suivi pour le battement de cœur (voir loop()).
   uint32_t last_report_ms_{0};
   uint32_t reported_captures_{0};

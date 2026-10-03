@@ -188,6 +188,33 @@ net is still carrying the result, the recovery is not finished"), the recovery i
 repairs are nets — better ones, but nets. Burst 2 is still unexplained: it needs at least two
 corrections.
 
+## 5ter. Step 1 implemented (03/10, evening) — measured result
+
+The self-adapting period and the bounded repairs are now in the firmware decoder
+(`esphome/includes/vevor_protocol.h`), with host tests. What is measured, not claimed:
+
+| what | result |
+|---|---|
+| period estimator, no station constant | 87.8 / 88.7 / 86.9 / 90.2 µs on synthetic bursts emitted at 88 / 89 / 87 / 90 µs |
+| **real captures replayed in the C++ decoder** | **5 of 6 decoded** — criterion met in the code that ships (`tests/data/captures_reelles.txt`, replayed by `test_captures_reelles`) |
+| the five decoded captures | all carry the station's measurement (identical 11-byte prefix); periods measured at 88.2-89.1 µs |
+| shortened two-bit pulse (the proven mechanism) | repaired to the **identical** frame |
+| 200 random payloads with a valid sync + header | **0 published** — the repairs do not fabricate frames |
+| firmware test suite | **397 checks, 0 failures** |
+
+Two structural corrections were needed to make the insertion repair work at all, both found by
+measurement rather than reasoning: the frame no longer fits in the search window once a bit is
+missing (`find_frame_candidate` now accepts a payload one bit short), and the bits between two
+boundaries belong to the **previous** segment, not the next one — my first attempt was shifted by a
+whole segment, which is why it decoded nothing.
+
+The continuity gate on repaired frames (same station, temperature within 1 °C, humidity within 5 %)
+is kept in the component. Measured fabrication rate is 0/200, so it is a **precaution at zero cost**,
+not a measured necessity — and it is documented as such.
+
+Still open, unchanged: the sixth capture (needs at least two corrections), and the strict bit-clock
+recovery of step 2, which remains research.
+
 ## 6. Implementation plan (revised with the 03/10 evening measurements)
 
 **Step 1 — ship what is proven (self-adapting, no station constant):**

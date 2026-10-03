@@ -295,6 +295,58 @@ def _pulse_scenarios() -> list[tuple[str, list[int], bool, dict, int]]:
     return out
 
 
+def emit_captures(path: pathlib.Path, source: pathlib.Path) -> int:
+    """Écrit tests/captures.h : les rafales RÉELLES relevées sur la station, rejouées par le test
+    C++ comme vecteurs de régression. Elles portent le critère d'acceptation du projet (5 des 6
+    décodables), et elles seules prouvent le décodeur sur du signal vrai — les scénarios
+    synthétiques ne reproduisent que ce qu'on a pensé à décrire."""
+    captures: list[list[int]] = []
+    for line in source.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        captures.append([int(v) for v in line.split()])
+    lines = [
+        "// GÉNÉRÉ par tests/frames.py --captures — ne pas éditer à la main.",
+        "// Source : tests/data/captures_reelles.txt (rafales réelles du 03/10).",
+        "#pragma once",
+        "#include <cstdint>",
+        "#include <cstddef>",
+        "",
+    ]
+    for index, capture in enumerate(captures):
+        body = ", ".join(str(v) for v in capture)
+        lines += [f"static const int32_t CAPTURE_{index}[] = {{{body}}};", ""]
+    lines += [
+        "struct VevorRealCapture {",
+        "  const char *name;",
+        "  const int32_t *timings;",
+        "  size_t count;",
+        "};",
+        "",
+        "static const VevorRealCapture VEVOR_REAL_CAPTURES[] = {",
+    ]
+    lines += [f'  {{"capture_reelle_{i}", CAPTURE_{i}, {len(c)}}},' for i, c in enumerate(captures)]
+    lines += [
+        "};",
+        "",
+        f"static const int VEVOR_REAL_CAPTURE_COUNT = {len(captures)};",
+        "// Les 5 rafales décodables portent la MÊME mesure (même station, même température, même",
+        "// humidité, même direction) : leur préfixe est identique. Le compteur TX et la somme",
+        "// diffèrent d'une rafale à l'autre — c'est normal, elles viennent d'émissions différentes.",
+        "static const uint8_t VEVOR_CAPTURE_PREFIX[11] = {0xAA, 0x00, 0x84, 0xCB, 0x16,",
+        "                                                0x02, 0x90, 0x50, 0x01, 0x01, 0x00};",
+        "static const int VEVOR_CAPTURE_PREFIX_LEN = 11;",
+        "// Nombre de rafales attendues décodables, et l'indice du contre-exemple assumé.",
+        "static const int VEVOR_CAPTURE_ATTENDUES = 5;",
+        "static const int VEVOR_CAPTURE_CONTRE_EXEMPLE = 2;",
+        "",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"captures.h écrit : {len(captures)} rafales réelles")
+    return len(captures)
+
+
 def emit_pulses(path: pathlib.Path) -> int:
     lines = [
         "// GÉNÉRÉ par tests/frames.py — ne pas éditer à la main.",
@@ -419,6 +471,7 @@ def main() -> int:
     ap.add_argument("--selfcheck", action="store_true")
     ap.add_argument("--vectors", action="store_true")
     ap.add_argument("--pulses", action="store_true")
+    ap.add_argument("--captures", action="store_true")
     args = ap.parse_args()
     here = pathlib.Path(__file__).resolve().parent
     if args.selfcheck:
@@ -427,6 +480,9 @@ def main() -> int:
         return emit_vectors(here / "vectors.h")
     if args.pulses:
         return emit_pulses(here / "pulses.h")
+    if args.captures:
+        emit_captures(here / "captures.h", here / "data" / "captures_reelles.txt")
+        return 0
     print(__doc__)
     return 0
 

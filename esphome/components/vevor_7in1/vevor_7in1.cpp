@@ -126,12 +126,14 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   uint8_t raw[vevor::FRAME_BYTES];
   int32_t period_used = 0;
   bool inverted = false;
+  bool repaired = false;
   size_t rejected = 0;
 
   // 1. DÉCODAGE DIRECT de la capture, sans rien recoller : c'est le cas normal.
   bool ok = vevor::decode_timings(timings.data(), timings.size(), vevor::PERIOD_CANDIDATES,
                                   vevor::PERIOD_CANDIDATE_COUNT, this->bits_.data(),
-                                  this->bits_.size(), raw, &period_used, &inverted, &rejected);
+                                  this->bits_.size(), raw, &period_used, &inverted, &rejected,
+                                  &repaired);
   this->rejected_ += rejected;
 
   bool from_stitch = false;
@@ -144,7 +146,8 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
     rejected = 0;
     ok = vevor::decode_timings(this->stitched_.data(), stitched, vevor::PERIOD_CANDIDATES,
                                vevor::PERIOD_CANDIDATE_COUNT, this->bits_.data(),
-                               this->bits_.size(), raw, &period_used, &inverted, &rejected);
+                               this->bits_.size(), raw, &period_used, &inverted, &rejected,
+                               &repaired);
     this->rejected_ += rejected;
     from_stitch = ok;
   }
@@ -155,6 +158,27 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
 
   if (!ok) {
     return false;
+  }
+
+  // GARDE-FOU DE CONTINUITÉ, pour les trames RÉPARÉES seulement : une trame obtenue par réparation
+  // n'est publiée que si elle est cohérente avec la dernière trame acceptée (même station, mesures
+  // qui ne sautent pas d'une rafale à l'autre). Mesure du 03/10 sur 200 charges utiles aléatoires :
+  // aucune fabrication — c'est donc une précaution à coût nul, gardée pour fermer le risque
+  // résiduel des réparations. Une trame décodée directement n'est pas soumise à ce contrôle.
+  if (repaired) {
+    vevor::Frame f;
+    vevor::Frame precedente;
+    const char *raison = "";
+    const bool reference =
+        this->has_last_frame_ && vevor::decode(this->last_frame_, precedente, &raison);
+    if (vevor::decode(raw, f, &raison) && reference && !vevor::continuite_ok(f, precedente)) {
+      this->repairs_rejetees_++;
+      ESP_LOGD(TAG,
+               "trame réparée REFUSÉE par le garde-fou de continuité (station ou mesures "
+               "incohérentes avec la trame précédente)");
+      return false;
+    }
+    this->repairs_++;
   }
 
   // La même rafale est régulièrement livrée deux fois par le RMT : deux trames identiques octet
@@ -172,10 +196,12 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   this->has_last_frame_ = true;
 
   this->frames_++;
-  ESP_LOGD(TAG, "trame extraite (%d us, polarité %s, capturée %s) → %u octets", (int) period_used,
-           inverted ? "inversée" : "normale",
+  // La période est en DIXIÈMES de microseconde (elle est mesurée sur la rafale) : on journalise la
+  // valeur réellement retenue, pas un entier trompeur.
+  ESP_LOGD(TAG, "trame extraite (période mesurée %d.%d us, polarité %s, %s%s) → %u octets",
+           (int) (period_used / 10), (int) (period_used % 10), inverted ? "inversée" : "normale",
            from_stitch ? "en deux morceaux recollés" : "d'un seul bloc",
-           (unsigned) vevor::FRAME_BYTES);
+           repaired ? ", RÉPARÉE" : "", (unsigned) vevor::FRAME_BYTES);
 
   // La trame est remise AU YAML, qui publie les capteurs : le composant ne connaît pas les
   // entités, et la logique de protocole reste testable à froid dans includes/vevor_protocol.h.

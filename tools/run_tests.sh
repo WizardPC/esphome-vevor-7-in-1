@@ -29,6 +29,9 @@ echo "=== 2. génération des trames de test ==="
 echo "=== 2b. génération des scénarios d'impulsions (chaîne asynchrone) ==="
 "$DEV_PY" "$ROOT/tests/frames.py" --pulses || exit 1
 
+echo "=== 2c. génération des rafales RÉELLES (vecteurs de régression du dump) ==="
+"$DEV_PY" "$ROOT/tests/frames.py" --captures || exit 1
+
 echo "=== 3. compilation du test C++ ==="
 "$DEV_PY" -m ziglang c++ -std=c++17 -w \
   -I "$ROOT/esphome/includes" -I "$ROOT/tests" \

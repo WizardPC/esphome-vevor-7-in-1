@@ -16,6 +16,7 @@
 #include "vevor_protocol.h"
 #include "vectors.h"
 #include "pulses.h"
+#include "captures.h"
 
 static int g_failures = 0;
 static int g_checks = 0;
@@ -251,17 +252,17 @@ static void test_pulse_chain() {
     // round 2, §2.6). Ce qui doit être vrai ici : un candidat de la liste a été retenu, et la
     // trame est correcte (assertions ci-dessus). La SÉLECTION réelle du bon candidat est éprouvée
     // dans test_period_selection().
-    bool period_is_candidate = false;
-    for (size_t c = 0; c < vevor::PERIOD_CANDIDATE_COUNT; c++) {
-      if (period_used == vevor::PERIOD_CANDIDATES[c]) {
-        period_is_candidate = true;
-      }
-    }
-    expect(period_is_candidate, name + " : période retenue membre des candidats");
+    // Période retenue : elle vient désormais de la MESURE sur la rafale (estimer_periode_x10), et
+    // non d'une liste de candidats. On exige donc qu'elle soit PLAUSIBLE (50-150 µs), pas qu'elle
+    // appartienne à une grille — c'est justement le point : une carte inconnue est mesurée, jamais
+    // supposée. La trame elle-même est déjà vérifiée par les assertions ci-dessus.
+    expect(period_used >= vevor::PERIODE_MIN_X10 && period_used <= vevor::PERIODE_MAX_X10,
+           name + " : période retenue plausible (mesurée sur la rafale)");
     const bool want_inverted = name.find("polarite_inversee") != std::string::npos;
     expect(inverted == want_inverted,
            name + " : polarité retenue " + (inverted ? "inversée" : "normale"));
-    printf("    %-30s période retenue %d us, polarité %s\n", s.name, (int) period_used,
+    printf("    %-30s période retenue %d.%d us, polarité %s\n", s.name,
+           (int) (period_used / 10), (int) (period_used % 10),
            inverted ? "inversée" : "normale");
   }
 }
@@ -392,19 +393,21 @@ static void test_period_selection() {
   bool inverted = false;
 
   // (1) chaque candidat, SEUL, décode une rafale émise à sa période.
+  // On appelle `essayer_periode` (la couche « une période donnée ») et non `decode_timings`, car
+  // `decode_timings` MESURE d'abord la période sur la rafale : la grille fixe n'est plus qu'un
+  // repli, et c'est bien le repli que ce test éprouve. Le chemin mesuré a son propre test
+  // (test_periode_mesuree).
   int exerces = 0;
   for (int i = 0; i < VEVOR_PULSE_COUNT; i++) {
     const VevorPulseScenario &s = VEVOR_PULSE_VECTORS[i];
     if (!s.valid || s.period_us <= 0) {
       continue;
     }
-    const int32_t un[1] = {s.period_us};
-    period_used = 0;
-    const bool ok = vevor::decode_timings(s.timings, s.count, un, 1, bits.data(), bits.size(),
-                                          raw, &period_used, &inverted);
-    expect(ok && period_used == s.period_us,
-           std::string(s.name) + " : décodable avec le SEUL candidat " +
-               std::to_string(s.period_us) + " us");
+    period_used = s.period_us * 10;
+    const bool ok = vevor::essayer_periode(s.timings, s.count, s.period_us * 10, bits.data(),
+                                           bits.size(), raw, &inverted, nullptr, nullptr);
+    expect(ok, std::string(s.name) + " : décodable avec le SEUL candidat " +
+                   std::to_string(s.period_us) + " us");
     if (s.period_us == 88 || s.period_us == 89 || s.period_us == 87) {
       exerces++;
     }
@@ -425,17 +428,33 @@ static void test_period_selection() {
   const int32_t seul88[1] = {88};
   const int32_t sans90[2] = {88, 87};
   const int32_t recherche[2] = {88, 90};
+  // On éprouve la couche « une période donnée » (`essayer_periode`) : c'est elle qui porte le
+  // balayage. `decode_timings` mesure la période avant d'y venir, donc l'exercer ici testerait la
+  // mesure, pas le repli.
   period_used = 0;
-  expect(!vevor::decode_timings(longue->timings, longue->count, seul88, 1, bits.data(),
-                                bits.size(), raw, &period_used, &inverted),
+  expect(!vevor::essayer_periode(longue->timings, longue->count, seul88[0] * 10, bits.data(),
+                                 bits.size(), raw, &inverted, nullptr, nullptr),
          "rafale longue : le candidat 88 SEUL échoue (elle est vraiment sensible à la période)");
-  expect(!vevor::decode_timings(longue->timings, longue->count, sans90, 2, bits.data(),
-                                bits.size(), raw, &period_used, &inverted),
-         "rafale longue : sans le candidat 90, aucun candidat ne décode (88 et 87 échouent)");
+  bool reussi = false;
+  for (int32_t p : sans90) {
+    if (vevor::essayer_periode(longue->timings, longue->count, p * 10, bits.data(), bits.size(),
+                               raw, &inverted, nullptr, nullptr)) {
+      reussi = true;
+    }
+  }
+  expect(!reussi, "rafale longue : sans le candidat 90, aucun candidat ne décode (88 et 87 échouent)");
+  period_used = 0;
+  expect(vevor::essayer_periode(longue->timings, longue->count, 90 * 10, bits.data(), bits.size(),
+                                raw, &inverted, nullptr, nullptr),
+         "rafale longue : le balayage CONTINUE après l'échec de 88 et atteint 90 (le candidat 90 la "
+         "décode)");
+  // Et le chemin de production, lui, la décode par la période MESURÉE sur la rafale : la grille
+  // fixe n'est plus qu'un repli, ce que la mesure du 03/10 a établi.
   period_used = 0;
   expect(vevor::decode_timings(longue->timings, longue->count, recherche, 2, bits.data(),
-                               bits.size(), raw, &period_used, &inverted) && period_used == 90,
-         "rafale longue : le balayage CONTINUE après l'échec de 88 et atteint 90");
+                               bits.size(), raw, &period_used, &inverted) &&
+             period_used >= vevor::PERIODE_MIN_X10 && period_used <= vevor::PERIODE_MAX_X10,
+         "rafale longue : décodée par la période mesurée sur la rafale");
 }
 
 // --- 9. Politique de recollage : un MORCEAU se recolle, une rafale COMPLÈTE non -------------
@@ -556,6 +575,155 @@ static void test_header_tolerance() {
   expect(!decode_une_trame(deux_bits), "en-tête à DEUX bits faux : refusé (tolérance bornée)");
 }
 
+// --- 13. Période bit MESURÉE sur la rafale, et réparation par insertion d'un bit --------------
+// Contrainte de production rappelée par l'utilisateur : un nouvel utilisateur ne fait que flasher,
+// sur une carte inconnue, et le code doit rendre sa station fonctionnelle sans analyse. Le décodeur
+// ne doit donc PAS supposer le rythme bit : il le MESURE sur chaque rafale (estimer_periode_x10).
+// Ce test l'éprouve sur quatre points : (a) l'estimation tombe juste sur une rafale synthétique au
+// rythme de la station (88,5 µs mesurés le 03/10) ; (b) des rafales émises à un rythme DIFFÉRENT
+// sont décodées sans réglage (le cas d'une autre carte) ; (c) un bit MANQUANT dans la charge — le
+// mécanisme prouvé sur les rafales du dump — est réparé ; (d) une trame qui ne se valide pas reste
+// refusée, réparation comprise.
+
+// Comme pulses_depuis_octets, mais une impulsion de DEUX bits peut être RACCOURCIE à un bit : c'est
+// le mécanisme mesuré sur les rafales du dump (une impulsion de deux périodes mesurée comme une
+// seule). Le flux décodé compte alors un bit de moins, et tout ce qui suit est décalé — exactement
+// ce que la réparation par insertion doit rattraper.
+static bool raccourcir_une_impulsion(std::vector<int32_t> &pulses, int32_t periode) {
+  for (size_t i = pulses.size() / 2; i < pulses.size(); i++) {
+    if (pulses[i] == 2 * periode || pulses[i] == -2 * periode) {
+      pulses[i] = (pulses[i] > 0) ? periode : -periode;
+      return true;
+    }
+  }
+  return false;
+}
+
+static void test_periode_mesuree() {
+  printf("Période mesurée sur la rafale, et réparation par insertion d'un bit\n");
+  const uint8_t trame[vevor::FRAME_BYTES] = {0xAA, 0x00, 0x84, 0xCB, 0x16, 0x02, 0x90, 0x50,
+                                             0x01, 0x01, 0x00, 0x02, 0x22, 0x01, 0xFF, 0x02,
+                                             0x31, 0xDF, 0x33, 0x5C, 0x34};
+  std::vector<uint8_t> bits(vevor::MAX_BITS);
+  std::vector<int32_t> pulses;
+  uint8_t raw[vevor::FRAME_BYTES];
+  int32_t periode = 0;
+  bool inverse = false;
+  bool repare = false;
+  size_t rejets = 0;
+
+  // (a) l'estimateur retrouve le rythme de la station, sans aucune constante de station.
+  pulses_depuis_octets(trame, vevor::FRAME_BYTES, 88, pulses);
+  const int32_t mesuree = vevor::estimer_periode_x10(pulses.data(), pulses.size());
+  expect(mesuree >= 875 && mesuree <= 895,
+         "estimation du rythme bit : " + std::to_string(mesuree / 10) + "," +
+             std::to_string(mesuree % 10) + " us (attendu 88,3-88,9)");
+
+  // (b) rythmes DIFFÉRENTS : c'est le cas d'une carte inconnue, décodée sans réglage.
+  const int32_t rythmes[] = {87, 88, 89, 90, 91};
+  for (int32_t p : rythmes) {
+    pulses_depuis_octets(trame, vevor::FRAME_BYTES, p, pulses);
+    const int32_t est = vevor::estimer_periode_x10(pulses.data(), pulses.size());
+    repare = false;
+    const bool ok = vevor::decode_timings(pulses.data(), pulses.size(), vevor::PERIOD_CANDIDATES,
+                                          vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(),
+                                          raw, &periode, &inverse, &rejets, &repare);
+    expect(ok && std::memcmp(raw, trame, vevor::FRAME_BYTES) == 0 && !repare,
+           "rafale émise à " + std::to_string(p) + " us : décodée (estimée à " +
+               std::to_string(est / 10) + "," + std::to_string(est % 10) + " us)");
+  }
+
+  // (c) une impulsion de DEUX bits mesurée comme UN seul : c'est le mécanisme réel. Le démodulateur
+  //     ne « perd » pas un bit dans l'abstrait — il raccourcit une impulsion de deux périodes, et
+  //     tout ce qui suit est décalé d'un bit. On raccourcit donc une impulsion dans la charge, et
+  //     la réparation par insertion doit retrouver la trame exacte.
+  pulses_depuis_octets(trame, vevor::FRAME_BYTES, 88, pulses);
+  expect(raccourcir_une_impulsion(pulses, 88),
+         "une impulsion de deux bits a été trouvée dans la charge pour la raccourcir");
+  repare = false;
+  const bool ok_repare =
+      vevor::decode_timings(pulses.data(), pulses.size(), vevor::PERIOD_CANDIDATES,
+                            vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(), raw, &periode,
+                            &inverse, &rejets, &repare);
+  expect(ok_repare && repare && std::memcmp(raw, trame, vevor::FRAME_BYTES) == 0,
+         "impulsion de deux bits raccourcie à un bit : réparée, trame exacte retrouvée");
+
+  // (d) contre-épreuve : que FABRIQUE la réparation ? Elle élargit l'ensemble des trames
+  //     acceptées, il faut donc borner ce qu'elle peut produire. On éprouve 200 charges utiles
+  //     ALÉATOIRES avec synchronisation et en-tête justes : aucune ne doit être publiée.
+  //     Mesure du 03/10 : 0 sur 200. C'est ce qui autorise à garder cette réparation.
+  int fabriquees = 0;
+  for (uint32_t graine = 1; graine <= 200; graine++) {
+    uint8_t alea[vevor::FRAME_BYTES];
+    uint32_t x = graine * 2654435761u;
+    for (size_t i = 0; i < vevor::FRAME_BYTES; i++) {
+      x = x * 1103515245u + 12345u;
+      alea[i] = (uint8_t)(x >> 16);
+    }
+    alea[0] = 0xAA;   // en-tête juste : la synchronisation a réussi
+    alea[1] = 0x00;
+    pulses_depuis_octets(alea, vevor::FRAME_BYTES, 88, pulses);
+    if (vevor::decode_timings(pulses.data(), pulses.size(), vevor::PERIOD_CANDIDATES,
+                              vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(), raw,
+                              &periode, &inverse)) {
+      fabriquees++;
+    }
+  }
+  expect(fabriquees == 0,
+         "200 charges utiles aléatoires (synchro et en-tête justes) : " +
+             std::to_string(fabriquees) + " publiée(s) — la réparation ne fabrique pas de trame");
+
+  // (e) bruit seul : aucune trame publiée.
+  std::vector<int32_t> bruit;
+  for (int i = 0; i < 200; i++) {
+    const int32_t d = 40 + (i * 7) % 60;
+    bruit.push_back((i % 2 == 0) ? d : -d);
+  }
+  expect(!vevor::decode_timings(bruit.data(), bruit.size(), vevor::PERIOD_CANDIDATES,
+                                vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(), raw,
+                                &periode, &inverse),
+         "bruit sans préambule : aucune trame publiée");
+}
+
+// --- 14. Rafales RÉELLES de la station (vecteurs de régression, critère d'acceptation) --------
+// Les six rafales du dump du 03/10, rejouées telles quelles. C'est le seul test qui porte sur du
+// signal RÉEL : les scénarios synthétiques ne reproduisent que ce qu'on a pensé à décrire. Critère
+// fixé dans docs/bit-jitter-analysis.md : 5 des 6 doivent être décodables, la sixième restant le
+// contre-exemple assumé (elle demande au moins deux corrections). Les cinq décodables portent la
+// même mesure de la station.
+static void test_captures_reelles() {
+  printf("Rafales RÉELLES de la station (%d captures du dump du 03/10)\n", VEVOR_REAL_CAPTURE_COUNT);
+  std::vector<uint8_t> bits(vevor::MAX_BITS);
+  uint8_t raw[vevor::FRAME_BYTES];
+  int32_t period_used = 0;
+  bool inverted = false;
+  bool repaired = false;
+  size_t rejected = 0;
+  int decodees = 0;
+  for (int i = 0; i < VEVOR_REAL_CAPTURE_COUNT; i++) {
+    const VevorRealCapture &c = VEVOR_REAL_CAPTURES[i];
+    repaired = false;
+    const bool ok = vevor::decode_timings(c.timings, c.count, vevor::PERIOD_CANDIDATES,
+                                          vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(),
+                                          raw, &period_used, &inverted, &rejected, &repaired);
+    if (ok) {
+      decodees++;
+      printf("    %-18s décodée (%d.%d us, %s) : %s\n", c.name, (int) (period_used / 10),
+             (int) (period_used % 10), repaired ? "RÉPARÉE" : "directe",
+             vevor::hex_bytes(raw, vevor::FRAME_BYTES).c_str());
+      expect(std::memcmp(raw, VEVOR_CAPTURE_PREFIX, VEVOR_CAPTURE_PREFIX_LEN) == 0,
+             std::string(c.name) + " : porte bien la mesure de la station (préfixe attendu)");
+    } else {
+      printf("    %-18s NON décodée%s\n", c.name,
+             i == VEVOR_CAPTURE_CONTRE_EXEMPLE ? " (contre-exemple assumé)" : " <-- RÉGRESSION");
+    }
+  }
+  expect(decodees >= VEVOR_CAPTURE_ATTENDUES,
+         "rafales réelles : " + std::to_string(decodees) + " décodées sur " +
+             std::to_string(VEVOR_REAL_CAPTURE_COUNT) + " (critère : " +
+             std::to_string(VEVOR_CAPTURE_ATTENDUES) + " au moins)");
+}
+
 int main() {
   printf("=== Tests du décodeur Vevor 7-en-1 (sans matériel) ===\n\n");
   test_vectors();
@@ -570,6 +738,8 @@ int main() {
   test_hole_skip();
   test_fragment_policy();
   test_header_tolerance();
+  test_periode_mesuree();
+  test_captures_reelles();
 
   printf("\n%d vérifications, %d échec(s)\n", g_checks, g_failures);
   if (g_failures == 0) {
