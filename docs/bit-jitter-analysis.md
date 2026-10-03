@@ -57,6 +57,30 @@ Two aggravating factors, both structural:
 2. **the pulses are not the transmitter's.** They are what our own demodulator produces after its
    channel filter, its slicer and its AGC have had their say.
 
+## 2bis. Hypotheses tested and refuted (03/10, offline, same six bursts)
+
+All tested on the same dump, with the firmware's own rounding rule, so that no arithmetic artefact
+can accuse the firmware:
+
+| hypothesis | test | result |
+|---|---|---|
+| wrong period / grid too coarse | 5 grids, including 85.0-91.0 µs in 0.1 µs steps, both polarities | **1/6, identical for every grid** — refuted |
+| the owner's 88.3 µs is the missing key | the same sweep brackets 88.3 µs | no gain — refuted (our decoder is insensitive to it) |
+| wrong polarity | both polarities tried at every period | refuted |
+| one bit lost / added | delete one bit at **every** position, re-validate | no recovery — refuted |
+| one wrong bit in the header byte | tolerate exactly one bit, checksum + counter + gate must pass | **1/6 → 3/6** — real, but a net, not the fix |
+| bit clock per burst (the documented fix) | two prototypes, the second primed with 88.3 µs | **0/6 twice** — the prototypes are at fault, not the approach; a phase loop needs a real implementation and tests |
+
+What *is* consistent with all of it: the total number of bits is preserved, but a **bit boundary has
+moved between two pulses**. That reproduces both observed signatures — a single wrong bit in the
+constant header, and a doubling of every field after a divergence point — and it is precisely what a
+per-edge clock removes and what independent per-pulse rounding cannot.
+
+Acceptance criterion for the real implementation, so that nobody can fool themselves: a recovered
+frame must pass **checksum + counter + plausibility gate** on bursts where the direct decode fails,
+and the implementation must first reproduce the frames that *do* decode today. Any prototype that
+cannot reproduce the known-good capture is broken by definition — both of mine were.
+
 ## 3. What the literature says (checked, not assumed)
 
 * **rtl_433**, the reference implementation for this protocol, does not assume anything either: its

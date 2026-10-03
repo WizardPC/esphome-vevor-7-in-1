@@ -213,10 +213,11 @@ inline bool is_fragment(size_t count) {
 // station), 88,3 µs (mesure de l'utilisateur → 11 325 bauds), 87 µs (déduite de rtl_433). La
 // bonne période n'est PAS supposée : elle est trouvée à la trame décodée, et le gagnant est
 // journalisé — c'est ce qui permet de resserrer ensuite sans deviner.
-static const int32_t PERIOD_CANDIDATES[] = {86, 87, 88, 89, 90, 85};
-// MESURÉ le 03/10 : sur six rafales propres du même dump, les trames décodables sortent à
-// 86,0-88,5 µs. L'ancienne grille {90, 88, 89, 87} n'en attrapait qu'une : le bas de la plage
-// manquait, et 89 / 90 ne servaient à rien sur ce montage. 88 reste dans la grille par sûreté.
+static const int32_t PERIOD_CANDIDATES[] = {90, 88, 89, 87};
+// MESURÉ le 03/10 : élargir cette grille (86-90, puis 85,0-91,0 µs par pas de 0,1) ne décode PAS une
+// rafale de plus sur les six captures du dump — 1/6 sans le filet, quelle que soit la grille. La
+// valeur exacte du rythme bit n'est donc pas le verrou ; ne pas la retoucher sans une mesure qui le
+// démontre. (Le projet de référence mesure la station à 88,3 µs ; notre décodeur y est insensible.)
 static constexpr size_t PERIOD_CANDIDATE_COUNT =
     sizeof(PERIOD_CANDIDATES) / sizeof(PERIOD_CANDIDATES[0]);
 
