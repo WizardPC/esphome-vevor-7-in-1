@@ -48,10 +48,13 @@ void Vevor7in1::loop() {
     return;
   }
 
-  ESP_LOGI(TAG, "captures=%u (+%u), trames=%u, rejets=%u, dernières impulsions=%u, plus longue=%u",
+  ESP_LOGI(TAG,
+           "captures=%u (+%u), trames=%u, rejets=%u, réparées=%u (dont %u refusées), dernières "
+           "impulsions=%u, plus longue=%u",
            (unsigned) this->captures_, (unsigned) (this->captures_ - this->reported_captures_),
-           (unsigned) this->frames_, (unsigned) this->rejected_,
-           (unsigned) this->last_pulse_count_, (unsigned) this->longest_capture_);
+           (unsigned) this->frames_, (unsigned) this->rejected_, (unsigned) this->repairs_,
+           (unsigned) this->repairs_rejetees_, (unsigned) this->last_pulse_count_,
+           (unsigned) this->longest_capture_);
   this->reported_captures_ = this->captures_;
 }
 

@@ -1,3 +1,47 @@
+### 03/10 (suite 8) — Étape 1 livrée : période MESURÉE + réparations bornées, 5/6 sur les rafales réelles
+
+Consigne : « essaie la piste de l'horloge », avec une contrainte de production structurante —
+**un nouvel utilisateur ne fera que flasher**, le code doit rendre sa station fonctionnelle sans
+analyse, et donc **jamais dépendre d'une constante propre à une station**.
+
+**Livré dans le firmware** (`esphome/includes/vevor_protocol.h`), avec tests hôtes :
+
+* `estimer_periode_x10()` : la période bit est **mesurée sur chaque rafale reçue** (médiane de la
+  fenêtre protocolaire 45-115 µs, puis consolidation par `d / round(d/T)` sur les impulsions > 0,55·T).
+  Aucune constante de station. La grille `PERIOD_CANDIDATES` ne sert plus que de repli.
+* `reparer_par_insertion()` : réparation bornée d'un bit **manquant** (le mécanisme prouvé : une
+  impulsion de deux bits lue comme un seul), après la tolérance d'un bit d'en-tête déjà en place.
+  Toutes validées par en-tête + somme + compteur + porte de plausibilité.
+* `continuite_ok()` côté composant : une trame **réparée** doit être cohérente avec la précédente
+  (même station, ±1 °C, ±5 %). Mesuré : 0 fabrication sur 200 charges aléatoires — c'est une
+  précaution à coût nul, pas une nécessité mesurée, et c'est documenté comme telle.
+* Le journal périodique publie désormais `réparées=N (dont M refusées)` : la mesure sur la carte doit
+  montrer ce que les réparations apportent réellement.
+
+**Chiffres mesurés :**
+
+| quoi | résultat |
+|---|---|
+| estimateur, sur rafales synthétiques 88/89/87/90 µs | 87,8 / 88,7 / 86,9 / 90,2 µs |
+| **rafales RÉELLES du dump rejouées dans le C++** | **5 sur 6** (critère d'acceptation fixé le matin) |
+| les 5 décodées | même mesure de la station (préfixe de 11 octets identique), périodes 88,2-89,1 µs |
+| impulsion de 2 bits raccourcie à 1 bit | réparée à l'identique |
+| 200 charges utiles aléatoires (synchro juste) | **0 publiée** |
+| suite de tests du projet | **397 vérifications, 0 échec** |
+
+**Deux corrections structurelles** ont été nécessaires pour que la réparation fonctionne, toutes deux
+trouvées par la mesure et non par le raisonnement : (1) la trame ne « rentre » plus dans la fenêtre de
+recherche dès qu'un bit manque — `find_frame_candidate` accepte maintenant une charge utile à un bit
+près ; (2) les bits entre deux frontières appartiennent au segment **précédent**, pas au suivant —
+ma première implémentation était décalée d'un segment entier, d'où 0/6.
+
+**Vecteur de régression versionné** : `tests/data/captures_reelles.txt` (les 6 rafales du dump) est
+rejoué par `test_captures_reelles()` — c'est le seul test du projet qui porte sur du signal réel.
+
+**Reste ouvert** : la 6e rafale (au moins deux corrections nécessaires), et la récupération d'horloge
+au sens strict (étape 2), qui reste du domaine de la recherche. Firmware flashé (`a444b9a0`,
+958 688 octets) ; mesure de 15 min en cours.
+
 ### 03/10 (suite 7) — Piste de l'horloge : rythme MESURÉ sur la rafale (5/6), et ce qui ne marche pas
 
 Consigne reçue : écarter le cycle d'alimentation (l'utilisateur le fait à la main après un flash) et
