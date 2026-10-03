@@ -32,8 +32,9 @@ never touches the radio.
 | `esphome/components/cc1101/` | **Production** | local copy of ESPHome's `cc1101` component with the fixes this board needs (`README-LOCAL.md`) |
 | `esphome/secrets.yaml.example` | **Production** | template to copy to `esphome/secrets.yaml` (never versioned) |
 | `docs/wiring.svg` | **Production** | wiring diagram |
-| `docs/forecast-rules.md` | **Rules** | the console\'s forecast icon is not receivable; tables to reproduce an equivalent in Home Assistant |
-| `tests/` | **Test** | off-board suite: independent Python encoder + C++ unit tests (430 checks, no board needed) |
+| `docs/forecast-rules.md` | **Rules** | the console's forecast icon is not receivable; tables to reproduce an equivalent in Home Assistant |
+| `docs/firmware-design-notes.md` | **Notes** | why the production YAML says what it says: the measured reason behind each setting |
+| `tests/` | **Test** | off-board suite: independent Python encoder + C++ unit tests (377 checks, no board needed) |
 | `tools/` | **Test** | build, flash, log capture, independent evaluation, frequency scan, A/B comparison (`tools/README.md`) |
 | `evidence/` | **Test** | versioned JSON reports backing every claim (`evidence/README.md`) |
 | `references/` | Context | protocol description + rtl_433 reference source (GPL-2.0) |

@@ -1,22 +1,9 @@
-# Récepteur station météo Vevor 7-en-1 868 MHz — ESP32-C3 SuperMini + CC1101
-# Protocole : references/PROTOCOL.md  (portage de rtl_433/src/devices/vevor_7in1.c)
-# Décodeur :  includes/vevor_protocol.h
-#
-# Câblage : 3V3->VCC, GND->GND, GPIO6->MOSI, GPIO4->SCLK, GPIO5->MISO,
-#           GPIO7->CSN, GPIO3->GDO0.   (GDO2 non connecté)
+# Vevor 7-in-1 weather station receiver, 868 MHz — ESP32-C3 SuperMini + CC1101.
+# Wiring, design choices and the measurements behind them: docs/firmware-design-notes.md
+# Frame layout: references/PROTOCOL.md — Decoder: includes/vevor_protocol.h
 
 substitutions:
-  # Fréquence : 868,35 MHz — celle du montage témoin qui DÉCODE cette station sur cette carte
-  # (registre lu au démarrage du témoin : 868 349 824 Hz). Ce n'est plus une hypothèse de
-  # départ : c'est la valeur mesurée du seul récepteur qui entend la station (voir
-  # state/PROGRESS.md, itération 7).
-  # Retour à 868,35 : valeur validée (180 trames en une heure le 01/10 à 14:58) et celle du
-  # projet de référence. Le test à 868,30 n'a rien donné, et il est valide puisque le
-  # contrôle des écritures montre que les registres FREQ2/1/0 sont bien appliqués.
   freq_mhz: "868.35"
-  # Déviation et bande passante : valeurs du montage témoin (70 kHz / 100 kHz), identiques aux
-  # nôtres depuis l'itération 4-5. Ce ne sont donc PAS les suspects : le montage témoin décode
-  # avec exactement ces réglages.
   deviation_khz: "70"
   symbol_rate: "11111"
   bw_khz: "100"
@@ -28,29 +15,13 @@ esphome:
   includes:
     - includes/vevor_protocol.h
   on_boot:
-    priority: -100
+    priority: -100          # after every setup(), including the radio and the RMT
     then:
       - lambda: |-
-          ESP_LOGI("v7in1", "V7IN1 BOOT recepteur pret, freq=%s MHz dev=%s kHz sr=%s",
+          ESP_LOGD("v7in1", "V7IN1 BOOT recepteur pret, freq=%s MHz dev=%s kHz sr=%s",
                    "${freq_mhz}", "${deviation_khz}", "${symbol_rate}");
-      # Ce bloc ne journalise QUE le boot (l'`ESP_LOGI` ci-dessus) : aucune action `cc1101.*`
-      # n'est exécutée au démarrage — le ré-armement radio n'y est PAS rejoué. Il est assuré par
-      # la surveillance `interval: 20s` plus bas, via le script unique `rearmer_radio`
-      # (`cc1101.reset`). Rappel mesuré : ce ré-armement est nécessaire après un OTA, le CC1101
-      # pouvant rester sans verrouillage de PLL (« PLL lock failed, retrying calibration ») et
-      # GDO0 ne produisant alors plus de rafale exploitable.
-      # Priorité -100 = après tous les setup(), y compris ceux de `cc1101` et du RMT.
-  # Le CC1101 est un composant SÉPARÉ : il reste alimenté et GARDE SES REGISTRES pendant que
-  # l'ESP32 redémarre. Or, au démarrage de l'ESP32, les broches du bus (CSN, SCLK, MOSI) sont en
-  # haute impédance : un front parasite sur CSN est lu par la puce comme le début d'une transaction
-  # SPI et peut corrompre ses registres — d'autant plus si elle était restée en RX ou en cours de
-  # calibration. La repasser en IDLE avant l'arrêt propre lui donne un état CONNU au démarrage
-  # suivant (le pull-up externe de 10 kΩ sur CSN traite la même fenêtre, par le matériel).
-  #
-  # RÉTABLI le 03/10 : ces deux blocs venaient du projet de référence, où ils « assurent le bon
-  # démarrage après OTA ». Ils avaient été désactivés ici pour un test (« VARIANTE D ») et jamais
-  # remis en service — voir state/PROGRESS.md.
-  # Priorité 600 = exécuté tôt dans la séquence d'arrêt, avant que le journal ne se taise.
+  # Put the radio in IDLE before a clean stop: the chip keeps its registers while the ESP32
+  # restarts, and its bus lines float during that restart. See design notes §6.
   on_shutdown:
     priority: 600.0
     then:
@@ -59,50 +30,35 @@ esphome:
 esp32:
   board: esp32-c3-devkitm-1
   framework:
-    # BASCULE EN esp-idf (test du 30/09 23:1x) : c'est le framework du montage témoin qui
-    # décode (`framework: type: esp-idf` dans son YAML), et ESPHome fait d'ESP-IDF le framework
-    # par défaut des ESP32 depuis 2026.1. Le projet était resté sur `arduino` à cause d'un
-    # blocage d'installation (« Can't create Python virtual environment for ESP-IDF 5.5.5 ») dû
-    # au Python Debian sans ensurepip — blocage résolu depuis : ce build tourne sur le CPython
-    # autonome de .venv (voir tools/fix_python_env.sh), et le toolchain IDF est en cache
-    # (~/.cache/esphome/idf, 2,8 Go). Si la bascule casse quelque chose, revenir à `arduino` :
-    # c'est le seul changement de ce test.
     type: esp-idf
 
 logger:
-  level: DEBUG
-  logs:
-    cc1101: DEBUG
-    v7in1: DEBUG
+  # Production level on purpose. Everything periodic is logged at DEBUG, so a normal build stays
+  # quiet; raise to DEBUG (or add `logs: {v7in1: DEBUG}`) when chasing a reception problem.
+  # Only the frame line (see on_frame) stays at INFO: the host tools parse it.
+  level: INFO
 
 api:
   encryption:
     key: !secret api_key
-  # Pas de reboot automatique quand aucun client n'est connecté : cela évite de
-  # couper une session de capture de logs (l'agent se connecte par périodes).
-  reboot_timeout: 0s
+  reboot_timeout: 0s        # never reboot on client disconnect: it would cut a capture session
 
 ota:
-  # Authentification par la clé de chiffrement de l'API (pas de mot de passe séparé :
-  # la clé API suffit et économise flash + RAM). `encryption:` vide = on offre la clé API.
   - platform: esphome
-    encryption: {}
+    encryption: {}          # inherits the API key: no separate OTA password
     on_begin:
       then:
-        # Second moment où l'on met la puce en IDLE juste avant un redémarrage : pendant tout
-        # l'OTA, la radio reste ainsi dans un état connu au lieu de rester en RX.
-        - logger.log: "OTA en cours : passage du CC1101 en IDLE..."
+        # Second moment the radio is parked in IDLE, during a whole update. See design notes §6.
+        - logger.log:
+            format: "OTA en cours : passage du CC1101 en IDLE..."
+            level: DEBUG
         - cc1101.set_idle:
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  # 8,5 dB = minimum accepté : puissance d'émission réduite (le routeur/DNS de l'utilisateur
-  # rejette la carte avec la puissance par défaut).
-  output_power: 8.5dB
-  # Adresse fixe utilisée pour l'OTA et les logs : le Wi-Fi est sur 172.16.0.0/24, alors que
-  # ce conteneur est sur 192.168.2.0/24 (le mDNS ne traverse pas la passerelle).
-  use_address: 172.16.0.205
+  output_power: 8.5dB       # the router rejects the default transmit power
+  use_address: 172.16.0.205 # fixed address: mDNS does not cross the gateway
   ap:
     ssid: "Vevor-7in1 Fallback"
     password: !secret ap_password
@@ -113,16 +69,8 @@ external_components:
   - source:
       type: local
       path: components
-    # cc1101 : copie LOCALE du composant d'ESPHome, modifiée pour relire l'identité de la puce
-    # (4 essais à 50 ms dans configure(), puis jusqu'à 60 relectures NON BLOQUANTES à 250 ms —
-    # ~15 s — depuis loop()) au lieu d'une seule, et journaliser CHIP_RDYn (voir cc1101.cpp).
-    # 02/10 : pilote LOCAL rétabli, avec le correctif d'entrée en RX (réessais au lieu d'abandonner,
-    # cf. cc1101.cpp enter_calibrated_) — c'est le test qui dit si le garde-fou peut ré-armer sans
-    # condamner la session. Le test « pilote d'origine » est tombé sur un démarrage en état A et n'a
-    # rien prouvé ; il reste à refaire sur plusieurs démarrages.
-    # Pilote LOCAL (copie modifiée d'ESPHome) : relectures d'identité, contrôle des écritures,
-    # diagnostic de calibration VCO. Cadence SPI à 1 MHz — mesuré le 02/10 : à 200 kHz la puce sort
-    # un flux de bruit et ne décode rien, à 1 MHz elle décode toutes les rafales de la station.
+    # Local copy of ESPHome's cc1101 driver: identity re-reads, verified writes, VCO calibration
+    # diagnostics, SPI at 1 MHz. See design notes §5.
     components: [vevor_7in1, cc1101]
 
 spi:
@@ -132,93 +80,41 @@ spi:
 
 cc1101:
   id: radio
-  # `allow_other_uses` RETIRÉ : ce composant n'a plus aucun périphérique SPI en partage. Règle
-  # dure, mesurée (01/10/2026) : un second périphérique sur le bus du `cc1101` — même sur une
-  # broche CS libre et non câblée — rend la puce muette (0 trame et 0-4 captures RMT avec lui,
-  # 5 trames/60 s sans lui). La puce doit rester le SEUL périphérique de son bus
-  # (voir state/DONE.md §1b et l'en-tête de components/vevor_7in1/vevor_7in1.h).
   cs_pin:
     number: GPIO7
-    # `mode` AVEC PULL-UP — c'est LA différence trouvée le 02/10 à 00h55 en comparant au firmware de
-    # référence, qui déclare exactement ceci : `cs_pin: {number: GPIO7, mode: {output: true,
-    # pullup: true}}`. Sans pull-up, la ligne CS FLOTTE pendant tout le démarrage de l'ESP32 (avant
-    # que le firmware ne configure la broche en sortie) : la puce peut y voir des sélections
-    # parasites et se retrouver dans l'état INDÉTERMINÉ que décrit la datasheet (§4.9 / Table 18),
-    # ce qui collait exactement avec nos symptômes variables d'un démarrage à l'autre (0xFFFF au
-    # démarrage, ou puce prête mais qui ne démodule rien). Le pull-up maintient CS inactif (haut)
-    # tant que personne ne le pilote.
     mode:
       output: true
-      pullup: true
-  # PAS de `gdo0_pin` ici, volontairement : le composant cc1101 appellerait un
-  # `pin_mode(FLAG_INPUT)` DIFFÉRÉ sur la broche, donc après que remote_receiver a configuré
-  # sa voie RMT — et le RMT ne capturait alors plus rien (constaté : sonde voyant la broche
-  # bouger, captures=0). Le GDO0 est consommé par remote_receiver, qui en est le seul maître.
+      pullup: true          # an external 10 kΩ pull-up to 3V3 is fitted as well (design notes §6)
+  # No gdo0_pin here on purpose: the cc1101 component would take the pin back from the
+  # remote_receiver RMT channel. No packet_mode either: the asynchronous path is the one that
+  # works on this build. Both points in design notes §7.
   frequency: ${freq_mhz}MHz
   modulation_type: 2-FSK
   symbol_rate: ${symbol_rate}
   fsk_deviation: ${deviation_khz}kHz
   filter_bandwidth: ${bw_khz}kHz
-  # `num_preamble` et `magn_target` RETIRÉS (test du 30/09 23:1x) : le montage témoin qui décode
-  # n'en met aucun, donc il tourne avec les DÉFAUTS d'ESPHome — et l'un des deux n'est pas neutre :
-  # `magn_target` (AGCCTRL2) vaut 42 dB par défaut et nous le forcions à 33 dB, soit 9 dB de gain
-  # AGC en moins sur un signal déjà faible (RSSI mesuré −104 dBm au plancher, −87 dBm sur rafale).
-  # Nos deux blocs `cc1101` sont maintenant identiques, champ par champ.
-  # num_preamble: 4        # TX uniquement, sans effet en réception
-  # magn_target: 33dB      # 9 dB de gain AGC en moins que le défaut (42dB)
-  # PAS de `packet_mode` : le composant met alors la puce en MODE SÉRIE ASYNCHRONE
-  # (PKT_FORMAT = 3) et sort le signal démodulé sur GDO0. C'est cette voie — et non le mode
-  # packet — qui a fait ses preuves sur ce montage (voir state/PROGRESS.md). En mode packet,
-  # la même configuration n'a jamais produit une seule trame cohérente.
 
 remote_receiver:
   id: rf_receiver
   pin:
-    number: GPIO3          # même GDO0 que le CC1101 (câblage à une seule broche de données)
-    # `allow_other_uses` retiré en même temps que la sonde : ESPHome refuse le partage déclaré
-    # quand plus personne d'autre n'utilise la broche (« Pin 3 incorrectly sets
-    # allow_other_uses: true ») — c'est ce qui a fait échouer le build du 30/09 22:45.
-  # Réglages repris du montage témoin qui décode cette station sur cette carte (lus dans son log
-  # de démarrage) : filtre 45 us, idle 1100 us.
-  #   - 45 us ≈ une DEMI-période bit : les impulsions plus courtes sont du bruit, et en filtrer
-  #     trop peu est pire que rien. Notre ancien `filter: 10us` laissait passer des glitches de
-  #     26-50 us ; chacun ajoute un front parasite au milieu de la rafale et décale tout ce qui
-  #     suit → aucune trame, jamais, alors que les captures étaient pleines.
-  #   - 1100 us de silence closent la rafale : une rafale = une capture complète (166-178
-  #     impulsions mesurées chez le témoin). Nos 10 ms gardaient la capture ouverte entre deux
-  #     rafales.
-  filter: 45us
-  idle: 1100us
-  # Tampon LOGICIEL de capture (indépendant du bloc mémoire matériel de 96 symboles du C3) :
-  # ~211 bits par trame, avec de la marge. C'est ce qui permet à une rafale entière d'arriver
-  # d'un seul bloc — vérifié chez le témoin : « Salve RF recue : 166 impulsions ».
+    number: GPIO3          # the CC1101 GDO0 pin — a single data wire
+  filter: 45us             # half a bit period: shorter pulses are noise (design notes §7)
+  idle: 1100us             # closes one burst into one capture
   receive_symbols: 512
   tolerance: 25%
 
-# Notre extracteur de trames : impulsions -> bits -> 21 octets, remis au YAML ci-dessous.
+# Pulses → bits → 21 bytes. The component only hands over already-validated frames.
 vevor_7in1:
   id: vevor_rx
   receiver_id: rf_receiver
-  # Période bit de référence ; le composant essaie 90, 88, 89 et 87 us à chaque capture, et
-  # journalise celle qui gagne.
-  bit_period: 90us
-  # AUCUN cs_pin, AUCUNE clé d'instrumentation : ce composant n'a plus aucun accès SPI (voir
-  # l'avertissement en tête de components/vevor_7in1/vevor_7in1.h). La puce CC1101 doit rester le
-  # SEUL périphérique de son bus — un second périphérique SPI, même sur une broche CS libre, la
-  # rend muette (mesuré le 01/10/2026).
+  bit_period: 90us         # 90, 88, 89 and 87 µs are all tried on each capture
   on_frame:
     then:
       - lambda: |-
-          // Le composant ne livre QUE des trames déjà validées : 21 octets, en-tête, checksum et
-          // compteur vérifiés dans includes/vevor_protocol.h. Ici : extraire les valeurs, publier.
-          // Le compteur de trames REFUSÉES vit dans le composant (« Trames rejetées » ci-dessous,
-          // publié par l'interval) et compte les candidats dont le mot de synchronisation a été
-          // vu mais que la validation a écartés — c'est le vrai indicateur de bruit du décodage,
-          // distinct de « rien n'arrive à la puce » (compteur « Captures RMT »).
           vevor::Frame f;
           const char *reason = "taille";
           if (x.size() != vevor::FRAME_BYTES || !vevor::decode(x.data(), f, &reason)) {
-            // Filet de sécurité : ne devrait jamais arriver.
+            // Safety net: should never happen, the component validates before handing over.
             ESP_LOGW("v7in1", "V7IN1 ANOMALIE trame livree invalide (%u octets, %s)",
                      (unsigned) x.size(), reason);
             id(reason_sensor).publish_state(reason);
@@ -239,37 +135,25 @@ vevor_7in1:
           id(rain_total).publish_state(f.rain_mm);
           id(uv_index).publish_state(f.uv_index);
           id(light_lux).publish_state(f.lux);
+          // One line per frame (one every 20 s). Deliberately at INFO: the host tools read it.
           ESP_LOGI("v7in1", "V7IN1 OK %s", vevor::to_json(f).c_str());
+
 globals:
-  # Compteur de redémarrages effectués alors que la puce était muette sur le bus SPI. PERSISTANT
-  # (restore_value) : c'est ce qui borne les tentatives, pour ne pas boucler indéfiniment sur un
-  # matériel réellement hors service. Remis à zéro dès qu'une trame est publiée.
+  # Counts reboots while the radio was silent. Persistent so a really dead board cannot loop.
   - id: g_reboots_radio
     type: int
     restore_value: true
     initial_value: "0"
 
-# Ré-armement radio : UNE seule implémentation, appelée par le bouton ET par la surveillance
-# automatique (interval de 20 s plus bas). C'est l'entrée en RX qui retente le verrouillage PLL
-# (cc1101.cpp : enter_calibrated_ avec PLL_LOCK_RETRIES) — donc le seul levier à chaud contre une
-# puce restée en IDLE après un démarrage raté.
 script:
+  # The single re-arm implementation, called by the button AND by the watchdog: one cc1101.reset
+  # (strobe + full configure). Never a chain of setters — see design notes §8.
   - id: rearmer_radio
-    # CORRIGÉ le 02/10 — NE PAS enchaîner les actions `cc1101.set_*` : dans le composant, chacune
-    # fait `if (initialized_) { enter_idle_(); ...; enter_rx_(); }` (voir set_frequency dans
-    # cc1101.cpp). Sept actions enchaînées = sept cycles de reconfiguration complets, et le
-    # garde-fou les rejouait toutes les 20 s. La puce passait donc son temps en IDLE et en
-    # recalibration au lieu d'écouter — c'est ce qui expliquait « 0 trame alors que la station
-    # émet », et pourquoi la seule heure saine du 01/10 (où les trames arrivaient, donc où le
-    # garde-fou ne se déclenchait jamais) a donné 180 trames.
-    # `cc1101.reset` fait déjà strobe(SRES) + configure() complet, en réutilisant les valeurs de
-    # fréquence/modulation/débit déjà en mémoire : c'est tout ce qu'il faut.
     then:
       - cc1101.reset: radio
 
-# Lecture à distance des compteurs internes du composant : sans ça, « combien de captures ? »
-# n'est lisible que dans les battements de cœur du log (et pas dans un relevé d'entités).
 interval:
+  # Internal counters, published as entities.
   - interval: 10s
     then:
       - lambda: |-
@@ -277,18 +161,9 @@ interval:
           id(valid_sensor).publish_state(id(vevor_rx).get_frames());
           id(rejected_sensor).publish_state(id(vevor_rx).get_rejected());
           id(duplicates_sensor).publish_state(id(vevor_rx).get_duplicates());
-  # SURVEILLANCE DE LA RADIO (20 s) — mesuré le 01/10 : un démarrage sur deux lève la puce ABSENTE
-  # DU BUS SPI (le composant relit « Chip ID: 0xFFFF », toutes les lectures à 0xFF). Elle n'est
-  # alors jamais configurée, reste en IDLE, et rien n'arrive sur GDO0 — alors que la station émet.
-  # Le ré-armement à chaud est INEFFICACE (3 tentatives, 3 « Failed to verify » mesurés) ; le
-  # REDÉMARRAGE récupère (l'état de la puce s'inverse d'un démarrage à l'autre). Ces lignes
-  # partaient auparavant avant que l'API soit joignable : le défaut était invisible de l'extérieur.
-  #
-  # Le critère est le nombre de TRAMES PUBLIÉES, et non de captures : en état sourd il arrive
-  # encore quelques captures parasites (3 à 5 par fenêtre), qui remettaient à zéro un compteur
-  #   basé sur les captures — le redémarrage ne partait donc jamais (constaté sur une fenêtre de
-  #   9 minutes : 7 lignes « EN ECHEC », 0 redémarrage).
-  # Cadence 20 s : les tentatives d'initialisation rapprochées du mode 1 ont besoin d'être serrées.
+  # Watchdog. The station transmits one burst every 20 s, day and night, so any silence is a
+  # receiver fault. The criterion is PUBLISHED FRAMES, never captures. 30 × 20 s of gentle
+  # re-arms, then a reboot — the only remedy measured so far. See design notes §8.
   - interval: 20s
     then:
       - lambda: |-
@@ -298,72 +173,45 @@ interval:
           if (t != dernieres_trames) {
             dernieres_trames = t;
             muettes = 0;
-            id(g_reboots_radio) = 0;   // la chaîne complète vit : plus de dette de tentatives
+            id(g_reboots_radio) = 0;
             return;
           }
           muettes++;
-          ESP_LOGI("v7in1", "SANTE radio=%s trames=%u captures=%u (aucune trame depuis %d s)",
+          ESP_LOGD("v7in1", "SANTE radio=%s trames=%u captures=%u (aucune trame depuis %d s)",
                    id(radio).is_failed() ? "EN ECHEC" : "ok", (unsigned) t,
                    (unsigned) id(vevor_rx).get_captures(), muettes * 20);
-          // Règle de base : cette station émet une rafale toutes les 20 s, JOUR ET NUIT (confirmé
-          // par l'utilisateur le 01/10). Un silence de plusieurs minutes est donc TOUJOURS une
-          // panne du récepteur — plus besoin de distinguer « station à l'arrêt » de « carte
-          // sourde », ce qui autorise un redémarrage sans conditions. Le journal garde la
-          // distinction (radio EN ECHEC = puce muette sur le SPI ; radio ok = chaîne RF/RMT), pour
-          // savoir ce qu'on répare.
-          // 02/10 : 9 tentatives (3 min) laissaient trop peu de temps à une première rafale ; le
-          // seuil passe à 30 (10 min) pour qu'un silence court ne fasse plus rien du tout.
           if (muettes <= 30) {
-            // 10 minutes de tentatives d'initialisation douces (30 × 20 s) — c'est ce que recommande le fil TI
-            // « CC1101 not responding to SPI » (le quartz démarre tardivement, la puce finit par
-            // répondre si on insiste) ; une tentative coûte 10 ms. Mesuré : inefficace en mode
-            // « puce muette », mais gratuit et parfois suffisant en mode « radio saine ».
-            ESP_LOGW("v7in1", "aucune trame depuis %d s — tentative d'initialisation radio %d/30",
+            ESP_LOGD("v7in1", "aucune trame depuis %d s — tentative d'initialisation radio %d/30",
                      muettes * 20, muettes);
             id(rearmer_radio).execute();
             return;
           }
-          // Redémarrage : seul remède mesuré (l'état de la puce change d'un démarrage à l'autre ;
-          // quand son quartz tourne, tout fonctionne — mesuré sur une heure entière à 180 trames).
-          // Dix redémarrages (un par cycle de ~10 min), puis un par 15 min : la carte ne
-          // renonce jamais, sans passer son temps à redémarrer.
           if (id(g_reboots_radio) < 10 || (muettes % 45) == 0) {
             id(g_reboots_radio) = id(g_reboots_radio) + 1;
-            ESP_LOGE("v7in1", "aucune trame depuis %d min (radio %s, captures=%u) — redémarrage "
-                              "n°%d (seul remède mesuré)",
+            ESP_LOGW("v7in1", "aucune trame depuis %d min (radio %s, captures=%u) — redemarrage n°%d",
                      muettes / 3, id(radio).is_failed() ? "EN ECHEC" : "ok",
                      (unsigned) id(vevor_rx).get_captures(), (int) id(g_reboots_radio));
             App.safe_reboot();
           }
 
 button:
-  # Instrument : demande la journalisation des impulsions de la PROCHAINE capture (64 durées en
-  # clair). L'API ne livre pas l'historique et les premières captures sont déjà passées quand
-  # l'API devient joignable : sans ce bouton, on analyse le flux à l'aveugle de l'extérieur.
+  # Diagnostic instruments, exposed in Home Assistant as configuration entities.
   - platform: template
     name: "Dump impulsions"
     id: dump_button
     entity_category: config
     on_press:
       - lambda: id(vevor_rx).request_raw_dump();
-  # Ré-applique TOUS les réglages radio à chaud (mêmes valeurs que la configuration), puis
-  # relance la réception. Sert à trancher un soupçon précis : après un OTA, le CC1101 peut-il
-  # rester dans un état partiellement configuré (il garde ses registres, l'ESP32 seul redémarre) ?
-  # Si le récepteur revient à la vie après ce bouton, la cause est là — et non dans l'antenne.
   - platform: template
     name: "Réappliquer la config radio"
     id: radio_reapply_button
     entity_category: config
     on_press:
       then:
-        # Une seule implémentation de la séquence : le script `rearmer_radio` (voir plus haut). Le
-        # bouton et la surveillance automatique doivent réarmer EXACTEMENT pareil, sinon on ne sait
-        # plus ce qu'on a testé.
         - script.execute: rearmer_radio
-  # Redémarrage à la demande. Utile parce que c'est LE remède mesuré au mutisme SPI (l'état de la
-  # puce s'inverse à chaque démarrage) : sans ce bouton, il fallait reflasher pour redémarrer.
   - platform: restart
     name: "Redémarrer la carte"
+
 number:
   - platform: template
     name: "Fréquence CC1101"
@@ -372,11 +220,9 @@ number:
     min_value: 430.0
     max_value: 930.0
     step: 0.005
-    # `restore_value: true` rejouait la valeur MÉMORISÉE (868,35) au démarrage, donc elle écrasait
-    # le réglage compilé : c'est ce qui a rendu les tests de fréquence ambigus. On aligne tout.
     initial_value: 868.35
     optimistic: true
-    restore_value: false
+    restore_value: false     # a restored value used to override the compiled frequency
     entity_category: config
     on_value:
       then:
@@ -477,9 +323,7 @@ text_sensor:
     name: "Dernière trame brute"
     id: raw_sensor
     entity_category: diagnostic
-  # Verdict de la dernière trame livrée par le composant : « ok », ou la raison du refus si une
-  # trame invalide arrivait malgré tout (filet de sécurité — le comptage des refus, lui, est dans
-  # « Trames rejetées »).
+  # Verdict on the last frame handed over: "ok", or the reason it was refused.
   - platform: template
     name: "Dernier verdict"
     id: reason_sensor
