@@ -11,12 +11,13 @@ témoin décode la station à cet instant et à cet endroit. Il sert de mesure d
 carte tourne le témoin (l'API native, elle, est chiffrée avec une autre clé : inaccessible).
 
 Usage :
-  tools/witness_probe.py --host 172.16.0.205 --seconds 90
+dev/tools/witness_probe.py --host <ip-de-la-carte> --seconds 90
 Sortie : logs/witness_probe_<AAAAMMJJ_HHMM>.log + résumé sur la sortie standard.
 """
 
 from __future__ import annotations
 
+import os
 import argparse
 import datetime as dt
 import socket
@@ -33,7 +34,9 @@ ROOT = DEV.parent                               # racine du dépôt
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="172.16.0.205")
+    ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
+                    required="VEVOR_HOST" not in os.environ,
+                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
     ap.add_argument("--seconds", type=float, default=90.0)
     ap.add_argument("--out", default=None)
     args = ap.parse_args()

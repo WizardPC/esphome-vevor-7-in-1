@@ -11,7 +11,7 @@ donc dans ce flux, **indépendamment de la polarité et de l'alignement bit à b
      (`sum(b[0..18]) & 0xFF == b[19]` et `b[20] == (b[18]+1) & 0xFF`).
 
 Usage :
-    tools/analyze_stream.py logs/stream1.log [--json logs/stream_analysis.json]
+ dev/tools/analyze_stream.py logs/stream1.log [--json logs/stream_analysis.json]
 """
 
 from __future__ import annotations

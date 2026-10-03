@@ -38,7 +38,9 @@ DEV = pathlib.Path(__file__).resolve().parent.parent   # dev/
 ROOT = DEV.parent                                      # racine du dépôt
 DEFAULT_YAML = ROOT / "esphome" / "vevor-7in1.yaml"
 SECRETS_YAML = ROOT / "esphome" / "secrets.yaml"
-DEFAULT_HOST = "172.16.0.205"
+# Aucune adresse en dur : celle du réseau de l'auteur n'a rien à faire dans le dépôt. Elle
+# vient de l'environnement, ou l'outil la réclame et renvoie vers find_esp32.py.
+DEFAULT_HOST = os.environ.get("VEVOR_HOST", "")
 DEFAULT_PORT = 6053
 ESPHOME = ROOT / ".venv" / "bin" / "esphome"
 PY = ROOT / ".venv" / "bin" / "python"

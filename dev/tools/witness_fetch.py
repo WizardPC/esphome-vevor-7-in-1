@@ -5,11 +5,12 @@ Utile pour /logs : le serveur du témoin diffuse ses lignes de log, dont le dump
 démarrage (fréquence, déviation, bande, gain AGC…). C'est la seule source qui permet de comparer
 sa configuration radio à la nôtre champ par champ quand la carte tourne son firmware.
 
-Usage : tools/witness_fetch.py --host 172.16.0.205 --path /logs --seconds 20 --out logs/x.log
+Usage : tools/witness_fetch.py --host <ip-de-la-carte> --path /logs --seconds 20 --out logs/x.log
 """
 
 from __future__ import annotations
 
+import os
 import argparse
 import datetime as dt
 import socket
@@ -23,7 +24,9 @@ ROOT = DEV.parent                               # racine du dépôt
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="172.16.0.205")
+    ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
+                    required="VEVOR_HOST" not in os.environ,
+                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
     ap.add_argument("--path", default="/logs")
     ap.add_argument("--seconds", type=float, default=20.0)
     ap.add_argument("--out", required=True)

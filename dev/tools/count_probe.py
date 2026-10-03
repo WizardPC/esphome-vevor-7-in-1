@@ -7,7 +7,7 @@ compteurs « Trames valides » / « Trames rejetées » sont des entités d'éta
 dès qu'un paquet est reçu, indépendamment du flux de logs. Comparer les deux lève le doute.
 
 Usage:
-    tools/count_probe.py --host 172.16.0.205 [--seconds 30] [--json logs/count_probe.json]
+ dev/tools/count_probe.py --host <ip-de-la-carte> [--seconds 30] [--json logs/count_probe.json]
 
 Code retour :
     0  mesure faite ; un delta de 0 paquet est le RÉSULTAT « aucune trame » ;

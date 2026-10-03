@@ -98,12 +98,12 @@ GPIO2/GPIO8/GPIO9 sont des pins de strapping sur ESP32-C3 : on évite GPIO2 pour
 
 ## Environnement
 
-- LXC Debian 13, IP `192.168.2.167` ; Home Assistant `192.168.2.104` (HA Core ne répondait pas
+- LXC Debian 13, IP `<conteneur>` ; Home Assistant `<home-assistant>` (HA Core ne répondait pas
   sur 8123 au 30/09 ; le token est dans `.ha_token`).
 - **La carte peut être déplacée** : l'utilisateur a proposé de la mettre ailleurs si la réception
   868 MHz est mauvaise. Conséquence opérationnelle : **si `/dev/ttyACM0` disparaît** (carte
   débranchée de l'hôte Proxmox), le flash USB n'est plus possible → flasher en **OTA**
-  (`tools/flash.sh 172.16.0.205`). Les logs restent disponibles par l'API native, mais une carte
+  (`tools/flash.sh <ip-de-la-carte>`). Les logs restent disponibles par l'API native, mais une carte
   dont le Wi-Fi casse doit être rapportée physiquement à l'hôte pour être récupérée en USB.
 - ESPHome dans `~/projets/vevor-7in1/.venv` (Python autonome + `esphome`, `aioesphomeapi`).
 - Logs ESP32 lus via l'API native (port 6053) avec `tools/capture_logs.py` — **indépendant
@@ -133,7 +133,7 @@ Voir `references/HOME_ASSISTANT.md` pour l'intégration HA et ce qui est scripta
   ce n'est pas une instabilité, c'est le garde-fou. La formulation d'origine est datée.
 - **Règles de répartition / anti-collision** : elles visaient deux agents écrivant en même temps.
   Elles n'ont plus d'objet si une seule session travaille ; les garder quand deux processus tournent.
-- **Faits d'environnement datés** (LXC `192.168.2.167`, HA `192.168.2.104`, HA Core muet sur 8123 au
+- **Faits d'environnement datés** (LXC `<conteneur>`, HA `<home-assistant>`, HA Core muet sur 8123 au
   30/09) : à rafraîchir si l'installation change — pas des exigences du projet.
 - **Fait corrigé** : le fichier décodeur cité en tête de ce document (`esphome/components/vevor_7in1/vevor_7in1.h`)
   n'existait pas ; le décodeur est `esphome/components/vevor_7in1/vevor_protocol.h` (l'en-tête `vevor_7in1.h` est

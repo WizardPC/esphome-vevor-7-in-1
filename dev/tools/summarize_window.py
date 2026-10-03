@@ -16,7 +16,7 @@ En complément, le résumé ajoute `wind_dir_deg` (plage des directions) et `val
 deux anomalies structurellement invisibles dans l'ancien format.
 
 Usage :
-    tools/summarize_window.py logs/capture.log [--rapport evidence/rapport.json]
+ dev/tools/summarize_window.py logs/capture.log [--rapport evidence/rapport.json]
                                  [--json evidence/resume.json] [--txt evidence/resume.txt]
 
 Code retour :

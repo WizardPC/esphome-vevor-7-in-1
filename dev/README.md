@@ -234,10 +234,10 @@ tools/build.sh                       # writes BUILD OK / BUILD FAIL to build/las
 #    An ESP32-C3 flashed over USB shows up as /dev/ttyACM0 (the C3's USB-Serial-JTAG).
 #    /dev/ttyUSB0 may exist as an unusable node (c---------) : do not target it by default.
 tools/flash.sh /dev/ttyACM0
-tools/flash.sh 172.16.0.205          # OTA afterwards
+tools/flash.sh <ip-de-la-carte>          # OTA afterwards
 
 # 5. Capture the board's logs (native API, port 6053 — no browser needed)
-.venv/bin/python tools/capture_logs.py --host 172.16.0.205 --seconds 120 \
+.venv/bin/python tools/capture_logs.py --host <ip-de-la-carte> --seconds 120 \
     --out logs/capture_$(date +%Y%m%d_%H%M%S).log
 
 # 6. Evaluate the captured frames (independent Python decoder + acceptance criteria)

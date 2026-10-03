@@ -17,7 +17,7 @@ contrôle rtl_433 et compteur cohérent — en essayant les 4 périodes candidat
 et les 8 décalages de bit.
 
 Usage :
-    tools/decoder_dump.py logs/dump_brut.log [--json logs/dump_decode.json]
+ dev/tools/decoder_dump.py logs/dump_brut.log [--json logs/dump_decode.json]
 
 Code retour :
     0  au moins une capture lue ; « 0 trame valide » est un RÉSULTAT négatif ;

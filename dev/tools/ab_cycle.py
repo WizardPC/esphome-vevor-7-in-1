@@ -13,7 +13,7 @@ La table des variantes est celle de `_common.VARIANTS` (source de vérité uniqu
 `boot_probe.py`) ; un nom inconnu échoue lisiblement au lieu de lever un KeyError.
 
 Usage :
-    tools/ab_cycle.py --rounds 2 --seconds 100 [--variants temoin,prod,origine]
+ dev/tools/ab_cycle.py --rounds 2 --seconds 100 [--variants temoin,prod,origine]
 
 Code retour :
     0  toutes les mesures sont exploitables (« aucune trame » est un RÉSULTAT négatif) ;

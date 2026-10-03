@@ -16,6 +16,7 @@ Code retour :
 """
 from __future__ import annotations
 
+import os
 import argparse
 import asyncio
 import datetime
@@ -88,7 +89,9 @@ async def run(host: str, port: int, key: str, mhz: float, seconds: float) -> int
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="172.16.0.205")
+    ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
+                    required="VEVOR_HOST" not in os.environ,
+                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
     ap.add_argument("--port", type=int, default=6053)
     ap.add_argument("--yaml", default="esphome/vevor-7in1.yaml")
     ap.add_argument("--mhz", type=float, default=868.35)

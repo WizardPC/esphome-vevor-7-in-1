@@ -2,7 +2,7 @@
 # Flash le firmware, en USB (--device /dev/ttyUSB0) ou en OTA (--device IP).
 # Usage: tools/flash.sh [cible] [nom_yaml]
 #   tools/flash.sh /dev/ttyUSB0
-#   tools/flash.sh 192.168.2.50
+#   tools/flash.sh <ip-de-la-carte>
 #
 # Le code retour est toujours celui d'ESPHome ; un marqueur FLASH OK / FLASH FAIL est écrit
 # dans logs/last_flash_status.txt (la sortie peut passer par un pipe sans le perdre).

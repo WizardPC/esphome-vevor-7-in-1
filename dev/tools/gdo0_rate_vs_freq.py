@@ -8,7 +8,7 @@ cette activité dépend de la fréquence : si elle est identique à 867,000 MHz 
 alors l'activité observée est du bruit interne à la puce et ne peut PAS servir de détecteur.
 
 Usage:
-    tools/gdo0_rate_vs_freq.py logs/gdo0_freq_*.log [--out logs/gdo0_rate_vs_freq.json]
+ dev/tools/gdo0_rate_vs_freq.py logs/gdo0_freq_*.log [--out logs/gdo0_rate_vs_freq.json]
 
 Chaque fichier doit contenir des lignes « sonde GDO0 : N transition(s) en U us » et des lignes
 « captures=N (+d), trames=T, dernières impulsions=P, plus longue=L ».

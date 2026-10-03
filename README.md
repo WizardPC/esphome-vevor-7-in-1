@@ -71,20 +71,33 @@ touch the RF path between the chip and the antenna.
 2. Paste the content of [`esphome/vevor-7in1.yaml`](esphome/vevor-7in1.yaml) into the device's
    config. It is self-contained: it pulls its components from this public repository, no file of
    this repo is needed next to it.
-3. Create `secrets.yaml` next to it with three keys
-   ([`esphome/secrets.yaml.example`](esphome/secrets.yaml.example) gives the exact names):
-   `wifi_ssid`, `wifi_password`, `api_key`.
+3. Create `secrets.yaml` next to it with four keys:
+   `wifi_ssid`, `wifi_password`, `ap_password`, `api_key`
+   ([`esphome/secrets.yaml.example`](esphome/secrets.yaml.example) gives the exact names).
 4. **Install** → *Plug into this computer* the first time (USB), then over the air by IP.
 
-Nothing else to configure: the board needs no location, no time zone and no clock.
+Nothing else to configure: the board needs no location, no time zone and no clock, and it carries
+**no IP address, no network name and no station identifier** — every value that depends on *your*
+installation stays in `secrets.yaml`, which never leaves your machine.
+
+Two optional keys exist for the cases where the network gets in the way, both documented in
+`secrets.yaml.example`:
+
+* **`use_address`** — only if ESPHome cannot find the board over the network. Home Assistant
+  normally reaches it by name (mDNS); set a fixed address if your board sits behind a gateway, on
+  another subnet or in a VLAN, where that name does not resolve. Symptom: the compile succeeds and
+  the upload fails with *no route to host*.
+* **`wifi_output_power`** — if your access point refuses the default transmit power. Symptom: the
+  board never appears on the network after flashing.
 
 ---
 
 ## 4. What it publishes to Home Assistant
 
-All entities below are declared in `esphome/vevor-7in1.yaml`. **`name:` values are French** (changing
-them would rename existing entities in an already-running installation) — rename them in the YAML if
-you want another language. Automations should bind to the entity `id` and to the published *values*.
+All entities below are declared in `esphome/vevor-7in1.yaml`. **`name:` values are English** (they
+were French until 03/10/2026); rename them in the YAML if you want another language — the entity
+`id` and the published *values* are what automations should bind to. Changing a name in an
+already-running installation creates *new* entities in Home Assistant: the old ones go unavailable.
 
 ### Measurements
 

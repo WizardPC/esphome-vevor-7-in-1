@@ -6,10 +6,10 @@ chercher la station. On pilote l'entité `number` « Fréquence CC1101 » du fir
 lit le nombre de trames reçues (valides + rejetées) et le RSSI pendant chaque palier.
 
 Usage:
-    scan_freq.py --host 192.168.2.50 [--key CLE] [--start 867.8 --stop 868.6 --step 0.05]
+    scan_freq.py --host <ip-de-la-carte> [--key CLE] [--start 867.8 --stop 868.6 --step 0.05]
                  [--dwell 25] [--out scan.json]
-    scan_freq.py --host 192.168.2.50 --list          # liste les entités exposées
-    scan_freq.py --host 192.168.2.50 --set 868.30    # règle juste la fréquence
+    scan_freq.py --host <ip-de-la-carte> --list          # liste les entités exposées
+    scan_freq.py --host <ip-de-la-carte> --set 868.30    # règle juste la fréquence
 
 Un palier doit durer au moins ~25 s : la station n'émet qu'une rafale toutes les 20 s.
 

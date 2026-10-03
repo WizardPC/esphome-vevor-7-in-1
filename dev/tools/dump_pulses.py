@@ -7,10 +7,11 @@ demande en attente (`request_raw_dump()`) et journalise, pour la PROCHAINE captu
 premières durées en clair — seule façon d'analyser le flux réel depuis l'extérieur.
 
 Usage :
-    tools/dump_pulses.py [--host 172.16.0.205] [--seconds 45] [--out logs/dump_pulses.log]
+ dev/tools/dump_pulses.py [--host <ip-de-la-carte>] [--seconds 45] [--out logs/dump_pulses.log]
 """
 from __future__ import annotations
 
+import os
 import argparse
 import asyncio
 import pathlib
@@ -25,7 +26,9 @@ from aioesphomeapi import APIClient
 
 async def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="172.16.0.205")
+    ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
+                    required="VEVOR_HOST" not in os.environ,
+                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
     ap.add_argument("--seconds", type=float, default=45.0)
     ap.add_argument("--out", default="logs/dump_pulses.log")
     args = ap.parse_args()

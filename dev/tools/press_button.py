@@ -7,7 +7,7 @@ fautif » contre « le chemin RF a changé » — sans reflasher. Le script note
 l'appui (témoin d'horodatage utilisé pour découper la fenêtre avant/après).
 
 Usage:
-    tools/press_button.py --name "Réappliquer la config radio" [--seconds 300] [--out logs/x.log]
+ dev/tools/press_button.py --name "Réappliquer la config radio" [--seconds 300] [--out logs/x.log]
 
 Code retour :
     0  fenêtre capturée, au moins une ligne de log reçue ;
@@ -16,6 +16,7 @@ Code retour :
 """
 from __future__ import annotations
 
+import os
 import argparse
 import asyncio
 import pathlib
@@ -31,7 +32,9 @@ from aioesphomeapi import APIClient  # noqa: E402
 
 async def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="172.16.0.205")
+    ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
+                    required="VEVOR_HOST" not in os.environ,
+                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
     ap.add_argument("--key", default=None, help="clé API base64 (défaut: env ESPHOME_API_KEY ou YAML)")
     ap.add_argument("--name", required=True, help="nom exact du bouton (voir --list-buttons)")
     ap.add_argument("--seconds", type=float, default=300.0)

@@ -8,7 +8,7 @@
 set -uo pipefail
 DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/ : outils, tests, docs, journaux
 ROOT="$(cd "$DEV/.." && pwd)"            # racine du dépôt : esphome/ y vit, et rien d'autre
-HOST=172.16.0.205
+HOST=<ip-de-la-carte>
 ROUNDS=6
 SEC=25
 FLASH=1

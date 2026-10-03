@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Retrouve l'IP de l'ESP32 (API native ESPHome sur 6053) — utilisé par la boucle autonome.
 
-Usage: find_esp32.py [--subnet 192.168.2] [--timeout 1.0] [--refresh]
+Usage: find_esp32.py --subnets <préfixes>  (ou VEVOR_SUBNETS dans l'environnement)
 
 Stratégie : si state/DEVICE_IP existe et répond encore, on le renvoie (rapide) ; sinon on
 scanne le /24 sur le port 6053, on mémorise le premier résultat dans state/DEVICE_IP.
@@ -10,6 +10,7 @@ de la boucle de détecter un changement d'état sans réveiller l'agent inutilem
 """
 from __future__ import annotations
 
+import os
 import argparse
 import ipaddress
 import pathlib
@@ -30,10 +31,11 @@ def open_port(ip: str, port: int, timeout: float) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--subnets", default="192.168.2,172.16.0",
-                    help="sous-réseaux à balayer. IMPORTANT : le Wi-Fi de la carte est sur "
-                         "172.16.0.0/24 (use_address 172.16.0.205) alors que ce conteneur est "
-                         "sur 192.168.2.0/24 — un scan limité à un seul des deux conclut à tort "
+    ap.add_argument("--subnets", default=os.environ.get("VEVOR_SUBNETS"),
+                    required="VEVOR_SUBNETS" not in os.environ,
+                    help="préfixes de sous-réseaux à balayer, séparés par des virgules (ex. "
+                         "« 192.168.1,192.168.2 »). Balayez TOUS les sous-réseaux que le trafic "
+                         "de la carte peut traverser : un scan limité à un seul conclut à tort "
                          "que la carte est absente.")
     ap.add_argument("--port", type=int, default=6053)
     ap.add_argument("--timeout", type=float, default=1.0)

@@ -2,7 +2,7 @@
 """Capture les logs d'un ESP32 ESPHome via l'API native (port 6053) pendant N secondes.
 
 Usage:
-    capture_logs.py --host 192.168.2.50 --seconds 90 [--key CLE_BASE64] [--out fichier.log]
+    capture_logs.py --host <ip-de-la-carte> --seconds 90 [--key CLE_BASE64] [--out fichier.log]
 
 Sans --key, utilise $ESPHOME_API_KEY ou la clé lue dans le YAML du projet
 (voir `_common.key_from_yaml`, qui résout `!secret`).

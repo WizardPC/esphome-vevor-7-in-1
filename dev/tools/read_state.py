@@ -11,7 +11,7 @@ Piège déjà rencontré ailleurs : `subscribe_states` ne livre pas les états i
 attend donc d'avoir reçu quelque chose, sinon on lirait des vides et on conclurait à tort.
 
 Usage:
-    tools/read_state.py [--host 172.16.0.205] [--json logs/state.json]
+ dev/tools/read_state.py [--host <ip-de-la-carte>] [--json logs/state.json]
 
 Code retour :
     0  au moins un état d'entité reçu ;
@@ -20,6 +20,7 @@ Code retour :
 """
 from __future__ import annotations
 
+import os
 import argparse
 import asyncio
 import pathlib
@@ -48,7 +49,9 @@ async def run(host: str, port: int, key: str | None) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="172.16.0.205")
+    ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
+                    required="VEVOR_HOST" not in os.environ,
+                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
     ap.add_argument("--port", type=int, default=6053)
     ap.add_argument("--key", default=None)
     ap.add_argument("--json", default=None, help="fichier JSON (relatif = racine du projet)")

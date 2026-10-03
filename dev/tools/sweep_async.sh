@@ -10,7 +10,12 @@
 set -uo pipefail
 DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/ : outils, tests, docs, journaux
 ROOT="$(cd "$DEV/.." && pwd)"            # racine du dépôt : esphome/ y vit, et rien d'autre
-HOST="${1:-172.16.0.205}"
+HOST="${1:-${VEVOR_HOST:-}}"
+if [ -z "$HOST" ]; then
+  echo "usage: $(basename "$0") <ip-de-la-carte> [secondes/palier] [début] [fin] [pas]" >&2
+  echo "  l'adresse peut aussi venir de la variable VEVOR_HOST, ou de dev/tools/find_esp32.py" >&2
+  exit 3
+fi
 DWELL="${2:-25}"
 START="${3:-867.80}"
 STOP="${4:-868.60}"

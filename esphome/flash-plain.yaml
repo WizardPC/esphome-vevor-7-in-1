@@ -13,12 +13,12 @@
 # `--file` avec le binaire déjà construit par vevor-7in1.yaml.
 #
 # Usage :
-#   .venv/bin/esphome upload esphome/flash-plain.yaml --device 172.16.0.205 \
+#   .venv/bin/esphome upload esphome/flash-plain.yaml --device <ip-de-la-carte> \
 #       --file esphome/.esphome/build/vevor-7in1/build/firmware.ota.bin
 
 esphome:
   name: vevor-7in1
-  friendly_name: Station Vevor 7-en-1
+  friendly_name: "Vevor 7-in-1 weather station"
 
 esp32:
   board: esp32-c3-devkitm-1
@@ -38,4 +38,4 @@ ota:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  use_address: 172.16.0.205
+  use_address: !secret use_address

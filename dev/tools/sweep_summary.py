@@ -7,7 +7,7 @@ le bruit en fabrique aussi. Les compteurs « captures » et « plus longue » so
 diagnostiquer l'instrument, pas pour conclure sur le signal.
 
 Usage:
-    tools/sweep_summary.py "logs/sweep1_frozen/*.log" --out logs/sweep1_summary.json
+ dev/tools/sweep_summary.py "logs/sweep1_frozen/*.log" --out logs/sweep1_summary.json
 """
 from __future__ import annotations
 

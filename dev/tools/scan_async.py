@@ -8,11 +8,12 @@ par l'API native. La cadence de captures et les durées d'impulsions ne sont PAS
 présence de signal (le bruit en produit autant) : seul le décodage d'une trame compte.
 
 Usage :
-    tools/scan_async.py --freqs 868.15,868.20,868.25,868.30,868.35 --dwell 25 \
-        [--host 172.16.0.205] [--out logs/scan_async.json]
+ dev/tools/scan_async.py --freqs 868.15,868.20,868.25,868.30,868.35 --dwell 25 \
+        [--host <ip-de-la-carte>] [--out logs/scan_async.json]
 """
 from __future__ import annotations
 
+import os
 import argparse
 import asyncio
 import pathlib
@@ -28,7 +29,9 @@ from aioesphomeapi import APIClient
 
 async def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="172.16.0.205")
+    ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
+                    required="VEVOR_HOST" not in os.environ,
+                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
     ap.add_argument("--freqs", required=True, help="liste séparée par des virgules, en MHz")
     ap.add_argument("--dwell", type=float, default=25.0, help="secondes par palier")
     ap.add_argument("--out", default="logs/scan_async.json")

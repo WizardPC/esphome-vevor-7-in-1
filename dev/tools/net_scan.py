@@ -2,13 +2,14 @@
 """Scanner réseau minimal pour ce projet : localise Home Assistant et les ESP32 ESPHome.
 
 Usage:
-    net_scan.py [--subnet 192.168.2] [--ports 8123,6052,6053] [--timeout 0.4]
+    net_scan.py --subnet <préfixe> [--ports 8123,6052,6053] [--timeout 0.4]
 
 Aucune dépendance externe. Utile pour retrouver l'IP de l'ESP32 avant/après le premier flash
 (6053 = API native ESPHome, 6052 = dashboard ESPHome, 8123 = Home Assistant).
 """
 from __future__ import annotations
 
+import os
 import argparse
 import ipaddress
 import socket
@@ -33,7 +34,9 @@ def probe(ip: str, port: int, timeout: float) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--subnet", default="192.168.2")
+    ap.add_argument("--subnet", default=os.environ.get("VEVOR_SUBNETS"),
+                    required="VEVOR_SUBNETS" not in os.environ,
+                    help="préfixe de sous-réseau à explorer (variable VEVOR_SUBNETS)")
     ap.add_argument("--ports", default="8123,6052,6053")
     ap.add_argument("--timeout", type=float, default=1.0,
                     help="1.0s par défaut : un timeout trop court produit des FAUX NÉGATIFS "
