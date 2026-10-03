@@ -111,6 +111,16 @@ void CC1101Component::setup() {
     this->gdo0_pin_->setup();
   }
 
+  // CORRECTIF DU 03/10 — ATTACHER L'INTERRUPTION GDO0 AVANT TOUT RETOUR ANTICIPÉ.
+  // Elle est ce qui RÉVEILLE loop() : loop() appelle disable_loop() en entrée, et seul
+  // gpio_intr() -> enable_loop_soon_any_context() la relance quand une trame se présente.
+  // Placée plus bas, elle était sautée à chaque démarrage où la puce ne répondait pas du
+  // premier coup (le cas « une fois sur deux » mesuré) : la relecture finissait par réussir,
+  // configure() entrait en RX, la puce remplissait son FIFO, GDO0 montait — et PERSONNE ne
+  // venait lire, définitivement. Symptôme : écritures conformes, radio=ok, 0 trame. Le
+  // pilote d'origine, qui n'a pas ce retour anticipé, n'a jamais ce défaut.
+  this->attacher_interruption_gdo0_();
+
   this->configure();
   if (this->state_.VERSION == 0 || this->state_.PARTNUM == 0xFF) {
     // La puce ne répond pas encore : on ne renonce NI ne bloque. Relectures depuis loop(),
@@ -126,16 +136,20 @@ void CC1101Component::setup() {
     return;
   }
 
+}
+
+void CC1101Component::attacher_interruption_gdo0_() {
+  if (this->gdo0_pin_ == nullptr) {
+    return;
+  }
   // Defer pin mode setup until after all components have completed setup()
   // This handles the case where remote_transmitter runs after CC1101 and changes pin mode
-  if (this->gdo0_pin_ != nullptr) {
-    this->defer([this]() {
-      this->gdo0_pin_->pin_mode(gpio::FLAG_INPUT);
-      if (this->state_.PKT_FORMAT == static_cast<uint8_t>(PacketFormat::PACKET_FORMAT_FIFO)) {
-        this->gdo0_pin_->attach_interrupt(&CC1101Component::gpio_intr, this, gpio::INTERRUPT_RISING_EDGE);
-      }
-    });
-  }
+  this->defer([this]() {
+    this->gdo0_pin_->pin_mode(gpio::FLAG_INPUT);
+    if (this->state_.PKT_FORMAT == static_cast<uint8_t>(PacketFormat::PACKET_FORMAT_FIFO)) {
+      this->gdo0_pin_->attach_interrupt(&CC1101Component::gpio_intr, this, gpio::INTERRUPT_RISING_EDGE);
+    }
+  });
 }
 
 void CC1101Component::configure() {
@@ -473,6 +487,12 @@ void CC1101Component::begin_rx() {
 void CC1101Component::reset() {
   this->strobe_(Command::RES);
   this->configure();
+  // Reconfigurer la puce ne suffit pas si l'interruption GDO0 a été perdue : loop() resterait
+  // endormie et le ré-armement ne récupérerait rien. detach puis attach = toujours sans risque.
+  if (this->gdo0_pin_ != nullptr) {
+    this->gdo0_pin_->detach_interrupt();
+    this->gdo0_pin_->attach_interrupt(&CC1101Component::gpio_intr, this, gpio::INTERRUPT_RISING_EDGE);
+  }
 }
 
 void CC1101Component::set_idle() {

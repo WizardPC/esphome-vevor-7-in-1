@@ -104,6 +104,8 @@ class CC1101Component final : public Component,
   uint8_t retry_budget_{0};
   uint32_t next_retry_ms_{0};
   void retry_radio_init_();
+  // Attache l'interruption GDO0 (réveille loop()) — voir le correctif du 03/10 dans setup().
+  void attacher_interruption_gdo0_();
 
   float output_power_requested_{10.0f};
   float output_power_effective_{10.0f};

@@ -1,3 +1,49 @@
+## 03/10 — Cause du « sourd un démarrage sur deux » : un défaut de NOTRE pilote
+
+Ce n'était pas la loterie du matériel, c'était un bug de la copie locale du pilote `cc1101`.
+
+**Le mécanisme.** `loop()` du composant est piloté par INTERRUPTION : il commence par
+`disable_loop()`, et seul `gpio_intr()` (front sur GDO0) le relance via
+`enable_loop_soon_any_context()`. Notre chemin de secours « la puce ne répond pas du premier coup,
+je relis toutes les 250 ms » **sortait de `setup()` en `return` AVANT le bloc `defer()` qui attache
+cette interruption**. Conséquence : la relecture finissait par réussir, `configure()` entrait bien en
+RX, la puce remplissait son FIFO, GDO0 montait — et plus personne ne lisait, définitivement. Le
+pilote d'origine, qui n'a pas ce retour anticipé, n'a jamais ce défaut : d'où l'impression mesurée
+qu'il « décode mieux » (bissect à état égal du 02/10 : 12 trames contre 3-4).
+
+**Pourquoi ça ressemblait à une loterie matérielle.** Le chemin de secours n'est pris que si la puce
+ne répond pas au premier essai, ce qui dépend de la vitesse de stabilisation de son alimentation et
+de son quartz. Un démarrage favorable passait à côté du bug, un démarrage défavorable tombait
+dedans, définitivement. Cela explique aussi le « sourd après OTA » (un OTA redémarre l'ESP32 sans
+couper le module, donc la puce est plus souvent lente) et le fait qu'un ré-armement ne récupérait
+pas toujours.
+
+**Correctif appliqué.** L'interruption GDO0 est attachée **avant tout retour anticipé**
+(`attacher_interruption_gdo0_()`), et `reset()` la détache/rattache pour qu'un ré-armement récupère
+vraiment.
+
+**Ce que ça NE règle pas, mesuré dans la foulée.** Le blocage actuel est ailleurs : dans la même
+fenêtre, le contrôle des écritures rapporte `1 registre définitivement non pris` neuf fois, `2` une
+fois, contre `0` cinq fois — la configuration de la puce reste partiellement aux valeurs d'usine
+(`FSCAL1=0x19` valide et `MARCSTATE=0x0D` par ailleurs : la puce est en RX, la PLL est bonne, elle
+ne démodule simplement pas). C'est le défaut de LIEN, celui que le pull-up et le 10 µF ont atténué
+sans le supprimer → **l'alimentation du module reste l'intervention à faire**.
+
+**Deux mesures du jour, et leur portée.** (a) A/B interleavé `origine` contre notre pilote d'avant
+correctif, 6 tours chacun, 100 s par tour : **0 trame partout** — tirage confondu, aucune conclusion
+possible sur les pilotes ; seul écart reproductible, la longueur des captures (90-93 impulsions chez
+nous contre 22-41 chez l'origine), ce qui recoupe le bissect. (b) Le binaire corrigé, flashé : le
+chemin de secours a bien été pris (`CC1101 trouvé après 1 relecture(s)` à chaque cycle) — donc le
+correctif s'exerce — mais toujours 0 trame, à cause des écritures perdues ci-dessus.
+
+**Garde-fou : à calmer.** Le seuil actuel (`muettes <= 30`) ré-arme **toutes les 20 s pendant 10
+minutes**. Chaque ré-armement relance une configuration complète, dont ~2 sur 3 perdent un registre
+sur ce lien : sur une liaison marginale, le garde-fou **entretient** le défaut au lieu de le réparer.
+Proposition : n'armer qu'après un silence franc (2-3 min, soit 6-9 muettes) et plafonner l'insistance
+à quelques tentatives, puis redémarrer.
+
+---
+
 > **RETIRÉ le 03/10** — cette itération portait la prévision embarquée, démontée à la demande du propriétaire (la station ne transmet pas la pression). Les règles survivent hors du firmware : `docs/forecast-rules.md`.
 
 ## 03/10 — PARTIE PRÉVISION RETIRÉE (demande du propriétaire)

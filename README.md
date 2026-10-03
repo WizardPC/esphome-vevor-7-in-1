@@ -392,6 +392,17 @@ Details and regeneration commands: `evidence/README.md`.
 
 ## Known pitfalls of this build (measured, not supposed)
 
+* **`loop()` is interrupt-driven: an early `return` in `setup()` that skips `attach_interrupt` makes
+  the board permanently deaf, with no other symptom.** The component calls `disable_loop()` at the
+  top of `loop()`; only the GDO0 edge interrupt wakes it again. If the interrupt is not attached, the
+  chip still receives: FIFO filled, GDO0 high, `MARCSTATE = 0x0D`, register writes verified,
+  `radio=ok` — and **no frame, ever**. This is what our non-blocking identity re-read did until
+  03/10: it returned before the `defer()` that attaches GDO0, so any boot where the chip was slow to
+  answer (about one in two, and more often right after an OTA) ended up configured and deaf. The
+  stock ESPHome driver has no such early return, which is why it looked like it decoded better.
+  The interrupt is now attached **before any early return**, and `reset()` re-attaches it so a
+  re-arm really recovers.
+
 1. **The CC1101 must remain the ONLY device on its SPI bus.** Declaring a second SPI device in the
    YAML — even with a **free, unwired** CS pin — is enough to silence the chip: 0 captures, 0 frames,
    no error. Measured by alternating with a reference firmware on the same board in the same emission
