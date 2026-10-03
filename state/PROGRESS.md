@@ -1,3 +1,23 @@
+### 03/10 (suite) — Les deux passages du CC1101 en IDLE étaient désactivés depuis un test
+
+Signalé par le propriétaire, qui ne les trouvait plus dans notre YAML alors que le projet de référence
+les porte. Vérification faite : ils y étaient, mais **commentés** sous l'étiquette « VARIANTE D
+(test) » — désactivés pendant une campagne de tests, jamais remis en service.
+
+- `on_shutdown:` (priorité 600) → `cc1101.set_idle:` : le CC1101 est un composant SÉPARÉ, il reste
+  alimenté et **garde ses registres** pendant que l'ESP32 redémarre. Or au démarrage de l'ESP32 les
+  broches du bus (CSN, SCLK, MOSI) sont en haute impédance : un front parasite sur CSN est lu comme le
+  début d'une transaction SPI et peut corrompre ses registres — d'autant plus si la puce était restée
+  en RX ou en pleine calibration. La mettre en IDLE avant l'arrêt lui donne un état CONNU pour le
+  démarrage suivant. C'est la même fenêtre que traite le pull-up externe de 10 kΩ sur CSN.
+- `ota: on_begin:` → `cc1101.set_idle:` : même chose pendant toute la durée de la mise à jour.
+
+Rétablis, compilés, flashés (966 880 octets, `2c64b292`). Le commentaire de test est remplacé par
+l'explication du mécanisme : c'est exactement le genre de reste de campagne de tests qui fait
+ressembler un montage à une panne matérielle.
+
+---
+
 ## 03/10 — Cause du « sourd un démarrage sur deux » : un défaut de NOTRE pilote
 
 Ce n'était pas la loterie du matériel, c'était un bug de la copie locale du pilote `cc1101`.

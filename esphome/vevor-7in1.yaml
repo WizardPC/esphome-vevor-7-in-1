@@ -40,15 +40,21 @@ esphome:
       # pouvant rester sans verrouillage de PLL (« PLL lock failed, retrying calibration ») et
       # GDO0 ne produisant alors plus de rafale exploitable.
       # Priorité -100 = après tous les setup(), y compris ceux de `cc1101` et du RMT.
-  # Le CC1101 reste actif pendant une mise à jour OTA et peut ne plus répondre après.
-  # On le repasse en IDLE avant l'arrêt propre (priorité haute = exécuté tôt).
-  # VARIANTE D (test) — le passage en IDLE au shutdown est DÉSACTIVÉ : c'est un candidat direct
-  # pour expliquer qu'après un OTA/reboot la réception ne revienne jamais alors qu'un boot « sur
-  # puce jamais mise en IDLE » décodait parfaitement. À réactiver selon le résultat.
-  # on_shutdown:
-  #   priority: 600.0
-  #   then:
-  #     - cc1101.set_idle:
+  # Le CC1101 est un composant SÉPARÉ : il reste alimenté et GARDE SES REGISTRES pendant que
+  # l'ESP32 redémarre. Or, au démarrage de l'ESP32, les broches du bus (CSN, SCLK, MOSI) sont en
+  # haute impédance : un front parasite sur CSN est lu par la puce comme le début d'une transaction
+  # SPI et peut corrompre ses registres — d'autant plus si elle était restée en RX ou en cours de
+  # calibration. La repasser en IDLE avant l'arrêt propre lui donne un état CONNU au démarrage
+  # suivant (le pull-up externe de 10 kΩ sur CSN traite la même fenêtre, par le matériel).
+  #
+  # RÉTABLI le 03/10 : ces deux blocs venaient du projet de référence, où ils « assurent le bon
+  # démarrage après OTA ». Ils avaient été désactivés ici pour un test (« VARIANTE D ») et jamais
+  # remis en service — voir state/PROGRESS.md.
+  # Priorité 600 = exécuté tôt dans la séquence d'arrêt, avant que le journal ne se taise.
+  on_shutdown:
+    priority: 600.0
+    then:
+      - cc1101.set_idle:
 
 esp32:
   board: esp32-c3-devkitm-1
@@ -83,10 +89,10 @@ ota:
     encryption: {}
     on_begin:
       then:
-        - logger.log: "OTA en cours (VARIANTE D : pas de passage en IDLE)"
-        # VARIANTE D (test) — `cc1101.set_idle` DÉSACTIVÉ ici aussi : c'est le second endroit où
-        # on met la puce en IDLE juste avant un redémarrage. À réactiver selon le résultat.
-        # - cc1101.set_idle:
+        # Second moment où l'on met la puce en IDLE juste avant un redémarrage : pendant tout
+        # l'OTA, la radio reste ainsi dans un état connu au lieu de rester en RX.
+        - logger.log: "OTA en cours : passage du CC1101 en IDLE..."
+        - cc1101.set_idle:
 
 wifi:
   ssid: !secret wifi_ssid
