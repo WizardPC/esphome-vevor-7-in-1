@@ -1,3 +1,30 @@
+### 03/10 (suite 3) — YAML de production allégé, explications déplacées dans la documentation
+
+Demande du propriétaire : le fichier destiné à ESPHome Builder n'a pas besoin d'autant de détail, et
+les lambda de journalisation doivent être en debug pour ne pas charger l'ESP32.
+
+- `esphome/vevor-7in1.yaml` : **486 → 330 lignes**. Les blocs de justification sont remplacés par des
+  renvois d'une ligne vers `docs/firmware-design-notes.md`. Vérifié par un diff des lignes
+  fonctionnelles (commentaires YAML **et** C++ retirés) : trois écarts seulement, tous voulus — niveau
+  de log, forme du log OTA, libellé d'un message. Entités, identifiants, valeurs, scripts et
+  intervalles inchangés.
+- Journalisation : tout le périodique passe en `DEBUG`, `logger: level` passe à **INFO**. Le binaire
+  passe de **966 896 à 957 008 octets** : ESPHome retire du firmware les chaînes de journalisation
+  debug, ce n'est donc pas cosmétique. Seule exception, documentée dans le YAML et dans les notes :
+  la ligne `V7IN1 OK {...}` reste en INFO, parce que c'est le produit de la carte et que les outils de
+  mesure la lisent.
+- `docs/firmware-design-notes.md` (anglais) : dix sections qui reprennent les mesures justifiant
+  chaque réglage (câblage, paramètres radio, framework, règle du seul périphérique SPI, pilote local
+  — piège de l'interruption GDO0 et faux positifs des registres de calibration —, état de la puce à
+  travers un redémarrage, voie asynchrone, garde-fou, journalisation, ce qui reste dans le YAML).
+
+**Conséquence à connaître pour les campagnes de mesure** : la ligne de santé `SANTE radio=…` n'existe
+plus qu'en DEBUG. Les compteurs restent lisibles comme entités (c'est ce dont les outils se servent),
+mais pour suivre le comportement du garde-fou pendant une mesure, remonter le niveau ou ajouter
+`logs: {v7in1: DEBUG}` le temps de la campagne.
+
+---
+
 ### 03/10 (suite 2) — Notre contrôle d'écriture criait au loup sur les registres de calibration
 
 Le relevé de **quels** registres échouaient — jamais fait jusqu'ici — explique 70 % des alertes de la
