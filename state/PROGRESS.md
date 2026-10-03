@@ -1,3 +1,34 @@
+### 03/10 (suite 2) — Notre contrôle d'écriture criait au loup sur les registres de calibration
+
+Le relevé de **quels** registres échouaient — jamais fait jusqu'ici — explique 70 % des alertes de la
+journée :
+
+| registre | adresse | alertes | verdict |
+|---|---|---|---|
+| FSCAL2 | 0x24 | 21 | FAUX POSITIF du contrôle |
+| AGCCTRL0 | 0x1D | 5 | perte réelle |
+| FSCAL1 | 0x25 | 2 | FAUX POSITIF du contrôle |
+| MCSM0 | 0x18 | 1 | perte réelle |
+| FREQ0 | 0x0F | 1 | perte réelle |
+
+FSCAL3/FSCAL2/FSCAL1/FSCAL0 sont les registres de **calibration du synthétiseur, que la puce réécrit
+elle-même** pendant sa calibration VCO. Preuve directe dans le journal : nous écrivons `0x2C` dans
+FSCAL2 et la calibration y laisse `0x0C`. Notre boucle « écrire → relire → réécrire jusqu'à ce que ça
+prenne » ne pouvait donc JAMAIS réussir sur ces registres : elle les réécrivait quatre fois à chaque
+configuration et comptait ces échecs comme des pertes de liaison. Deux conséquences : des diagnostics
+trompeurs (le « lien qui lâche en permanence ») et du trafic SPI inutile ajouté juste avant la
+calibration.
+
+Correction : ces quatre registres sont désormais écrits UNE fois, sans vérification (comme TEST0/1/2),
+et la valeur écrite reste celle que recommande la datasheet pour accélérer la calibration.
+
+Ce qui reste, et qui est réel : **FREQ0, AGCCTRL0 et MCSM0** — eux ne sont pas réécrits par la puce.
+Une seule perte de FREQ0 (mot de fréquence) suffit à rendre la puce sourde à toute fréquence, quelle
+que soit sa sensibilité : c'est la cause du « 0 trame alors que les registres se relisent conformes »
+relevé par l'autre session le 02/10 au soir.
+
+---
+
 ### 03/10 (suite) — Les deux passages du CC1101 en IDLE étaient désactivés depuis un test
 
 Signalé par le propriétaire, qui ne les trouvait plus dans notre YAML alors que le projet de référence

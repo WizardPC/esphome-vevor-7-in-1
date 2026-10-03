@@ -227,7 +227,16 @@ void CC1101Component::configure() {
       continue;
     }
     const uint8_t voulu = this->state_.regs()[i];
-    if (i > 0x2B) {  // TEST0/1/2 : écriture simple, relecture non fiable
+    // Registres écrits UNE fois, sans vérification, parce que la relecture ne PEUT pas correspondre :
+    //  - TEST0/1/2 (0x2C et au-delà) : relecture non fiable, déjà documenté ;
+    //  - FSCAL3/FSCAL2/FSCAL1/FSCAL0 (0x23-0x26) : registres de CALIBRATION du synthétiseur, que la
+    //    PUCE réécrit elle-même pendant sa calibration VCO. Mesuré le 03/10 : nous écrivons 0x2C dans
+    //    FSCAL2 et la calibration y laisse 0x0C — notre boucle croyait donc l'écriture perdue et la
+    //    réécrivait quatre fois à CHAQUE configuration. Ces faux positifs faisaient 21 des 30 alertes
+    //    de la journée et masquaient les vraies pertes (FREQ0, AGCCTRL0, MCSM0). La valeur écrite ici
+    //    reste celle recommandée par la datasheet, qui accélère la calibration : elle est simplement
+    //    écrite une fois, puis la puce en fait ce qu'elle doit.
+    if (i > 0x2B || (i >= static_cast<uint8_t>(Register::FSCAL3) && i <= static_cast<uint8_t>(Register::FSCAL0))) {
       this->write_(static_cast<Register>(i));
       continue;
     }
