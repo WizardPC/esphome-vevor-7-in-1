@@ -34,7 +34,8 @@ never touches the radio.
 | `docs/wiring.svg` | **Production** | wiring diagram |
 | `docs/forecast-rules.md` | **Rules** | the console's forecast icon is not receivable; tables to reproduce an equivalent in Home Assistant |
 | `docs/firmware-design-notes.md` | **Notes** | why the production YAML says what it says: the measured reason behind each setting |
-| `tests/` | **Test** | off-board suite: independent Python encoder + C++ unit tests (377 checks, no board needed) |
+| `docs/bit-jitter-analysis.md` | **Analysis** | why single bits go wrong: pulse-width jitter, missing bit-clock recovery, what the literature says, and how to tell a fix from a palliative |
+| `tests/` | **Test** | off-board suite: independent Python encoder + C++ unit tests (380 checks, no board needed) |
 | `tools/` | **Test** | build, flash, log capture, independent evaluation, frequency scan, A/B comparison (`tools/README.md`) |
 | `evidence/` | **Test** | versioned JSON reports backing every claim (`evidence/README.md`) |
 | `references/` | Context | protocol description + rtl_433 reference source (GPL-2.0) |
