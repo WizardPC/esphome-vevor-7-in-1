@@ -147,24 +147,73 @@ Ordered by expected value, all measurable:
    RMT's `filter` threshold — the last one being the reason 45-50 µs glitches can still enter the
    bit stream.
 
-## 6. Implementation plan for the bit-clock recovery (next piece of work)
+## 5bis. Clock track — what worked, what did not (03/10 evening)
 
-1. **`recover_bits(timings, count, bits, max_bits)`** — build the segment timeline (level, duration),
-   estimate the initial period from the *preamble* (median of the first edge spacings below 3·T,
-   with T seeded at 88.3 µs from the reference project), lock the phase on every edge with a bounded
-   first-order correction, then sample the level at each bit centre. No per-pulse rounding.
-2. **Keep today's per-pulse path as a fallback.** Decode with the recovered clock first; if it fails,
-   fall back to the period grid. Both paths go through the same validation, so the fallback can never
-   publish something the clock path would have refused.
-3. **Host tests, before anything touches the board:**
-   * synthetic burst, known frame, pulse widths jittered ±10 % and ±25 % → decoded;
-   * synthetic burst with a bit boundary moved between two pulses → decoded by the clock, **not** by
-     the grid (this is the case that matters, and the grid must be shown to fail on it);
-   * the six real captures as regression vectors — five must decode, the sixth is the counter-example
-     that keeps us honest;
-   * a burst with no preamble, and pure noise → nothing published.
-4. **Acceptance**: 5/6 on the dump, against 1/6 direct and 3/6 with the net — and the net should
-   become unnecessary. If it is still carrying the result, the recovery is not finished.
+**What worked, and it is the part that matters for a shipped product:**
+
+* **A self-adapting period estimator.** From the burst alone — no per-station constant — the bit rate
+  comes out at **88.5-88.9 µs on all six bursts**, i.e. the 88.3 µs measured by the reference project.
+  Method: take the durations in the 45-115 µs window, then consolidate with the median of
+  `d / round(d / T)` over the pulses above 0.55·T, four times. This removes the "we hard-coded 90 µs"
+  class of bug entirely: any board is measured, not assumed.
+* **The failure mechanism, proven.** Inserting **one** bit repairs bursts 0 and 3 (positions 151 and
+  187 of the bit stream); earlier, deleting one bit repaired nothing. So a pulse that should have
+  yielded two bits yielded one — a *missing* bit, not an added one. That is the boundary case, and it
+  is what the per-pulse rounding gets wrong.
+* **A combination that reaches the acceptance criterion: 5 of 6 bursts decode**, all five carrying the
+  same payload. Contributions: 1 direct, 2 via the one-bit header net, 2 via inserting one bit in the
+  payload. Every path is gated by header + checksum + counter + plausibility gate.
+* **Cost on the target:** the insertion repair is ~168 positions × 21 bytes worst case ≈ 67 k
+  operations, under 1 ms at 160 MHz, and only runs when a sync was found but the frame failed —
+  ~125 times per 12 minutes in practice. Negligible.
+
+**What did not work:**
+
+* **A true phase-locked clock: three implementations, none better than plain rounding.** The first two
+  decoded 0/6 and did not even reproduce the burst that decodes today, which by our own criterion
+  means they were broken, not that the approach is wrong.
+* **Cumulative position rounding is worse, and this one is a keeper of a result.** It matches plain
+  rounding at the correct period (3/6 with the net), but collapses to **0/6 under a period error of
+  just +1 %**, while plain rounding holds 3/6 up to ±2 % and only fails at ±4 %. Cumulative rounding
+  *accumulates* the period error across 350 bits; per-pulse rounding does not. For a product that must
+  work on a stranger's board, **per-pulse rounding with a measured period is the robust choice**, and
+  a phase loop only becomes worth it with proper phase tracking — not with a fixed phase search.
+* **The parasite threshold** (discarding pulses below α·T and merging their neighbours), tested from
+  0.5·T to 0.8·T: no gain at all, and it degrades the net above 0.7·T. The 45-50 µs glitches are a
+  plausible story, not the mechanism.
+
+**Honest status:** the bit-level clock recovery is **not achieved**. What is achieved is a self-adapting
+period plus bounded, checksum-validated repairs, reaching 5/6. By the acceptance rule above ("if the
+net is still carrying the result, the recovery is not finished"), the recovery is unfinished and the
+repairs are nets — better ones, but nets. Burst 2 is still unexplained: it needs at least two
+corrections.
+
+## 6. Implementation plan (revised with the 03/10 evening measurements)
+
+**Step 1 — ship what is proven (self-adapting, no station constant):**
+* `estimer_periode(timings, count)` — the estimator validated above (windowed median, then
+  `d / round(d/T)` consolidation). Replaces the fixed `PERIOD_CANDIDATES` grid as the primary path.
+* decode with **per-pulse rounding** on the measured period (proven robust to a ±2 % period error),
+  keeping the fixed grid as a last-resort fallback.
+* **bounded repairs, all gated by header + checksum + counter + plausibility gate:** the one-bit
+  header net (existing), then a **one-bit insertion** search in the payload (~67 k operations worst
+  case, under 1 ms). Measured: 5/6 bursts on the dump, all identical payloads.
+* add a **counter gate**: the decoded `tx_counter` must be consistent with the previous frame, which
+  closes the false-positive door on the repairs and is cheap.
+
+**Step 2 — the actual bit-clock recovery (still open):** the phase-tracked clock described below,
+which exists to make step 1's repairs unnecessary. Per the measurements, it needs *true* phase
+tracking (a per-edge loop), not a fixed phase search, and it must be shown to beat per-pulse rounding
+under a deliberately wrong period before it is allowed on the board. Until then, step 1 is the
+product; step 2 is research.
+
+**Step 3 — host tests, before anything touches the board:**
+* the six real captures as regression vectors — five must decode, the sixth stays as the counter-example;
+* synthetic burst with a known frame and pulse widths jittered ±10 % / ±25 % → decoded;
+* synthetic burst with a delayed/advanced period (±1 %, ±2 %) → shows step 1 robust, and would catch a
+  regression that reintroduces cumulative rounding;
+* synthetic burst with one bit missing inside the payload → the insertion repair must recover it;
+* pure noise, and a burst with no preamble → nothing published.
 
 ## 7. How to tell a fix from a palliative, for this project
 

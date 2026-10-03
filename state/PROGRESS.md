@@ -1,3 +1,42 @@
+### 03/10 (suite 7) — Piste de l'horloge : rythme MESURÉ sur la rafale (5/6), et ce qui ne marche pas
+
+Consigne reçue : écarter le cycle d'alimentation (l'utilisateur le fait à la main après un flash) et
+essayer la piste de l'horloge. Contrainte de conception rappelée et désormais structurante : **un
+nouvel utilisateur ne fera que flasher** — le code doit rendre sa station fonctionnelle sans analyse,
+et **jamais** dépendre d'une constante propre à une station.
+
+**Ce qui marche (et qui sert directement la contrainte) :**
+
+* **Estimateur de rythme bit auto-adaptatif** — aucune constante de station. Sur les six rafales du dump
+  il sort **88,5-88,9 µs**, soit les **88,3 µs** mesurés par le projet de référence. Méthode : médiane
+  des durées de la fenêtre 45-115 µs, puis consolidation par la médiane de `d / round(d/T)` sur les
+  impulsions > 0,55·T, quatre fois. Le bug de classe « 90 µs codé en dur » disparaît : chaque carte est
+  MESURÉE, pas supposée.
+* **Mécanisme de panne prouvé** : **un bit manquant**, pas un bit en trop. Insérer un seul bit répare
+  les rafales 0 et 3 (positions 151 et 187 du flux) ; en supprimer un ne réparait rien.
+* **Combinaison à 5/6**, critère d'acceptation fixé le matin même : 1 directe + 2 par le filet d'un bit
+  d'en-tête + **2 par insertion d'un bit dans la charge**, toutes portant la même charge utile. Coût de
+  l'insertion sur la cible : ~67 k opérations au pire, < 1 ms à 160 MHz, et seulement quand une synchro
+  est trouvée mais la trame invalide (~125 fois / 12 min). Négligeable.
+
+**Ce qui ne marche pas (à ne pas refaire) :**
+
+* **Horloge verrouillée en phase : trois implémentations, aucune meilleure que l'arrondi simple.** Les
+  deux premières donnaient 0/6 et ne reproduisaient même pas la rafale décodable — donc elles étaient
+  fausses, pas l'approche.
+* **L'arrondi de position cumulée est PIRE** : égal à l'arrondi isolé au bon rythme, mais **0/6 dès +1 %
+  d'erreur de période**, quand l'arrondi isolé tient 3/6 jusqu'à ±2 %. Il cumule l'erreur sur 350 bits ;
+  l'arrondi isolé non. **Pour un produit qui doit marcher sur la carte d'un inconnu, l'arrondi isolé sur
+  période mesurée est le choix robuste.**
+* **Seuil de parasites** (écarter et fusionner les impulsions < α·T), testé de 0,5·T à 0,8·T : aucun gain,
+  et dégrade le filet au-delà de 0,7·T. Les parasites de 45-50 µs sont une histoire plausible, pas le
+  mécanisme.
+
+**Statut honnête :** la récupération d'horloge au sens strict **n'est pas obtenue**. Ce qui est obtenu,
+c'est un rythme auto-adaptatif + des réparations bornées validées par somme/compteur/porte → 5/6. La
+rafale 2 reste inexpliquée (il lui faut au moins deux corrections). Suite : implémenter l'étape 1 du plan
+(`docs/bit-jitter-analysis.md` §6) en C++ avec les tests hôtes, puis mesurer sur la carte.
+
 ### 03/10 (suite 6) — État mesuré en fin de journée, et les deux vrais chantiers restants
 
 **Mesure de 12 minutes avec le firmware flashé** (tolérance d'un bit sur l'en-tête) :
