@@ -1,3 +1,39 @@
+### 03/10 (suite 6) — État mesuré en fin de journée, et les deux vrais chantiers restants
+
+**Mesure de 12 minutes avec le firmware flashé** (tolérance d'un bit sur l'en-tête) :
+
+```
+TRAMES : 12 sur 36 émissions attendues (33 %)
+rejets : 125       dernières impulsions = 177 (rafale complète)   plus longue = 530
+écritures : « les 8 registres surveillés sont conformes »
+calibration VCO : FSCAL1=0x17 (valide), MARCSTATE=0x0D (en RX)
+V7IN1 OK {"id":33995,"temp_c":17.6,"humidity":74,"wind_dir_deg":107,"lux":17640,"tx_counter":152}
+```
+
+Valeurs cohérentes, et compteur TX avançant de +39 par émission — la cadence documentée.
+
+**Mais la fenêtre de référence juste avant (25 min, interrompue) montrait l'état A** : `Chip ID:
+0xFFFF`, `status 0xFF`, `CHIP_RDYn HAUT = alimentation ou quartz pas prêts`, pendant plus de dix
+minutes, avec redémarrage du garde-fou. Dans cet état la puce n'est pas sur le bus et **aucune
+correction logicielle ne peut rien** — ni l'interruption GDO0, ni la tolérance, ni la grille de
+périodes. C'est pourquoi la référence a donné 0 trame et la fenêtre suivante 12.
+
+**Chantier 1 — récupération d'horloge (le vrai correctif de décodeur).** Les 125 rejets sont les
+trames dont le décalage commence à l'octet 9 ou 11 : la tolérance d'un bit ne les rattrape pas, et
+c'est mesuré. L'approche de rtl_433 (alignement sur le préambule `AA AA AA` puis reconstruction de
+l'horloge bit) est la bonne ; elle exige une vraie implémentation avec tests hôtes sur des rafales
+synthétiques. Le prototype jetable a donné 0/6 : ne pas recommencer par là. Détail et références :
+`docs/bit-jitter-analysis.md`.
+
+**Chantier 2 — rendre le module cyclable en alimentation par le firmware.** L'état A est une panne
+d'ALIMENTATION/quartz (`CHIP_RDYn` haut = la puce l'annonce elle-même), seul un vrai cycle
+d'alimentation la rétablit — un `reset` logiciel ne redémarre pas l'oscillateur. Un transistor (ou un
+interrupteur de charge) entre le 3,3 V et le VCC du module, piloté par un GPIO, permettrait au
+garde-fou de faire ce cycle au lieu de redémarrer l'ESP32 en espérant. C'est la piste « transistor »
+déjà notée dans le projet, et elle devient la priorité matérielle avec le **100 nF**.
+
+---
+
 ### 03/10 (suite 5) — Pourquoi le rendement est bas : cinq rafales propres sur six ont un contenu corrompu
 
 Analyse hors ligne des 6 rafales « propres » du dump (162-167 impulsions, impulsion courte médiane à
