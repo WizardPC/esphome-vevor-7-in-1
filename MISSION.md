@@ -109,6 +109,11 @@ GPIO2/GPIO8/GPIO9 sont des pins de strapping sur ESP32-C3 : on évite GPIO2 pour
 - Logs ESP32 lus via l'API native (port 6053) avec `tools/capture_logs.py` — **indépendant
   de Home Assistant**, donc plus fiable que la lecture des logs de l'add-on.
 - **Compilation : dans ce conteneur** (déjà vérifiée, ~4 min, cache chaud ensuite).
+- **Sources des composants : `esphome/vevor-7in1.yaml` pointe sur le dépôt public**
+  (`github://WizardPC/esphome-vevor-7-in-1@main`) pour rester copiable tel quel par n'importe qui.
+  Toute compilation depuis CE dépôt doit donc forcer la source locale, sinon ESPHome télécharge la
+  version publiée et ignore l'arbre de travail : `tools/build.sh` et `tools/flash.sh` le font
+  (`-s vevor_components components`) — passer par eux, ou ajouter cette option à la main.
 - **Flash : OTA depuis ce conteneur** (`tools/flash.sh <IP>`) dès que le premier flash a été
   fait. L'add-on ESPHome Builder de HA sert au tout premier flash (il a l'accès UART à l'hôte
   HA) et de référence pour la gestion des appareils.
