@@ -92,20 +92,25 @@ static constexpr float WIND_LIMIT_MARGE_KMH = 0.01f;
 // BORNE DE PLAUSIBILITÉ DE LA PLUIE (ajoutée après un défaut constaté en production le 03/10).
 //
 // Home Assistant a enregistré deux pics de pluie à **7 634,5 mm** dans l'après-midi, sous un ciel
-// dégagé, alors que la valeur était stable à 59,2 mm avant et après — et une division par deux de
-// la même valeur (59,18 → 29,36 mm, soit 254 → 126 ticks, exactement un bit faux) deux minutes
-// avant le premier pic. La porte de plausibilité ne contrôlait PAS la pluie : direction, humidité,
-// température, vent et UV seulement. Une trame fausse — un bit de trop ou de moins à l'extraction —
-// pouvait donc publier n'importe quelle valeur de pluie sans être arrêtée par rien.
+// dégagé, alors que la valeur était stable à 59,2 mm avant et après — et une division par deux de la
+// même valeur (59,18 → 29,36 mm, soit 254 → 126 ticks, exactement un bit faux) deux minutes avant le
+// premier pic. La porte de plausibilité ne contrôlait PAS la pluie : direction, humidité, température,
+// vent et UV seulement. Une trame cohérente portant n'importe quelle valeur de pluie passait donc.
 //
-// La borne porte sur la HAUSSE seulement, et c'est délibéré. Le protocole documente un recul
-// légitime de 256 ticks (la station lit son compteur pendant un report) et la station peut remettre
-// son compteur à zéro : un contrôle qui refuserait une BAISSE rejetterait ensuite toutes les trames,
-// indéfiniment — c'est le piège classique du contrôle d'état embarqué. Une hausse, elle, est
-// TOUJOURS physiquement bornée, donc ce contrôle ne peut jamais bloquer une réception saine :
-// au pluviomètre de cette station (0,233 mm par bascule), +5 mm entre deux rafales espacées de 20 s
-// représenterait 21 bascules en 20 s, soit 15 mm/min — plus qu'aucune pluie réelle, et très loin des
-// 7 634 mm observés. Ne pas resserrer sans une mesure de pluie réelle soutenue.
+// Les règles appliquées sont celles du décodeur de RÉFÉRENCE du protocole (references/PROTOCOL.md,
+// d'après rtl_433) : « la pluie ne peut que monter, ou repartir à zéro après un changement de pile ;
+// une baisse non nulle est une corruption même avec un checksum valide ». C'est ce qui fait refuser
+// la division par deux observée — elle n'était pas seulement invraisemblable, elle était impossible.
+//
+// Le retour à zéro est accepté sur UNE trame (la référence demande trois trames consécutives) : c'est
+// un écart assumé, une trame isolée à 0 mm est sans conséquence, alors que le contrôle à trois trames
+// exige de mémoriser un état supplémentaire pour un gain nul.
+//
+// La hausse, elle, est bornée par le physique : au pluviomètre de cette station (0,233 mm par
+// bascule), +5 mm entre deux rafales espacées de 20 s représenterait 21 bascules en 20 s, soit
+// 15 mm/min — plus qu'aucune pluie réelle, et très loin des 7 634 mm observés. Ne pas resserrer sans
+// une mesure de pluie réelle soutenue, et ne JAMAIS borner la baisse à la place de cette règle :
+// une borne symétrique rejetterait les trames légitimes qui suivent une remise à zéro.
 static constexpr float RAIN_MAX_HAUSSE_MM = 5.0f;
 
 // `connue` = on a une trame précédente acceptée à comparer. Sans référence, on accepte : la trame a
@@ -116,6 +121,10 @@ inline bool pluie_plausible(float nouvelle, float precedente, bool connue) {
   }
   if (!connue) {
     return true;
+  }
+  if (nouvelle < precedente - 0.01f) {
+    // Baisse : légitime uniquement vers zéro (remise à zéro du compteur de pluie).
+    return nouvelle <= 0.01f;
   }
   return (nouvelle - precedente) <= RAIN_MAX_HAUSSE_MM;
 }

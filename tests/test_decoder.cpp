@@ -743,11 +743,17 @@ static void test_pluie_plausible() {
   expect(!vevor::pluie_plausible(65.0f, stable, true), "hausse de 6 mm en une rafale : refusée");
   expect(!vevor::pluie_plausible(-1.0f, stable, true), "valeur négative : refusée");
 
-  // Contre-épreuve indispensable : une BAISSE reste acceptée, y compris celle observée en
-  // production. Un contrôle de baisse bloquerait la réception pour de bon après une remise à zéro.
-  expect(vevor::pluie_plausible(29.36f, stable, true),
-         "division par deux observée (59,18 → 29,36 mm) : ACCEPTÉE");
-  expect(vevor::pluie_plausible(0.0f, stable, true), "compteur remis à zéro : accepté");
+  // Contre-épreuve dans les deux sens, avec les règles du décodeur de référence du protocole
+  // (references/PROTOCOL.md) : la pluie ne peut que MONTER, ou repartir à zéro après un changement de
+  // pile. Une baisse non nulle est une corruption, même avec un checksum valide — c'est exactement ce
+  // qu'a vécu la station le 03/10 (59,18 → 29,36 mm), et le refuser est le comportement CORRECT :
+  // cette valeur publiée était fausse.
+  expect(!vevor::pluie_plausible(29.36f, stable, true),
+         "division par deux observée (59,18 → 29,36 mm) : REFUSÉE (baisse non nulle = corruption)");
+  expect(!vevor::pluie_plausible(59.0f, stable, true), "baisse de 0,2 mm : refusée");
+  expect(vevor::pluie_plausible(0.0f, stable, true),
+         "compteur remis à zéro (changement de pile) : accepté");
+  expect(vevor::pluie_plausible(0.2f, 0.0f, true), "première bascule après la remise à zéro : acceptée");
   expect(vevor::pluie_plausible(7634.5f, 0.0f, false),
          "première trame, sans référence : acceptée (elle a déjà passé le reste de la porte)");
 

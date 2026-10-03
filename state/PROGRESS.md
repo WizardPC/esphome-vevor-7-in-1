@@ -10,11 +10,16 @@ direction, humidité, température, vent et UV — jamais la pluie. Une trame co
 n'importe quelle valeur de pluie était donc publiée telle quelle.
 
 **Correctif livré** (`pluie_plausible` dans `vevor_protocol.h`, appliqué à TOUTES les trames dans le
-composant) : la pluie ne peut pas MONTER de plus de 5 mm entre deux rafales. La borne porte sur la
-hausse seulement, et c'est délibéré : le protocole documente un recul légitime de 256 ticks (la
-station lit son compteur pendant un report) et la station peut remettre son compteur à zéro — un
-contrôle qui refuserait une BAISSE rejetterait ensuite toutes les trames, indéfiniment. Une hausse,
-elle, est toujours physiquement bornée, donc ce contrôle ne peut jamais bloquer une réception saine.
+composant), avec les règles du décodeur de RÉFÉRENCE du protocole (`references/PROTOCOL.md`, d'après
+rtl_433) — que le firmware n'appliquait pas : **la pluie ne peut que monter, ou repartir à zéro après
+un changement de pile ; une baisse non nulle est une corruption même avec un checksum valide.**
+- hausse > 5 mm entre deux rafales : refusée (21 bascules en 20 s, soit 15 mm/min — au-delà de toute
+  pluie réelle, et très loin des 7 634 mm observés) ;
+- baisse non nulle : refusée, SAUF vers zéro (remise à zéro du compteur). C'est ce qui fait refuser
+  la division par deux : cette valeur publiée était fausse, la refuser est le comportement correct.
+- écart assumé : la référence accepte un zéro après TROIS trames consécutives, nous l'acceptons sur
+  une seule — une trame isolée à 0 mm est sans conséquence, quand le contrôle à trois trames exige un
+  état supplémentaire pour un gain nul.
 Le message de refus journalise les **octets bruts** de la trame : sans eux on bloquerait le défaut
 sans comprendre pourquoi. Compteur `pluie_refusee=N` dans le journal périodique.
 
