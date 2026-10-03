@@ -213,7 +213,10 @@ inline bool is_fragment(size_t count) {
 // station), 88,3 µs (mesure de l'utilisateur → 11 325 bauds), 87 µs (déduite de rtl_433). La
 // bonne période n'est PAS supposée : elle est trouvée à la trame décodée, et le gagnant est
 // journalisé — c'est ce qui permet de resserrer ensuite sans deviner.
-static const int32_t PERIOD_CANDIDATES[] = {90, 88, 89, 87};
+static const int32_t PERIOD_CANDIDATES[] = {86, 87, 88, 89, 90, 85};
+// MESURÉ le 03/10 : sur six rafales propres du même dump, les trames décodables sortent à
+// 86,0-88,5 µs. L'ancienne grille {90, 88, 89, 87} n'en attrapait qu'une : le bas de la plage
+// manquait, et 89 / 90 ne servaient à rien sur ce montage. 88 reste dans la grille par sûreté.
 static constexpr size_t PERIOD_CANDIDATE_COUNT =
     sizeof(PERIOD_CANDIDATES) / sizeof(PERIOD_CANDIDATES[0]);
 
@@ -308,7 +311,29 @@ inline bool decode_timings(const int32_t *timings, size_t count, const int32_t *
       Frame frame;
       const char *reason = "";
       while (find_frame_candidate(bits, n, candidate, &from)) {
-        if (decode(candidate, frame, &reason)) {
+        bool ok = decode(candidate, frame, &reason);
+        if (!ok) {
+          // TOLÉRANCE D'UN BIT SUR L'OCTET D'EN-TÊTE (mesuré le 03/10) : sur les rafales du dump,
+          // l'octet 0 arrive régulièrement avec UN seul bit faux (0xAB, 0xAE ou 0xEA au lieu de
+          // 0xAA) tandis que les 16 octets suivants sont exacts — le front qui porte ce bit est mal
+          // daté, pas la trame. Corriger ce bit constant est sûr : la somme, le compteur et la porte
+          // de plausibilité doivent ensuite passer tous les trois. Un seul bit est corrigé, jamais
+          // plus, et le candidat corrigé remplace l'original pour les appelants.
+          uint8_t corrige[FRAME_BYTES];
+          for (uint8_t k = 0; k < 8 && !ok; k++) {
+            for (size_t i = 0; i < FRAME_BYTES; i++) {
+              corrige[i] = candidate[i];
+            }
+            corrige[0] = (uint8_t)(corrige[0] ^ (uint8_t)(1u << k));
+            if (decode(corrige, frame, &reason)) {
+              for (size_t i = 0; i < FRAME_BYTES; i++) {
+                candidate[i] = corrige[i];
+              }
+              ok = true;
+            }
+          }
+        }
+        if (ok) {
           for (size_t i = 0; i < FRAME_BYTES; i++) {
             raw_out[i] = candidate[i];
           }

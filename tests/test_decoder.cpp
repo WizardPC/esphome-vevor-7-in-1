@@ -487,6 +487,75 @@ static void test_fragment_policy() {
          "deux morceaux recollés : la trame est retrouvée");
 }
 
+// --- 12. Tolérance d'un bit sur l'octet d'en-tête (mesuré le 03/10) -----------------------------
+// Sur les rafales réelles d'un dump du 03/10, l'octet d'en-tête arrive régulièrement avec UN seul
+// bit faux (0xAB, 0xAE ou 0xEA au lieu de 0xAA) tandis que les 16 octets suivants sont exacts :
+// c'est le front qui porte ce bit qui est mal daté, pas la trame. `decode_timings` corrige donc ce
+// bit constant — mais UNIQUEMENT si la somme, le compteur et la porte de plausibilité passent
+// ensuite. Ce test borne la tolérance : un bit corrigé passe, deux échouent.
+static void pulses_depuis_octets(const uint8_t *octets, size_t n, int32_t periode,
+                                 std::vector<int32_t> &out) {
+  static const uint8_t PRE[5] = {0xAA, 0xAA, 0xAA, 0xCA, 0x54};
+  out.clear();
+  int niveau = 1;
+  int32_t courant = 0;
+  auto pousser = [&](int bit) {
+    const int b = bit & 1;
+    if (b == niveau) {
+      courant += periode;
+    } else {
+      out.push_back(niveau ? courant : -courant);
+      niveau = b;
+      courant = periode;
+    }
+  };
+  for (size_t i = 0; i < sizeof(PRE); i++) {
+    for (int k = 7; k >= 0; k--) {
+      pousser((PRE[i] >> k) & 1);
+    }
+  }
+  for (size_t i = 0; i < n; i++) {
+    for (int k = 7; k >= 0; k--) {
+      pousser((octets[i] >> k) & 1);
+    }
+  }
+  if (courant > 0) {
+    out.push_back(niveau ? courant : -courant);
+  }
+}
+
+static bool decode_une_trame(const uint8_t *octets) {
+  static std::vector<uint8_t> bits(vevor::MAX_BITS);
+  std::vector<int32_t> pulses;
+  uint8_t sortie[vevor::FRAME_BYTES];
+  int32_t periode = 0;
+  bool inverse = false;
+  size_t rejets = 0;
+  pulses_depuis_octets(octets, vevor::FRAME_BYTES, 90, pulses);
+  return vevor::decode_timings(pulses.data(), pulses.size(), vevor::PERIOD_CANDIDATES,
+                               vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(), sortie,
+                               &periode, &inverse, &rejets);
+}
+
+static void test_header_tolerance() {
+  printf("Tolérance d'un bit sur l'octet d'en-tête\n");
+  // Trame relevée le 03/10 sur la station (ID 33995, 15,6 °C, 80 %, 289°).
+  uint8_t intacte[vevor::FRAME_BYTES] = {0xAA, 0x00, 0x84, 0xCB, 0x16, 0x02, 0x90,
+                                         0x50, 0x01, 0x01, 0x00, 0x02, 0x22, 0x01,
+                                         0xFF, 0x02, 0x31, 0xDF, 0x33, 0x5C, 0x34};
+  expect(decode_une_trame(intacte), "trame intacte : décodée");
+
+  uint8_t un_bit[vevor::FRAME_BYTES];
+  std::memcpy(un_bit, intacte, vevor::FRAME_BYTES);
+  un_bit[0] = 0xAB;   // vu dans le dump : un seul bit de l'en-tête faux
+  expect(decode_une_trame(un_bit), "en-tête à UN bit faux : corrigé et décodé");
+
+  uint8_t deux_bits[vevor::FRAME_BYTES];
+  std::memcpy(deux_bits, intacte, vevor::FRAME_BYTES);
+  deux_bits[0] = 0xA9;   // deux bits faux : hors tolérance
+  expect(!decode_une_trame(deux_bits), "en-tête à DEUX bits faux : refusé (tolérance bornée)");
+}
+
 int main() {
   printf("=== Tests du décodeur Vevor 7-en-1 (sans matériel) ===\n\n");
   test_vectors();
@@ -500,6 +569,7 @@ int main() {
   test_period_selection();
   test_hole_skip();
   test_fragment_policy();
+  test_header_tolerance();
 
   printf("\n%d vérifications, %d échec(s)\n", g_checks, g_failures);
   if (g_failures == 0) {
