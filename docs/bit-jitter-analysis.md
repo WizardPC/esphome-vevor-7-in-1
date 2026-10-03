@@ -35,6 +35,14 @@ Measuring the demodulated pulse widths of those bursts:
 * 1-bit pulses span **47 µs to 93 µs** — a 40 % spread around the nominal 90 µs bit;
 * 2-bit pulses follow the same pattern (179-181 µs for 180 expected).
 
+**Important correction (owner's input, 03/10):** the reference project measured this station at
+**88.3 µs per bit** (11 325 baud), not 90 µs. So the spread is not only noise: our 1-bit pulses
+measure **+2 to +5 % long** against a real 88.3 µs bit — a *systematic* bias on top of the outliers.
+The nominal period in this project (`bit_period: 90us`, inherited from rtl_433) was wrong by ~2 %,
+and the fine sweep below landing on 86.0-88.5 µs is consistent with 88.3 µs plus that stretch.
+The fixed period grid also stops *just short* of the true value, which is why pulses near a rounding
+boundary fall on the wrong side.
+
 Every conversion of pulses to bits must decide "how many bit periods does this pulse hold?". With a
 40 % spread, that decision is a coin flip on the pulses that land near a rounding boundary, and
 **one wrong decision shifts every following bit** — which is exactly what the payloads above show.
