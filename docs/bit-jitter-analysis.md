@@ -140,7 +140,26 @@ Ordered by expected value, all measurable:
    RMT's `filter` threshold — the last one being the reason 45-50 µs glitches can still enter the
    bit stream.
 
-## 6. How to tell a fix from a palliative, for this project
+## 6. Implementation plan for the bit-clock recovery (next piece of work)
+
+1. **`recover_bits(timings, count, bits, max_bits)`** — build the segment timeline (level, duration),
+   estimate the initial period from the *preamble* (median of the first edge spacings below 3·T,
+   with T seeded at 88.3 µs from the reference project), lock the phase on every edge with a bounded
+   first-order correction, then sample the level at each bit centre. No per-pulse rounding.
+2. **Keep today's per-pulse path as a fallback.** Decode with the recovered clock first; if it fails,
+   fall back to the period grid. Both paths go through the same validation, so the fallback can never
+   publish something the clock path would have refused.
+3. **Host tests, before anything touches the board:**
+   * synthetic burst, known frame, pulse widths jittered ±10 % and ±25 % → decoded;
+   * synthetic burst with a bit boundary moved between two pulses → decoded by the clock, **not** by
+     the grid (this is the case that matters, and the grid must be shown to fail on it);
+   * the six real captures as regression vectors — five must decode, the sixth is the counter-example
+     that keeps us honest;
+   * a burst with no preamble, and pure noise → nothing published.
+4. **Acceptance**: 5/6 on the dump, against 1/6 direct and 3/6 with the net — and the net should
+   become unnecessary. If it is still carrying the result, the recovery is not finished.
+
+## 7. How to tell a fix from a palliative, for this project
 
 * A fix changes the **rate of decodable bursts**, measured on the same dump, offline, with the same
   script before and after. The number to publish is `decoded / bursts`, never "it works now".
