@@ -112,3 +112,13 @@ Testing/
 
 # === Rapports de revue de code (contiennent des détails d'installation) ===
 reviews/
+
+# Le dossier des journaux est ignore a tout niveau, SAUF son marqueur (git ne suit pas un dossier vide).
+!dev/logs/.gitkeep
+
+# Depuis la reorganisation, journaux et artefacts vivent sous dev/ : les motifs ci-dessus etaient
+# ancre au dossier du .gitignore et ne les couvraient plus. On ignore le CONTENU (pas le dossier),
+# pour pouvoir garder le marqueur .gitkeep que git exige.
+dev/logs/*
+!dev/logs/.gitkeep
+dev/build/*

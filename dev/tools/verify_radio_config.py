@@ -22,9 +22,10 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from _common import atomic_write_json  # noqa: E402
 
 XTAL = 26000000.0
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+DEV = pathlib.Path(__file__).resolve().parent.parent   # dev/
+ROOT = DEV.parent                                      # racine du dépôt
 DEFAULT_YAML = ROOT / "esphome" / "vevor-7in1.yaml"
-OUT = ROOT / "logs" / "radio_config_check.json"
+OUT = DEV / "logs" / "radio_config_check.json"
 
 
 def split_float(value: float, mbits: int):

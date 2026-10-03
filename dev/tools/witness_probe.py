@@ -38,7 +38,7 @@ def main() -> int:
     args = ap.parse_args()
 
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d_%H%M")
-    out = Path(args.out) if args.out else ROOT / "logs" / f"witness_probe_{stamp}.log"
+    out = Path(args.out) if args.out else DEV / "logs" / f"witness_probe_{stamp}.log"
     out.parent.mkdir(parents=True, exist_ok=True)
 
     base = f"http://{args.host}"

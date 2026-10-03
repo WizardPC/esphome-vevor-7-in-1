@@ -44,7 +44,7 @@ def main() -> int:
         if not binary.exists():
             print(f"# ERREUR : binaire absent pour {name} : {binary}", file=sys.stderr)
             return RC_ERREUR
-        log = ROOT / "logs" / f"boot_{name}_{binary.stat().st_mtime_ns}.log"
+        log = DEV / "logs" / f"boot_{name}_{binary.stat().st_mtime_ns}.log"
         print(f"\n=== {name} : flash {binary.name} ({binary.stat().st_size} o) ===", flush=True)
         proc = subprocess.run([str(ESPHOME), "upload", yaml, "--device", DEFAULT_HOST,
                                "--file", str(binary)],
@@ -53,7 +53,7 @@ def main() -> int:
         flash_ok = "OTA successful" in out
         print("flash:", "OK" if flash_ok else f"FAIL ({proc.returncode})", flush=True)
         # capture IMMÉDIATE (aucune attente) : on veut le setup dans le tampon de logs
-        cap = subprocess.run([str(PY), str(ROOT / "tools" / "capture_logs.py"),
+        cap = subprocess.run([str(PY), str(DEV / "tools" / "capture_logs.py"),
                               "--host", DEFAULT_HOST, "--seconds", "40", "--out", str(log)],
                              capture_output=True, text=True, timeout=120)
         print(f"# capture={cap.returncode}", flush=True)

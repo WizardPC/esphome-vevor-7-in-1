@@ -71,14 +71,14 @@ def main() -> int:
     # tout de suite, lisiblement, pas au milieu d'un cycle.
     for name in names:
         variant_of(name)
-    out_jsonl = ROOT / "logs" / "ab_cycle.jsonl"
+    out_jsonl = DEV / "logs" / "ab_cycle.jsonl"
     stamp = f"{dt.datetime.now(dt.timezone.utc):%Y%m%d_%H%M%S}"
     results = []
 
     for r in range(1, args.rounds + 1):
         for name in names:
             workdir, yaml, binary, desc = variant_of(name)
-            log = ROOT / "logs" / f"ab_{stamp}_r{r}_{name}.log"
+            log = DEV / "logs" / f"ab_{stamp}_r{r}_{name}.log"
             flash_log = log.with_suffix(".flash")
             started = dt.datetime.now(dt.timezone.utc)
             if not binary.exists():
@@ -97,12 +97,12 @@ def main() -> int:
             # RMT a réellement reçu pendant une fenêtre d'émission.
             if name == "temoin":
                 capture_cmd = [str(ROOT / ".venv" / "bin" / "python"),
-                               str(ROOT / "tools" / "capture_logs.py"),
+                               str(DEV / "tools" / "capture_logs.py"),
                                "--host", DEFAULT_HOST, "--seconds", str(args.seconds),
                                "--out", str(log)]
             else:
                 capture_cmd = [str(ROOT / ".venv" / "bin" / "python"),
-                               str(ROOT / "tools" / "press_button.py"),
+                               str(DEV / "tools" / "press_button.py"),
                                "--host", DEFAULT_HOST, "--name", "Dump impulsions",
                                "--seconds", str(args.seconds), "--out", str(log)]
             cap = subprocess.run(capture_cmd, capture_output=True, text=True,

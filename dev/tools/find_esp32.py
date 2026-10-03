@@ -17,8 +17,9 @@ import socket
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-CACHE = ROOT / "state" / "DEVICE_IP"
+DEV = pathlib.Path(__file__).resolve().parent.parent   # dev/
+ROOT = DEV.parent                                      # racine du dépôt
+CACHE = DEV / "state" / "DEVICE_IP"
 
 
 def open_port(ip: str, port: int, timeout: float) -> bool:

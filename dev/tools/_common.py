@@ -34,7 +34,8 @@ import re
 import tempfile
 
 # --- Chemins : UNE SEULE racine, jamais le CWD ------------------------------
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+DEV = pathlib.Path(__file__).resolve().parent.parent   # dev/
+ROOT = DEV.parent                                      # racine du dépôt
 DEFAULT_YAML = ROOT / "esphome" / "vevor-7in1.yaml"
 SECRETS_YAML = ROOT / "esphome" / "secrets.yaml"
 DEFAULT_HOST = "172.16.0.205"
@@ -211,16 +212,16 @@ VARIANTS: dict[str, tuple[pathlib.Path, str, pathlib.Path, str]] = {
                TEMOIN / "witness-test/.esphome/build/vevor-weather-station/build/firmware.ota.bin",
                "projet de référence (WizardPC/esphome-vevor-7in1), compilé par nos soins"),
     "origine": (ROOT / "esphome", "vevor-7in1.yaml",
-                ROOT / "build/variants/nous_pilote_origine.ota.bin",
+                DEV / "build/variants/nous_pilote_origine.ota.bin",
                 "pilote d'origine d'ESPHome, notre YAML"),
     "prod": (ROOT / "esphome", "vevor-7in1.yaml",
-             ROOT / "build/variants/nous_prod.ota.bin",
+             DEV / "build/variants/nous_prod.ota.bin",
              "notre firmware de production"),
     "prod_corrige": (ROOT / "esphome", "vevor-7in1.yaml",
-                     ROOT / "build/variants/nous_prod_corrige.ota.bin",
+                     DEV / "build/variants/nous_prod_corrige.ota.bin",
                      "notre pilote + correctif du 03/10 (interruption GDO0 attachée avant tout retour anticipé)"),
     "prod_avant_revue": (ROOT / "esphome", "vevor-7in1.yaml",
-                         ROOT / "build/variants/prod_avant_revue.ota.bin",
+                         DEV / "build/variants/prod_avant_revue.ota.bin",
                          "notre firmware d'avant la revue"),
 }
 

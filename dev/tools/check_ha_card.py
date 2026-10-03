@@ -40,8 +40,8 @@ except ImportError as exc:  # pragma: no cover - dépendance de l'environnement
     sys.exit(f"dépendance manquante ({exc}) — lancer avec .venv/bin/python")
 
 ROOT = Path(__file__).resolve().parent.parent
-CARD = ROOT / "docs" / "ha-card.yaml"
-ENTITIES = ROOT / "docs" / "ha-entities.txt"
+CARD = DEV / "docs" / "ha-card.yaml"
+ENTITIES = DEV / "docs" / "ha-entities.txt"
 FIRMWARE = ROOT / "esphome" / "vevor-7in1.yaml"
 NOW = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
 

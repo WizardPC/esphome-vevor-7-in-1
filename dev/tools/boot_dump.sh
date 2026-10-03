@@ -6,7 +6,8 @@
 #
 # Usage: tools/boot_dump.sh [--host IP] [--rounds N] [--seconds S] [--no-flash]
 set -uo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/ : outils, tests, docs, journaux
+ROOT="$(cd "$DEV/.." && pwd)"            # racine du dépôt : esphome/ y vit, et rien d'autre
 HOST=172.16.0.205
 ROUNDS=6
 SEC=25
@@ -24,15 +25,15 @@ done
 rm -f "$ROOT"/logs/bootdump_*.log
 (
   for i in $(seq 1 "$ROUNDS"); do
-    "$ROOT/.venv/bin/python" "$ROOT/tools/capture_logs.py" --host "$HOST" --seconds "$SEC" \
-      --out "$ROOT/logs/bootdump_$i.log" >/dev/null 2>&1 || true
+    "$ROOT/.venv/bin/python" "$DEV/tools/capture_logs.py" --host "$HOST" --seconds "$SEC" \
+      --out "$DEV/logs/bootdump_$i.log" >/dev/null 2>&1 || true
   done
 ) &
 LOOP=$!
 
 if [ "$FLASH" -eq 1 ]; then
   sleep 6
-  if "$ROOT/tools/flash.sh" "$HOST" >/dev/null 2>&1; then
+  if "$DEV/tools/flash.sh" "$HOST" >/dev/null 2>&1; then
     echo "FLASH OK (OTA)"
   else
     echo "FLASH ECHEC (voir logs/last_flash.log)"

@@ -8,7 +8,8 @@
 # Aucun accès à la carte n'est nécessaire : c'est ce qui permet à n'importe qui de vérifier le
 # décodeur, et à la boucle de ne pas casser une logique déjà validée.
 set -uo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/ : outils, tests, docs, journaux
+ROOT="$(cd "$DEV/.." && pwd)"            # racine du dépôt : esphome/ y vit, et rien d'autre
 DEV_PY="$ROOT/.venv-dev/bin/python"
 
 if [ ! -x "$DEV_PY" ]; then
@@ -19,24 +20,24 @@ if [ ! -x "$DEV_PY" ]; then
   exit 3
 fi
 
-mkdir -p "$ROOT/build"
+mkdir -p "$DEV/build"
 echo "=== 1. selfcheck de l'encodeur (reproduit-il la trame de rtl_433 ?) ==="
-"$DEV_PY" "$ROOT/tests/frames.py" --selfcheck || exit 1
+"$DEV_PY" "$DEV/tests/frames.py" --selfcheck || exit 1
 
 echo "=== 2. génération des trames de test ==="
-"$DEV_PY" "$ROOT/tests/frames.py" --vectors || exit 1
+"$DEV_PY" "$DEV/tests/frames.py" --vectors || exit 1
 
 echo "=== 2b. génération des scénarios d'impulsions (chaîne asynchrone) ==="
-"$DEV_PY" "$ROOT/tests/frames.py" --pulses || exit 1
+"$DEV_PY" "$DEV/tests/frames.py" --pulses || exit 1
 
 echo "=== 2c. génération des rafales RÉELLES (vecteurs de régression du dump) ==="
-"$DEV_PY" "$ROOT/tests/frames.py" --captures || exit 1
+"$DEV_PY" "$DEV/tests/frames.py" --captures || exit 1
 
 echo "=== 3. compilation du test C++ ==="
 "$DEV_PY" -m ziglang c++ -std=c++17 -w \
-  -I "$ROOT/esphome/components/vevor_7in1" -I "$ROOT/tests" \
-  "$ROOT/tests/test_decoder.cpp" -o "$ROOT/build/test_decoder" || exit 2
+  -I "$ROOT/esphome/components/vevor_7in1" -I "$DEV/tests" \
+  "$DEV/tests/test_decoder.cpp" -o "$DEV/build/test_decoder" || exit 2
 echo "binaire : build/test_decoder"
 
 echo "=== 4. exécution ==="
-"$ROOT/build/test_decoder"
+"$DEV/build/test_decoder"

@@ -5,7 +5,8 @@
 # via uv) qui embarque ensurepip, et on reconstruit le venv du projet dessus.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-ROOT="$(pwd)"
+DEV="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$DEV/.." && pwd)"
 
 echo "== 1. uv dans le venv actuel =="
 if [ ! -x .venv/bin/uv ]; then .venv/bin/pip install -q uv; fi
