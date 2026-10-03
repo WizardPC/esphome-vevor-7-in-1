@@ -1,3 +1,30 @@
+> **RETIRÉ le 03/10** — cette itération portait la prévision embarquée, démontée à la demande du propriétaire (la station ne transmet pas la pression). Les règles survivent hors du firmware : `docs/forecast-rules.md`.
+
+## 03/10 — PARTIE PRÉVISION RETIRÉE (demande du propriétaire)
+
+L'itération du 02/10 au soir avait ajouté **dans le firmware** une estimation locale de prévision
+météo : un modèle C++ (`esphome/includes/vevor_forecast.h`, ~320 lignes), une horloge SNTP, le
+composant `sun` (élévation solaire), les substitutions latitude/longitude/fuseau, et quatre entités
+(Prévision, Alerte verglas, Taux de pluie, Élévation du soleil). **Retiré intégralement le 03/10**,
+à la demande du propriétaire du montage, pour deux raisons :
+
+1. **La station ne fournit pas l'information.** L'icône de la console vient de SON baromètre
+   (manuel YT60309 p.20) ; le capteur extérieur ne mesure ni ne transmet la pression. Reproduire une
+   prévision à partir d'autres grandeurs, c'est produire une valeur que la station n'a pas donnée.
+2. **Des dépendances ajoutées sans prévenir** (horloge NTP, position du soleil, géolocalisation dans
+   les substitutions) : ce n'est pas au récepteur de les introduire.
+
+Le firmware ne publie donc plus que des **grandeurs mesurées**. Les règles, elles, sont conservées —
+hors de la carte — sous forme de tableaux dans `docs/forecast-rules.md` (seuils et leurs sources,
+fenêtre de pluie, référence de ciel clair, anti-battement), à appliquer **dans Home Assistant** avec
+l'intégration `sun` et les entités Vevor. `README.md` §1.4 explique le fait et renvoie à ce document.
+
+Retiré : `esphome/includes/vevor_forecast.h`, les entités de prévision, `time: sntp`, `sun:`, les
+substitutions géographiques, l'inclusion dans le YAML, l'accesseur dans `vevor_7in1.h`, et les tests
+correspondants (la suite repasse de 430 à 377 vérifications, 0 échec).
+
+---
+
 # État du projet — récepteur Vevor 7-en-1
 
 Format : on ajoute une entrée en haut à chaque itération. Jamais de réécriture de l'historique.

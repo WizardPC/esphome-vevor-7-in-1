@@ -40,11 +40,6 @@
 // La chaîne impulsions → trame vit dans l'en-tête `includes/` du projet, pour être testable
 // hors matériel (tools/run_tests.sh). ESPHome le copie dans src/.
 #include "vevor_protocol.h"
-// Local forecast estimate (pure logic, same rule: testable off-board). It lives here rather than in
-// an ESPHome `globals:` entry because ESPHome's globals cannot hold an arbitrary C++ class — and
-// the estimator must survive from frame to frame, since it carries the 20-minute rain window and
-// the 10-minute anti-flap hold.
-#include "vevor_forecast.h"
 
 namespace esphome {
 namespace vevor_7in1 {
@@ -122,12 +117,6 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   void dump_receiver_config_();
 
   Trigger<std::vector<uint8_t>> *get_frame_trigger() { return &this->frame_trigger_; }
-  // Local forecast estimate (see includes/vevor_forecast.h for what it does and does NOT do).
-  // Fed from the YAML `on_frame` lambda, which owns the sensor publishes.
-  vevor::Forecast update_forecast(const vevor::ForecastInputs &in) {
-    return this->forecast_.update(in);
-  }
-  const vevor::ForecastEstimator &forecast() const { return this->forecast_; }
   uint32_t get_frames() const { return this->frames_; }
   uint32_t get_captures() const { return this->captures_; }
   uint32_t get_duplicates() const { return this->duplicates_; }
@@ -172,8 +161,6 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   std::vector<int32_t> stitched_;
   // Tampon de travail de la conversion durées → bits (réutilisé à chaque capture).
   std::vector<uint8_t> bits_;
-  // Estimation de prévision locale : fenêtre de pluie de 20 min + anti-battement de 10 min.
-  vevor::ForecastEstimator forecast_;
 };
 
 }  // namespace vevor_7in1

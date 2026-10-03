@@ -28,11 +28,11 @@ never touches the radio.
 |---|---|---|
 | `esphome/vevor-7in1.yaml` | **Production** | the complete ESPHome configuration (firmware) |
 | `esphome/includes/vevor_protocol.h` | **Production** | protocol: pulses → bits → bytes → values, validation gate. Pure C++, **testable off-board** |
-| `esphome/includes/vevor_forecast.h` | **Production** | local weather-forecast estimate (see §1.4). Pure C++, **testable off-board** |
 | `esphome/components/vevor_7in1/` | **Production** | C++ component: plugs into `remote_receiver`, stitches burst fragments, counts, triggers |
 | `esphome/components/cc1101/` | **Production** | local copy of ESPHome's `cc1101` component with the fixes this board needs (`README-LOCAL.md`) |
 | `esphome/secrets.yaml.example` | **Production** | template to copy to `esphome/secrets.yaml` (never versioned) |
 | `docs/wiring.svg` | **Production** | wiring diagram |
+| `docs/forecast-rules.md` | **Rules** | the console\'s forecast icon is not receivable; tables to reproduce an equivalent in Home Assistant |
 | `tests/` | **Test** | off-board suite: independent Python encoder + C++ unit tests (430 checks, no board needed) |
 | `tools/` | **Test** | build, flash, log capture, independent evaluation, frequency scan, A/B comparison (`tools/README.md`) |
 | `evidence/` | **Test** | versioned JSON reports backing every claim (`evidence/README.md`) |
@@ -187,10 +187,6 @@ enforces.
 | Entity (`name:`) | HA type | Unit | Range | What it is |
 |---|---|---|---|---|
 | `Batterie station faible` | binary_sensor, `battery` | – | on/off | low-battery flag of the outdoor sensor |
-| `Alerte verglas` | binary_sensor, `cold` | – | on/off | **on when outdoor temperature < 1 °C** — exactly the manual's ice alert (§1.4) |
-| `Prévision (estimation locale)` | text_sensor | – | `unknown` / `sunny` / `partly_cloudy` / `cloudy` / `rainy` / `stormy` / `snowy` | local forecast estimate — **not** the console's icon, see §1.4 |
-| `Taux de pluie (estimation)` | sensor, `precipitation_intensity` | mm/h | **0 …** (20 min window) | rain intensity estimated from the cumulative counter; the quantity the rainy/stormy split is made from |
-| `Élévation du soleil (estimation)` | sensor (diagnostic) | ° | **−90 … +90** | sun elevation used by the sky part of the estimate; published every 20 s, so it is observable even when the radio is down. `unknown` until the clock is set |
 | `ID station` | sensor (diagnostic) | – | 0 … 65 535 | station ID (hex). **It changes when the sensor's batteries are changed** |
 | `Compteur TX` | sensor (diagnostic) | – | 0 … 255 | frame counter, +1 every 20 s (used to detect missed/replayed bursts) |
 | `Trames valides` | sensor (diagnostic) | – | 0 … 4 294 967 295 | frames decoded and published since boot |
@@ -209,79 +205,30 @@ enforces.
 | `Réappliquer la config radio` | button (config) | – | re-runs the radio re-arm sequence (`cc1101.reset`) |
 | `Redémarrer la carte` | button (config) | – | reboot — the measured remedy for the mute-chip condition |
 
-## 1.4 Local weather-forecast estimate — and why it is not the console's icon
+## 1.4 The console's forecast icon is not receivable — rules for Home Assistant
 
-**What the manual actually says** (Vevor YT60309, section *Weather Forecast*, p. 20):
+**Read this before expecting a forecast from this board.** The display console shows one of six icons
+(Sunny, Partly Cloudy, Cloudy, Rainy, Stormy, Snowy) computed from **its own barometer** (Vevor
+YT60309 manual, section *Weather Forecast*, p. 20: range 600-1100 hPa, pressure trend over the past
+hour, with the manual's own caveat that such a forecast is "about 65-70%" accurate). The outdoor
+7-in-1 sensor **neither measures nor transmits pressure**: its payload is temperature, humidity, wind
+speed and direction, rainfall, UV index and illuminance, and the 21-byte frame decoded here has no
+pressure field.
 
-> "The built-in barometer can notice atmospheric pressure changes, and based on the data collected,
-> can predict the weather conditions. There are 6 weather icons --- Sunny, Partly Cloudy, Cloudy,
-> Rainy, Stormy and Snowy.
-> NOTE: The accuracy of a general pressure-based forecast is about 65-70%. Forecasts are not
-> guaranteed. It may not necessarily reflect the current situation."
+> **The station's own forecast icon cannot be read off the air with this hardware.** No firmware can
+> do it, and this project does not pretend otherwise. An earlier iteration estimated the six
+> categories *inside the firmware*, with a sun-position dependency; it was **removed at the owner's
+> request** — when the station cannot provide the information, the receiver must not invent it.
 
-The same manual, section *Ice Alert* (p. 20):
+The board therefore publishes **measured quantities only** (see §1.3), and any forecast is left to
+Home Assistant, where the decision is visible, editable and testable. The rules — thresholds and their
+sources, rain-intensity window, cloudiness proxy, anti-flapping — are documented as tables in
+[`docs/forecast-rules.md`](docs/forecast-rules.md), to be applied with Home Assistant's `sun`
+integration and the Vevor entities.
 
-> "When outdoor temperature is lower than 1°C/33.8°F, the snowflake icon will appear on the LCD
-> display."
-
-**The fact that decides the design.** The forecast is computed by the **display console**, from the
-**console's own barometer** (specification table: 600–1100 hPa, pressure trend over the past hour,
-2 hPa steps). The outdoor 7-in-1 sensor's documented payload is "temperature, humidity, wind speed,
-wind direction, rainfall, UVI and light intensity" — **no pressure**, and the 21-byte RF frame
-decoded here has no pressure field (`vevor_protocol.h`, `references/PROTOCOL.md`). So:
-
-> **The station's own forecast icon cannot be received with this hardware.** No firmware can read it
-> out of the air. Anyone claiming to expose "the station's forecast" from this RF stream is
-> publishing a guess.
-
-What this project does instead — and labels as such:
-
-1. **`Alerte verglas` is faithful to the manual**: a threshold on the temperature we do receive
-   (`temp_c < 1.0 °C`), same boundary, same intent.
-2. **`Prévision (estimation locale)` estimates the same six categories from measured data only**,
-   with every threshold named and documented in
-   [`esphome/includes/vevor_forecast.h`](esphome/includes/vevor_forecast.h). It is **not** claimed
-   to reproduce the console's algorithm.
-
-The estimate, in priority order:
-
-* **Precipitation states** — from the cumulative rain counter. Because the counter is a tip counter
-  (0.233 mm per tip) it can only be turned into an intensity by differencing it over time: the
-  estimator keeps a sliding **20-minute window** (16 samples, one per 75 s) and computes
-  `mm/h = Δmm × 3 600 000 / Δt_ms`. Below a **5-minute** span it reports "not raining" rather than
-  a number the data cannot support (a single tip over 90 s would otherwise read as 9 mm/h).
-  * `snowy` — precipitation observed **and** outdoor temperature **< 1 °C** (the manual's own ice
-    boundary);
-  * `stormy` — precipitation observed **and** (rate ≥ **7.6 mm/h**, the WMO "heavy rain" threshold,
-    **or** gust ≥ **40 km/h**, the lower end of the strong-breeze band);
-  * `rainy` — precipitation observed, below those two thresholds.
-* **Clear-sky states** — only when it is **not** raining, and only with a usable sun position. The
-  measured illuminance is compared with a clear-sky reference computed from the sun elevation
-  (Kittler/CIE approximation, `lux_clear = 133 800 × sin(elevation)^1.15`, good to roughly ±20 %):
-  * `sunny` — measured/reference ratio ≥ **0.70**;
-  * `partly_cloudy` — ratio ≥ **0.35**;
-  * `cloudy` — below that.
-  This is a **proxy**: it separates bright / degraded / dim sky, it does not measure cloud cover.
-* `unknown` — in every case the data does not support an answer: at night (sun elevation < 3°), rain
-  but no clock, or no rain-window history yet. Home Assistant shows "unknown" instead of a
-  plausible-looking value.
-
-**Anti-flapping**: the published state only follows the raw state once it has held for **10 minutes**
-(30 frames); the first state after a boot is published after **1 minute** so the entity is not left
-empty after every restart.
-
-**Sanity-checked on real data.** Replaying the validated one-hour window (`evidence/`, 180 real
-frames, 01/10 14:58→15:58 UTC) through these rules gives measured/reference ratios between **0.55 and
-0.73** (sun elevation 26.2° → 17.9°) — 61 frames `sunny`, 119 `partly_cloudy`, none `cloudy` on an
-afternoon with broken cloud. That is not a validation of the console's icon (which is not
-receivable); it is the check that the sky proxy does not say something absurd on real measurements.
-
-**Configuration this needs**: an NTP clock (`time: platform: sntp`, self-contained — unlike the Home
-Assistant time platform it also syncs when no HA client is connected) and the `sun:` component,
-which needs your **`timezone`, `latitude`, `longitude`** — set them in the `substitutions:` block at
-the top of the YAML. A location error of even 100 km moves the computed sun elevation by a fraction
-of a degree, so the sky split is insensitive to it; a wrong **time zone** is not, and makes the sun
-position wrong by hours.
+* One manual rule needs no firmware support and stays directly usable: the **ice alert** (p. 20,
+  "when outdoor temperature is lower than 1 °C, the snowflake icon will appear") is a plain threshold
+  on a quantity we *do* receive — one template sensor away.
 
 ## 1.5 Install and flash
 
@@ -289,7 +236,7 @@ position wrong by hours.
 # 1. Secrets (once) — never versioned
 cp esphome/secrets.yaml.example esphome/secrets.yaml && $EDITOR esphome/secrets.yaml
 
-# 2. Set your timezone / latitude / longitude in esphome/vevor-7in1.yaml (substitutions:)
+# 2. Nothing else to configure: the board needs no location, no time zone and no clock (see §1.4)
 
 # 3. Build
 tools/build.sh                       # writes BUILD OK / BUILD FAIL to build/last_status.txt
@@ -355,11 +302,11 @@ Steps: self-check of the independent Python encoder (it must reproduce the rtl_4
 **byte for byte**) → generation of the test frames and pulse scenarios → compilation of the C++ test
 with the compiler bundled in `.venv-dev` (zig) → execution.
 
-Current state: **430 checks, 0 failures.** The suite covers the happy path, inverted polarity,
+Current state: **377 checks, 0 failures.** The suite covers the happy path, inverted polarity,
 truncated captures, jitter, timing bias, inter-burst gaps, frame stitching (and the rule that a
 *complete* burst must never be stitched), the plausibility gate and its rejection reasons, the
-period-selection sweep, and now the whole forecast estimator (thresholds, boundaries, rain window,
-counter reset, anti-flap hold, night and unsynced-clock cases).
+period-selection sweep, the plausibility gate on injected impossible frames, and the fragment
+policy (a complete burst is never stitched).
 
 Two properties make it a real check rather than a tautology:
 
@@ -516,6 +463,6 @@ but the very first flash has to be done elsewhere (web.esphome.io or the ESPHome
   licence.
 * The **`WizardPC/esphome-vevor-7in1`** project (same protocol, asynchronous architecture) served as
   a comparison point — measured radio parameters and protocol pitfalls — never as a code base.
-* The six forecast categories, the ice-alert threshold and the pressure-based nature of the console's
-  forecast are quoted from the **Vevor YT60309 owner's manual**; no manual text is redistributed here
-  beyond short quotations.
+* The **Vevor YT60309 owner's manual** is the source for two facts only: the console computes its six
+  forecast icons from its own barometer, and the ice alert trips below 1 °C. No manual text is
+  redistributed here beyond those short quotations.
