@@ -308,6 +308,23 @@ tools/flash.sh 172.16.0.205          # OTA afterwards
 tools/eval_frames.py logs/capture_*.log --json logs/report.json
 ```
 
+### Publishing to the repository
+
+The remote is already paired with this machine: `origin` points at
+`git@github-vevor:WizardPC/esphome-vevor-7-in-1.git`, an SSH alias backed by a deploy key present on
+this host (checked: `ssh -T git@github-vevor` answers *"Hi WizardPC/esphome-vevor-7-in-1!"*).
+
+```bash
+git push origin main     # fetch and push through the deploy key: no token required
+```
+
+**Do not misdiagnose this.** The deploy key allows `fetch`/`push`, **not** the GitHub API. `gh` is
+logged into no host and the `GITHUB_TOKEN` in the environment is a commented-out placeholder, so
+**opening a pull request needs a PAT** (or a click in the web UI). In particular, `gh auth status`
+reporting "not logged into any GitHub hosts" does **not** mean the repository is out of reach: git
+publishing works from any session, because the remote and the key live on disk, not in the agent's
+context.
+
 ## 1.6 Home Assistant notes
 
 * The board uses the **native API** with encryption; HA's ESPHome integration discovers it on the
