@@ -175,52 +175,23 @@ instead of the ten minutes the current recovery takes.
 
 ## 1.3 Entities published to Home Assistant
 
-All of them come from entities declared in `esphome/vevor-7in1.yaml`. `name:` values are French in
-the firmware (changing them would rename existing entities in an already-running installation);
-rename them in the YAML if you want another language — the entity `id` and the published *values*
-are what automations should bind to.
+**The tables live on the home page**: [`../README.md` §4](../README.md). They are maintained there,
+once, and that is deliberate — a table copied into two documents drifts, and this file's copy had
+already drifted twice (it still described the old rain rule, and the TX counter as *+1* per frame
+instead of the measured +39). This section therefore keeps only what a newcomer does not need.
 
-### Measurements
-
-| Entity (`name:`) | HA type | Unit | Accepted range | What it is |
-|---|---|---|---|---|
-| `Température extérieure` | sensor, `temperature` | °C | **−40 … +60** (frame encoding −50.0 … +359.5) | outdoor temperature, 0.1 °C steps, `(raw − 500) × 0.1` |
-| `Humidité extérieure` | sensor, `humidity` | % | **0 … 100** | outdoor relative humidity |
-| `Vent vitesse moyenne` | sensor, `wind_speed` | km/h | **0 … 180** | average wind speed, `raw / 8.333` |
-| `Vent rafale` | sensor, `wind_speed` | km/h | **0 … 180** | wind gust of the frame, `raw / 1.25` (always ≥ average) |
-| `Vent direction` | sensor | ° | **0 … 359** | wind direction; the station measures 16 sectors, the frame carries a 12-bit angle |
-| `Pluie cumulée` | sensor, `precipitation` | mm | **0 … 15 209.8** | cumulative rain since the last reset, 0.233 mm per tip; monotone (a decrease is corruption, a zero is only accepted after 3 consecutive frames) |
-| `Index UV` | sensor | – | **0 … 16** | UV index, `(b15 & 0x1F) − 1` |
-| `Luminosité` | sensor, `illuminance` | lx | **0 … 327 670** | illuminance; ×10 when bit 15 of the field is set (station spec: 0–200 klux) |
-
-Values outside the accepted range are **not published**: the frame is rejected and counted (see the
-plausibility gate in `vevor_protocol.h`). The station's own specifications (manual, p. 26-27) are:
-outdoor temperature −40…70 °C, humidity 1…99 %, wind 0…180 km/h, 16 wind directions, rain
-0…12 999 mm, UV 0…16, light 0…200 klux — the accepted ranges above are the ones this firmware
-enforces.
-
-### Status and diagnostics
-
-| Entity (`name:`) | HA type | Unit | Range | What it is |
-|---|---|---|---|---|
-| `Batterie station faible` | binary_sensor, `battery` | – | on/off | low-battery flag of the outdoor sensor |
-| `ID station` | sensor (diagnostic) | – | 0 … 65 535 | station ID (hex). **It changes when the sensor's batteries are changed** |
-| `Compteur TX` | sensor (diagnostic) | – | 0 … 255 | frame counter, +1 every 20 s (used to detect missed/replayed bursts) |
-| `Trames valides` | sensor (diagnostic) | – | 0 … 4 294 967 295 | frames decoded and published since boot |
-| `Trames rejetées` | sensor (diagnostic) | – | 0 … 4 294 967 295 | candidates whose sync word was seen but which failed validation (checksum / counter / plausibility) — the real noise counter |
-| `Captures RMT` | sensor (diagnostic) | – | 0 … 4 294 967 295 | bursts captured on GDO0 (0 = nothing reaches the chip) |
-| `Doublons ignorés` | sensor (diagnostic) | – | 0 … 4 294 967 295 | burst delivered twice by the RMT within 5 s |
-| `Dernière trame brute` | text_sensor (diagnostic) | – | 21 hex bytes | last decoded frame, as received |
-| `Dernier verdict` | text_sensor (diagnostic) | – | `ok` or a reason | safety net: verdict on the last delivered frame |
-
-### Controls
-
-| Entity (`name:`) | HA type | Range | What it is |
-|---|---|---|---|
-| `Fréquence CC1101` | number (config) | **430 … 930 MHz**, step 0.005 | live radio frequency: scan for the station without reflashing |
-| `Dump impulsions` | button (config) | – | logs the raw pulse durations of the next captures (the only way to analyse the real waveform from outside) |
-| `Réappliquer la config radio` | button (config) | – | re-runs the radio re-arm sequence (`cc1101.reset`) |
-| `Redémarrer la carte` | button (config) | – | reboot — the measured remedy for the mute-chip condition |
+* `name:` values are French in the firmware; changing them renames existing entities in an
+  already-running installation. Automations should bind to the entity `id` and the published
+  *values*, not to a display name.
+* The station's own specifications (manual p. 26-27) are **wider** than what this firmware enforces:
+  outdoor temperature −40…70 °C, humidity 1…99 %, wind 0…180 km/h, 16 directions, rain
+  0…12 999 mm, UV 0…16, light 0…200 klux. The accepted ranges on the home page are the ones the
+  plausibility gate actually applies.
+* **Counters visible in the board's log but not as entities**: frames obtained by repair, frames
+  refused by the continuity gate, and rain refusals. The periodic line looks like:
+  `captures=143 (+3), trames=47, rejets=1, réparées=1 (dont 0 refusées), pluie_refusee=0, …`
+  Raise the log level for a campaign to see them (`logger` substitution, see the root README's
+  flashing section and `state/PROGRESS.md`).
 
 ## 1.4 The console's forecast icon is not receivable — rules for Home Assistant
 

@@ -80,16 +80,52 @@ Nothing else to configure: the board needs no location, no time zone and no cloc
 
 ---
 
-## 4. What it publishes
+## 4. What it publishes to Home Assistant
 
-Temperature, humidity, wind speed and gust, wind direction, cumulative rain, UV index and
-illuminance — plus a set of diagnostic sensors (frames published, frames rejected, RMT captures,
-duplicates, station ID, TX counter, last raw frame) and four controls (radio frequency, raw pulse
-dump, radio re-apply, reboot).
+All entities below are declared in `esphome/vevor-7in1.yaml`. **`name:` values are French** (changing
+them would rename existing entities in an already-running installation) — rename them in the YAML if
+you want another language. Automations should bind to the entity `id` and to the published *values*.
 
-The full table, with units and accepted ranges, is in
-[`dev/README.md` §1.3](dev/README.md). Values outside physical ranges are **not** published: the
-frame is rejected and counted instead.
+### Measurements
+
+| Entity (`name:`) | Type | Unit | Accepted range | What it is |
+|---|---|---|---|---|
+| `Température extérieure` | sensor, `temperature` | °C | **−40 … +60** | outdoor temperature, 0.1 °C steps, `(raw − 500) × 0.1` |
+| `Humidité extérieure` | sensor, `humidity` | % | **0 … 100** | outdoor relative humidity |
+| `Vent vitesse moyenne` | sensor, `wind_speed` | km/h | **0 … 180** | average wind speed, `raw / 8.333` |
+| `Vent rafale` | sensor, `wind_speed` | km/h | **0 … 180** | wind gust of the frame, `raw / 1.25` (always ≥ average) |
+| `Vent direction` | sensor | ° | **0 … 359** | wind direction; the station measures 16 sectors, the frame carries a 12-bit angle |
+| `Pluie cumulée` | sensor, `precipitation` | mm | **0 … 15 209.8** | cumulative rain since the last reset, 0.233 mm per tip. Monotone: a rise of more than 5 mm between two frames, and any non-zero decrease, are rejected as corruption; a decrease to zero is accepted (battery change) |
+| `Index UV` | sensor | – | **0 … 16** | UV index, `(b15 & 0x1F) − 1` |
+| `Luminosité` | sensor, `illuminance` | lx | **0 … 327 670** | illuminance; ×10 when bit 15 of the field is set |
+
+### Status and diagnostics
+
+| Entity (`name:`) | Type | Unit | What it is |
+|---|---|---|---|
+| `Batterie station faible` | binary_sensor, `battery` | – | low-battery flag of the outdoor sensor |
+| `ID station` | sensor (diagnostic) | – | station ID (hex). **It changes when the sensor's batteries are changed** |
+| `Compteur TX` | sensor (diagnostic) | – | frame counter, +39 every 20 s (used to detect missed or replayed bursts) |
+| `Trames valides` | sensor (diagnostic) | – | frames decoded and published since boot |
+| `Trames rejetées` | sensor (diagnostic) | – | candidates whose sync word was seen but which failed validation (checksum / counter / plausibility) — the real noise counter |
+| `Captures RMT` | sensor (diagnostic) | – | bursts captured on GDO0 (0 = nothing reaches the chip) |
+| `Doublons ignorés` | sensor (diagnostic) | – | burst delivered twice by the RMT within 5 s |
+| `Dernière trame brute` | text_sensor (diagnostic) | – | last decoded frame, as received (21 hex bytes) |
+| `Dernier verdict` | text_sensor (diagnostic) | – | `ok` or a reason — verdict on the last delivered frame |
+
+### Controls
+
+| Entity (`name:`) | Type | Range | What it is |
+|---|---|---|---|
+| `Fréquence CC1101` | number (config) | **430 … 930 MHz**, step 0.005 | live radio frequency: scan for the station without reflashing |
+| `Dump impulsions` | button (config) | – | logs the raw pulse durations of the next captures (the only way to analyse the real waveform from outside) |
+| `Réappliquer la config radio` | button (config) | – | re-runs the radio re-arm sequence (`cc1101.reset`) |
+| `Redémarrer la carte` | button (config) | – | reboot — the measured remedy for the mute-chip condition |
+
+Values outside the accepted ranges are **not** published: the frame is rejected and counted instead
+(see the plausibility gate in `vevor_protocol.h`). A few counters are visible in the board's log
+rather than as entities — among them the rain refusals, which is what to look for if the rain value
+ever stops moving when you expect it to rain.
 
 ---
 
