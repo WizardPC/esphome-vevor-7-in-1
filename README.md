@@ -27,7 +27,7 @@ never touches the radio.
 | Path | Half | Role |
 |---|---|---|
 | `esphome/vevor-7in1.yaml` | **Production** | the complete ESPHome configuration (firmware) |
-| `esphome/includes/vevor_protocol.h` | **Production** | protocol: pulses → bits → bytes → values, validation gate. Pure C++, **testable off-board** |
+| `esphome/components/vevor_7in1/vevor_protocol.h` | **Production** | protocol: pulses → bits → bytes → values, validation gate. Pure C++, **testable off-board** |
 | `esphome/components/vevor_7in1/` | **Production** | C++ component: plugs into `remote_receiver`, stitches burst fragments, counts, triggers |
 | `esphome/components/cc1101/` | **Production** | local copy of ESPHome's `cc1101` component with the fixes this board needs (`README-LOCAL.md`) |
 | `esphome/secrets.yaml.example` | **Production** | template to copy to `esphome/secrets.yaml` (never versioned) |
@@ -256,6 +256,29 @@ tools/flash.sh 172.16.0.205          # OTA afterwards
 # 6. Evaluate the captured frames (independent Python decoder + acceptance criteria)
 tools/eval_frames.py logs/capture_*.log --json logs/report.json
 ```
+
+### Using the components in your own ESPHome install (copy-paste)
+
+Both components are read from this public repository, so a config only needs this block — nothing
+from this repository has to be copied next to your YAML (only your own `secrets.yaml`):
+
+```yaml
+external_components:
+  - source: github://WizardPC/esphome-vevor-7-in-1@main
+    refresh: 0s            # re-check the branch on every compile
+    components: [vevor_7in1, cc1101]
+```
+
+* `@main` follows the current version. Replace it with a tag (`@v1.0.0`) or a commit hash to pin a
+  version — with a pinned ref, `refresh: 0s` is no longer needed.
+* `esphome/components/cc1101` is a local copy of ESPHome's own driver carrying the fixes this board
+  needs, so ESPHome answers `External components are overriding built-in components: cc1101`. That
+  is expected: keep both names in `components:`, and do not add `path:`, ESPHome finds them at
+  `<repo>/esphome/components`.
+* `esphome: min_version:` can be set to the validated ESPHome version (`requirements.txt`).
+* Building **inside a clone of this repository** must use the local sources instead — that is what
+  `tools/build.sh` and `tools/flash.sh` do (`-s vevor_components components`). Without that option a
+  build fetches `@main` and silently ignores your working tree.
 
 ### Publishing to the repository
 

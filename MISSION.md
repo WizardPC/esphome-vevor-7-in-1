@@ -22,7 +22,7 @@ se réécrire les fichiers sous les pieds :
 - **La boucle** : la radio et le matériel uniquement — paramètres CC1101, build, flash, captures,
   balayages de fréquence, mesures. Elle écrit ses essais dans `state/PROGRESS.md` et avance
   `state/PHASE`.
-- **La session interactive** : le décodeur (`esphome/includes/vevor_protocol.h`), l'outillage
+- **La session interactive** : le décodeur (`esphome/components/vevor_7in1/vevor_protocol.h`), l'outillage
   d'analyse (`tools/eval_frames.py`), les tests et la documentation destinée aux autres
   utilisateurs.
 - Avant de modifier un fichier hors de son périmètre, le noter dans PROGRESS.md. En cas de
@@ -49,7 +49,7 @@ Une itération = un cycle. Ne pas reflasher sans avoir lu les logs du flash pré
 ## Boucle d'itération (une itération = un cycle)
 
 1. Lire `state/PROGRESS.md` (où on en est, dernière hypothèse, prochaine action).
-2. Modifier le firmware (`esphome/vevor-7in1.yaml`, `esphome/includes/*.h`).
+2. Modifier le firmware (`esphome/vevor-7in1.yaml`, `esphome/components/vevor_7in1/*.h`).
 3. Compiler : `tools/build.sh` → si échec, corriger et revenir en 2.
 4. Flasher : `tools/flash.sh <ip_ou_port>` (USB la première fois, OTA ensuite).
 5. Capturer les logs : `.venv/bin/python tools/capture_logs.py --host <ip> --seconds <durée_s> --out logs/capture_*.log`.
@@ -130,6 +130,6 @@ Voir `references/HOME_ASSISTANT.md` pour l'intégration HA et ce qui est scripta
   Elles n'ont plus d'objet si une seule session travaille ; les garder quand deux processus tournent.
 - **Faits d'environnement datés** (LXC `192.168.2.167`, HA `192.168.2.104`, HA Core muet sur 8123 au
   30/09) : à rafraîchir si l'installation change — pas des exigences du projet.
-- **Fait corrigé** : le fichier décodeur cité en tête de ce document (`esphome/includes/vevor_7in1.h`)
-  n'existait pas ; le décodeur est `esphome/includes/vevor_protocol.h` (l'en-tête `vevor_7in1.h` est
+- **Fait corrigé** : le fichier décodeur cité en tête de ce document (`esphome/components/vevor_7in1/vevor_7in1.h`)
+  n'existait pas ; le décodeur est `esphome/components/vevor_7in1/vevor_protocol.h` (l'en-tête `vevor_7in1.h` est
   celui du composant, sous `esphome/components/vevor_7in1/`).

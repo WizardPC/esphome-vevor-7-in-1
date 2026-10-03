@@ -20,7 +20,8 @@ flock -w 1500 9 || {
 cd "$ROOT/esphome"
 echo "[flash] $YAML -> $TARGET"
 
-"$ROOT/.venv/bin/esphome" run "$YAML.yaml" --device "$TARGET" --no-logs > "$ROOT/logs/last_flash.log" 2>&1
+# Même surcharge que build.sh : sinon ESPHome téléchargerait la version publiée.
+"$ROOT/.venv/bin/esphome" -s vevor_components components run "$YAML.yaml" --device "$TARGET" --no-logs > "$ROOT/logs/last_flash.log" 2>&1
 CODE=$?
 tail -25 "$ROOT/logs/last_flash.log"
 

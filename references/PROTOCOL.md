@@ -5,7 +5,7 @@ Reference implementation: the rtl_433 decoder `vevor_7in1.c` (merbanan/rtl_433,
 YT60231 (868 MHz EU), YT60234 (915 MHz US). Same protocol and same checksum in both bands.
 
 > **Status, 02/10/2026.** The **frame table** below was verified against our decoder
-> (`esphome/includes/vevor_protocol.h`): same "-1" offsets, same scales. The values in the "Radio
+> (`esphome/components/vevor_7in1/vevor_protocol.h`): same "-1" offsets, same scales. The values in the "Radio
 > layer" section, however (87 µs bit period ≈ 11 494 baud, ±37 kHz deviation, 915.031 MHz centre)
 > are **rtl_433's measurements on a 915 MHz unit**. The receiver used here (868 MHz EU) is
 > configured for **868.35 MHz / 70 kHz / 100 kHz / 11 111 baud**, the values of the reference build
@@ -21,7 +21,7 @@ YT60231 (868 MHz EU), YT60234 (915 MHz US). Same protocol and same checksum in b
 - Measured centre 915.031 MHz for a nominal 915.000 → expect a **frequency offset** (the CC1101
   reports `freq_offset` on each packet: that is the alignment tool).
 - Preamble then sync word: the pattern searched for is **`AA AA CA CA 54`**, followed by the
-  payload — `references/vevor_7in1.c:68`, `esphome/includes/vevor_protocol.h`.
+  payload — `references/vevor_7in1.c:68`, `esphome/components/vevor_7in1/vevor_protocol.h`.
 
 ## Frame
 
@@ -51,7 +51,7 @@ decrements apply only **after** validation.
 **No pressure field.** The frame carries no barometric pressure: the station's 6-icon weather
 forecast is computed by the display console from the console's own barometer (owner's manual
 YT60309, p. 20). The console's icon is therefore not receivable — see §1.4 of the README and the
-header of `esphome/includes/vevor_forecast.h`.
+header of `esphome/components/vevor_7in1/vevor_forecast.h`.
 
 ## Self-evaluation criteria (ground truth, without an SDR)
 

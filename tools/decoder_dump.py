@@ -6,7 +6,7 @@ aucune trame, il faut savoir si le flux BRUT contient une trame valide — donc 
 l'assembleur du firmware, ou dans la réception elle-même.
 
 Ce script rejoue exactement la quantification du firmware (voir `timings_to_bits` dans
-`esphome/includes/vevor_protocol.h`) :
+`esphome/components/vevor_7in1/vevor_protocol.h`) :
 
     niveau   = 1 si la durée est positive, 0 sinon      (la polarité GDO0 n'est pas présumée)
     nb ticks = arrondi(durée / période)                  (au moins 1, au plus MAX_RUN_BITS)

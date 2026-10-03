@@ -20,7 +20,8 @@ flock -w 1500 9 || {
 cd "$ROOT/esphome"
 echo "[build] $YAML"
 
-"$ROOT/.venv/bin/esphome" compile "$YAML.yaml" > "$ROOT/build/last_compile.log" 2>&1
+# Le YAML pointe par défaut sur le dépôt public (github://) : ici on compile l'arbre LOCAL.
+"$ROOT/.venv/bin/esphome" -s vevor_components components compile "$YAML.yaml" > "$ROOT/build/last_compile.log" 2>&1
 CODE=$?
 tail -20 "$ROOT/build/last_compile.log"
 

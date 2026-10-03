@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Encodeur de trames Vevor 7-en-1 — indépendant du décodeur, pour les tests hors matériel.
 
-C'est le pendant inverse de `esphome/includes/vevor_7in1.h` : il part de valeurs physiques et
+C'est le pendant inverse de `esphome/components/vevor_7in1/vevor_7in1.h` : il part de valeurs physiques et
 produit les 21 octets bruts, en appliquant l'encodage de la spec (`references/PROTOCOL.md`,
 elle-même issue de `rtl_433/src/devices/vevor_7in1.c`) : décalage +1 sur les octets
 8, 9, 11, 12, 13, 14, 16, 17, checksum = somme(b[0..18]) & 0xFF, et b[20] = (b[18]+1) & 0xFF.

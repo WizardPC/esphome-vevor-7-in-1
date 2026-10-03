@@ -1,7 +1,7 @@
 # Why single bits go wrong — functional analysis of the 03/10 discovery
 
 Scope: the production receiver (`ESP32-C3 + CC1101`, GPIO3/GDO0 into `remote_receiver`, decoder in
-`esphome/includes/vevor_protocol.h`). Written after the owner challenged the first fix ("if 5 of 6
+`esphome/components/vevor_7in1/vevor_protocol.h`). Written after the owner challenged the first fix ("if 5 of 6
 bursts carry the sync word, that cannot be chance — the problem comes from elsewhere"), and after a
 literature check to make sure we were not shipping a placebo.
 

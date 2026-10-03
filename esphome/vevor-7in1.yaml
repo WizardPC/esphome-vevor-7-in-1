@@ -1,19 +1,21 @@
 # Vevor 7-in-1 weather station receiver, 868 MHz — ESP32-C3 SuperMini + CC1101.
 # Wiring, design choices and the measurements behind them: docs/firmware-design-notes.md
-# Frame layout: references/PROTOCOL.md — Decoder: includes/vevor_protocol.h
+# Frame layout: references/PROTOCOL.md — Decoder: components/vevor_7in1/vevor_protocol.h
 
 substitutions:
   freq_mhz: "868.35"
   deviation_khz: "70"
   symbol_rate: "11111"
   bw_khz: "100"
+  # Composants récupérés depuis le dépôt public (voir `external_components` plus bas) :
+  # ce YAML est copiable tel quel chez n'importe qui, aucun fichier du dépôt n'est requis à côté.
+  # Dans CE dépôt, on compile les sources locales : `-s vevor_components components`.
+  vevor_components: "github://WizardPC/esphome-vevor-7-in-1@main"
 
 esphome:
   name: vevor-7in1
   friendly_name: Station Vevor 7-en-1
   comment: "Récepteur 868 MHz Vevor 7-in-1 (YT60309) — ESP32-C3 + CC1101"
-  includes:
-    - includes/vevor_protocol.h
   on_boot:
     priority: -100          # after every setup(), including the radio and the RMT
     then:
@@ -66,11 +68,16 @@ wifi:
 captive_portal:
 
 external_components:
-  - source:
-      type: local
-      path: components
-    # Local copy of ESPHome's cc1101 driver: identity re-reads, verified writes, VCO calibration
-    # diagnostics, SPI at 1 MHz. See design notes §5.
+  # Les deux composants viennent du dépôt public : ce bloc est copiable tel quel, rien du dépôt
+  # n'est requis à côté du YAML. Voir README §1.5 (versions figées : remplacer @main par un tag).
+  # Construire depuis l'arbre local (itération dans ce dépôt) exige la surcharge :
+  #   tools/build.sh                                             (déjà le cas)
+  #   esphome compile vevor-7in1.yaml -s vevor_components components
+  # Sans elle, la compilation irait chercher la version PUBLIÉE et ignorerait vos modifications.
+  - source: ${vevor_components}
+    refresh: 0s
+    # esphome/components/cc1101: local copy of ESPHome's driver — identity re-reads, verified
+    # writes, VCO calibration diagnostics, SPI at 1 MHz (this repo's version). See design notes §5.
     components: [vevor_7in1, cc1101]
 
 spi:

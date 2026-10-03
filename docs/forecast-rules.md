@@ -9,7 +9,7 @@ side of the estimate has been removed; what follows is the rule book, kept out o
 | Fact | Source |
 |---|---|
 | The console computes its six icons (Sunny, Partly Cloudy, Cloudy, Rainy, Stormy, Snowy) from **its own barometer**: range 600-1100 hPa, pressure trend over the past hour, and the manual itself warns the accuracy is *"about 65-70%"* | Vevor YT60309 owner's manual, *Weather Forecast*, p. 20 |
-| The outdoor 7-in-1 sensor **neither measures nor transmits pressure**. Its payload is temperature, humidity, wind speed, wind direction, rainfall, UV index and illuminance — the 21-byte frame has no pressure field | manual *Specifications*; `references/PROTOCOL.md`; `esphome/includes/vevor_protocol.h` |
+| The outdoor 7-in-1 sensor **neither measures nor transmits pressure**. Its payload is temperature, humidity, wind speed, wind direction, rainfall, UV index and illuminance — the 21-byte frame has no pressure field | manual *Specifications*; `references/PROTOCOL.md`; `esphome/components/vevor_7in1/vevor_protocol.h` |
 | *"When outdoor temperature is lower than 1 °C/33.8 °F, the snowflake icon will appear"* | manual, *Ice Alert*, p. 20 |
 
 **Consequence: the station's own forecast icon cannot be read off the air with this hardware.** No

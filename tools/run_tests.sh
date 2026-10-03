@@ -34,7 +34,7 @@ echo "=== 2c. génération des rafales RÉELLES (vecteurs de régression du dump
 
 echo "=== 3. compilation du test C++ ==="
 "$DEV_PY" -m ziglang c++ -std=c++17 -w \
-  -I "$ROOT/esphome/includes" -I "$ROOT/tests" \
+  -I "$ROOT/esphome/components/vevor_7in1" -I "$ROOT/tests" \
   "$ROOT/tests/test_decoder.cpp" -o "$ROOT/build/test_decoder" || exit 2
 echo "binaire : build/test_decoder"
 

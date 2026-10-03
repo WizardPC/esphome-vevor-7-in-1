@@ -35,10 +35,16 @@
 #include "esphome/core/log.h"
 #include "esphome/components/remote_base/remote_base.h"
 #include "esphome/components/remote_receiver/remote_receiver.h"
-#include "esphome/components/text_sensor/text_sensor.h"
 
-// La chaîne impulsions → trame vit dans l'en-tête `includes/` du projet, pour être testable
-// hors matériel (tools/run_tests.sh). ESPHome le copie dans src/.
+// La chaîne impulsions → trame vit à côté de ce fichier (`vevor_protocol.h`, dans le dossier du
+// composant) : ESPHome copie TOUT le dossier du composant dans le build, et un include entre
+// guillemets cherche d'abord dans le dossier du fichier incluant. Aucun `-I` ni bloc
+// `esphome: includes:` n'est donc nécessaire, et le composant reste autonome — c'est ce qui
+// permet de le récupérer tel quel depuis le dépôt public :
+//   external_components:
+//     - source: github://WizardPC/esphome-vevor-7-in-1@main
+//       components: [vevor_7in1, cc1101]
+// Testable hors matériel : tools/run_tests.sh.
 #include "vevor_protocol.h"
 
 namespace esphome {
