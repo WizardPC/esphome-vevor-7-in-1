@@ -1,0 +1,42 @@
+# Entités réellement exposées par Home Assistant — relevé, pas déduction.
+#
+# Provenance : liste fournie par le propriétaire (PanrahkFR) le 03/10/2026, lue dans
+# Home Assistant → Outils de développement → États, filtre « vevor ».
+#
+# Pourquoi ce fichier existe : l'entity_id n'est pas déductible du firmware seul. Le nom
+# d'appareil a été changé côté HA (« Jardin Station Vevor 7-en-1 »), alors que le YAML
+# déclare friendly_name « Station Vevor 7-en-1 » — la première version de la carte
+# pointait donc un préfixe inexistant. tools/check_ha_card.py vérifie la carte contre
+# CETTE liste, et non contre une reconstruction.
+#
+# Rafraîchir après tout renommage, changement de nom d'appareil ou nouvelle entité :
+#   1. Home Assistant → Outils de développement → États, filtrer « vevor », coller les
+#      couples nom / entity_id ci-dessous (un par appareil : binary_sensor, sensor, …) ;
+#   2. .venv/bin/python tools/check_ha_card.py   → doit rendre 0 échec.
+
+## Mesures
+sensor.jardin_station_vevor_7_en_1_temperature_exterieure            # Température extérieure
+sensor.jardin_station_vevor_7_en_1_humidite_exterieure              # Humidité extérieure
+sensor.jardin_station_vevor_7_en_1_luminosite                       # Luminosité (lx)
+sensor.jardin_station_vevor_7_en_1_index_uv                         # Index UV
+sensor.jardin_station_vevor_7_en_1_vent_vitesse_moyenne             # Vent vitesse moyenne
+sensor.jardin_station_vevor_7_en_1_vent_rafale                      # Vent rafale
+sensor.jardin_station_vevor_7_en_1_vent_direction                   # Vent direction (°)
+sensor.jardin_station_vevor_7_en_1_pluie_cumulee                    # Pluie cumulée (compteur)
+
+## État et diagnostic
+binary_sensor.jardin_station_vevor_7_en_1_batterie_station_faible   # Batterie station faible
+sensor.jardin_station_vevor_7_en_1_id_station                       # ID station
+sensor.jardin_station_vevor_7_en_1_compteur_tx                      # Compteur TX
+sensor.jardin_station_vevor_7_en_1_trames_valides                   # Trames valides
+sensor.jardin_station_vevor_7_en_1_trames_rejetees                  # Trames rejetées
+sensor.jardin_station_vevor_7_en_1_captures_rmt                     # Captures RMT
+sensor.jardin_station_vevor_7_en_1_doublons_ignores                 # Doublons ignorés
+sensor.jardin_station_vevor_7_en_1_derniere_trame_brute             # Dernière trame brute
+sensor.jardin_station_vevor_7_en_1_dernier_verdict                  # Dernier verdict
+
+## Commandes
+number.jardin_station_vevor_7_en_1_frequence_cc1101                 # Fréquence CC1101
+button.jardin_station_vevor_7_en_1_dump_impulsions                  # Dump impulsions
+button.jardin_station_vevor_7_en_1_reappliquer_la_config_radio      # Réappliquer la config radio
+button.jardin_station_vevor_7_en_1_redemarrer_la_carte              # Redémarrer la carte

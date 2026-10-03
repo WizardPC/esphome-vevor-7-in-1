@@ -4,16 +4,21 @@
 Ce que ce script vérifie, sans Home Assistant et sans matériel :
 
   1. le YAML se charge, et il a la forme d'une carte Lovelace ;
-  2. chaque `entity_id` cité dans les lignes actives existe bien dans
-     `esphome/vevor-7in1.yaml` (entity_id = translittération de
-     « <friendly_name> <nom de l'entité> », règle documentée par HA) : la carte ne
-     pointe donc aucune entité qui n'existe pas ;
-  3. aucun identifiant de l'ancien projet (`esp32_weather`, `jardin_vevor`) ne
-     subsiste dans une ligne active ;
-  4. les trois modèles du bandeau (état, icône, couleur) sont réellement exécutés
-     sur des scénarios chiffrés et comparés au verdict attendu par
-     `docs/forecast-rules.md` — y compris les cas honnêtes « nuit » et
-     « mesures insuffisantes », et le cas d'un capteur de pluie indisponible.
+  2. chaque `entity_id` de l'appareil cité par la carte — options commentées comprises,
+     puisqu'elles seront décommentées un jour — existe réellement dans
+     `docs/ha-entities.txt`, le relevé de Home Assistant. Jamais une reconstruction :
+     l'entity_id dépend du nom d'appareil, modifiable côté HA (le premier jet de la
+     carte pointait `station_vevor_7_en_1_…`, alors que HA expose
+     `jardin_station_vevor_7_en_1_…`) ;
+  3. ce relevé contient exactement les entités que `esphome/vevor-7in1.yaml` déclare,
+     translittérées et préfixées : une entité ajoutée au firmware sans être relevée
+     dans HA (ou l'inverse) est signalée ;
+  4. aucun identifiant de l'ancien projet (`esp32_weather`, `jardin_vevor`) ne subsiste
+     dans une ligne active ;
+  5. les trois modèles du bandeau (état, icône, couleur) sont réellement exécutés sur des
+     scénarios chiffrés et comparés au verdict attendu par `docs/forecast-rules.md` —
+     y compris les cas honnêtes « nuit » et « mesures insuffisantes », et le cas d'un
+     capteur de pluie indisponible.
 
 Usage :   .venv/bin/python tools/check_ha_card.py
 Sortie :  0 si tout est conforme, 1 sinon (chaque écart est affiché).
@@ -36,6 +41,7 @@ except ImportError as exc:  # pragma: no cover - dépendance de l'environnement
 
 ROOT = Path(__file__).resolve().parent.parent
 CARD = ROOT / "docs" / "ha-card.yaml"
+ENTITIES = ROOT / "docs" / "ha-entities.txt"
 FIRMWARE = ROOT / "esphome" / "vevor-7in1.yaml"
 NOW = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
 
@@ -66,14 +72,27 @@ except Exception as exc:
     sys.exit(f"1. YAML invalide : {exc}")
 
 # --------------------------------------------------------------------------- 2
-active = "\n".join(
-    line for line in raw.splitlines()
-    if line.strip() and not line.lstrip().startswith("#")
-)
-used = sorted(set(re.findall(r"\b(?:sensor|binary_sensor|text_sensor|number|button)\.[a-z0-9_]+", active)))
+reference = {
+    line.split("#")[0].strip()
+    for line in ENTITIES.read_text(encoding="utf-8").splitlines()
+    if line.split("#")[0].strip()
+}
+probe = next((entity for entity in sorted(reference) if entity.endswith("_temperature_exterieure")), None)
+if not probe:
+    sys.exit("2. docs/ha-entities.txt : impossible d'en déduire le préfixe d'appareil")
+prefix = probe.split(".", 1)[1].rsplit("_temperature_exterieure", 1)[0]
 
+cited = sorted(set(re.findall(
+    rf"\b(?:sensor|binary_sensor|text_sensor|number|button)\.{re.escape(prefix)}_[a-z0-9_]+", raw)))
+print(f"2. Entités : appareil « {prefix} », {len(reference)} entités relevées dans HA, "
+      f"{len(cited)} citées par la carte")
+unknown = [entity for entity in cited if entity not in reference]
+check(not unknown, f"les entités citées existent toutes dans le relevé ({unknown or 'aucun écart'})")
+unused = sorted(entity for entity in reference if entity not in cited)
+print(f"     relevé non cité par la carte (attendu : diag. et commandes) : {len(unused)} → {unused}")
+
+# --------------------------------------------------------------------------- 3
 firmware = FIRMWARE.read_text(encoding="utf-8")
-device = slugify(re.search(r"friendly_name:\s*(.+)", firmware).group(1).strip())
 declared: set[str] = set()
 domain = None
 for line in firmware.splitlines():
@@ -82,18 +101,62 @@ for line in firmware.splitlines():
         domain = head.group(1)
     name = re.match(r'\s+name:\s+"([^"]+)"', line)
     if name and domain:
-        declared.add(f"{domain}.{device}_{slugify(name.group(1))}")
+        # HA expose les text_sensor d'ESPHome dans le domaine `sensor` (constaté sur le relevé).
+        ha_domain = "sensor" if domain == "text_sensor" else domain
+        declared.add(f"{ha_domain}.{prefix}_{slugify(name.group(1))}")
 
-print(f"2. Entités : {len(used)} référencées dans la carte, {len(declared)} déclarées par le firmware")
-unknown = [entity for entity in used if entity not in declared]
-check(not unknown, f"aucune entité inconnue du firmware ({'aucune' if not unknown else unknown})")
+only_firmware = sorted(declared - reference)
+only_ha = sorted(reference - declared)
+print(f"3. Accord firmware / HA : {len(declared)} entités déclarées par esphome/vevor-7in1.yaml, "
+      f"{len(reference)} relevées dans HA")
+check(not only_firmware and not only_ha,
+      f"le relevé correspond au firmware (firmware seul : {only_firmware or 'aucune'} | "
+      f"HA seul : {only_ha or 'aucune'})")
 
-# --------------------------------------------------------------------------- 3
+# --------------------------------------------------------------------------- 4
+active = "\n".join(
+    line for line in raw.splitlines()
+    if line.strip() and not line.lstrip().startswith("#")
+)
 legacy = [line.strip() for line in active.splitlines() if re.search(r"esp32_weather|jardin_vevor", line)]
 check(not legacy, f"aucun identifiant de l'ancien projet dans les lignes actives ({legacy or 'aucun'})")
 
+# Les blocs d'options vivent en commentaires : ils seront décommentés un jour, donc on
+# vérifie ici qu'ils se chargent comme du YAML (et non seulement qu'ils se lisent bien).
+blocks: list[str] = []
+cur: list[str] = []
+base: int | None = None
+for line in raw.splitlines():
+    starter = re.match(r"^#(\s*)- ", line) or re.match(r"^#(\s*)[A-Za-z_][A-Za-z0-9_]*:\s*$", line)
+    if starter and base is None:
+        base = len(starter.group(1))
+        cur = [line[1:]]
+        continue
+    if base is None:
+        continue
+    body = line[1:] if line.startswith("#") else None
+    indent = len(body) - len(body.lstrip()) if body is not None else None
+    if line.strip() == "":
+        cur.append("")
+    elif body is not None and indent is not None and indent >= base:
+        cur.append(body)
+    else:
+        blocks.append("\n".join(cur).strip("\n"))
+        cur, base = [], None
+if base is not None:
+    blocks.append("\n".join(cur).strip("\n"))
 
-# --------------------------------------------------------------------------- 4
+broken: list[str] = []
+for block in blocks:
+    try:
+        yaml.safe_load(block)
+    except Exception as exc:  # noqa: BLE001 - on rapporte le texte fautif
+        broken.append(f"{exc} → {block.splitlines()[0][:60]}")
+check(not broken, f"les {len(blocks)} blocs d'options commentés se chargent comme du YAML "
+                  f"({broken or 'aucun écart'})")
+
+
+# --------------------------------------------------------------------------- 5
 class State:
     def __init__(self, state: str, last_changed: datetime | None = None):
         self.state, self.last_changed = state, last_changed
@@ -143,14 +206,20 @@ def render(template: str, data: dict) -> str:
 header = card["cards"][0]
 TEMPLATES = {"état": header["secondary"], "icône": header["icon"], "couleur": header["icon_color"]}
 clear_40 = 133800 * math.sin(math.radians(40)) ** 1.15  # référence ciel clair à 40° (§6)
+ENTITY = {
+    "temp": f"sensor.{prefix}_temperature_exterieure",
+    "rafale": f"sensor.{prefix}_vent_rafale",
+    "lux": f"sensor.{prefix}_luminosite",
+    "pluie": f"sensor.{prefix}_pluie_cumulee",
+}
 
 
 def scenario(label, *, t, lux, elev, rafale, pluie, il_y_a, attendu, icone, couleur, horizon="above_horizon"):
     data = {
-        "sensor.station_vevor_7_en_1_temperature_exterieure": State(str(t)),
-        "sensor.station_vevor_7_en_1_vent_rafale": State(str(rafale)),
-        "sensor.station_vevor_7_en_1_luminosite": State(str(lux)),
-        "sensor.station_vevor_7_en_1_pluie_cumulee": State(str(pluie), NOW - timedelta(seconds=il_y_a)),
+        ENTITY["temp"]: State(str(t)),
+        ENTITY["rafale"]: State(str(rafale)),
+        ENTITY["lux"]: State(str(lux)),
+        ENTITY["pluie"]: State(str(pluie), NOW - timedelta(seconds=il_y_a)),
         "sun.sun": State(horizon),
         "_sun_elevation": elev,
     }
@@ -170,7 +239,7 @@ def scenario(label, *, t, lux, elev, rafale, pluie, il_y_a, attendu, icone, coul
     return ok
 
 
-print("4. Modèles du bandeau exécutés sur des scénarios (verdicts de docs/forecast-rules.md)")
+print("5. Modèles du bandeau exécutés sur des scénarios (verdicts de docs/forecast-rules.md)")
 scenario("pluie en cours, 1,4 °C", t=1.4, lux=1000, elev=40, rafale=18, pluie=59.2, il_y_a=180,
          attendu="Pluvieux", icone="mdi:weather-rainy", couleur="blue")
 scenario("pluie et gel — alerte verglas du manuel (< 1 °C)", t=0.4, lux=1000, elev=40, rafale=12,

@@ -83,9 +83,12 @@ which is exactly why the night case returns `unknown` instead of a plausible-loo
 A ready-to-paste Lovelace card built on these rules — drop-in replacement for the
 older `esp32_weather` / `jardin_vevor` card — is versioned as
 [`docs/ha-card.yaml`](ha-card.yaml); it needs no helper in Home Assistant (the rain
-window is read from the cumulative counter's `last_changed`), and
-`tools/check_ha_card.py` executes its templates on numeric scenarios so the rules
-below cannot drift away from the card.
+window is read from the cumulative counter's `last_changed`), and it is checked
+against the **measured** Home Assistant entity list in
+[`docs/ha-entities.txt`](ha-entities.txt) — the entity prefix depends on the device
+name, which is renamable inside HA, so it is never deduced from the firmware.
+`tools/check_ha_card.py` runs both that check and the rules below against numeric
+scenarios, so the card cannot drift away from this document.
 
 Starting point, meant to be adapted and tested in your own configuration — it is not deployed
 anywhere and has not been exercised against a live Home Assistant.
