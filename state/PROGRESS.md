@@ -1,3 +1,36 @@
+### 03/10 (suite 9) — PREUVE SUR LA CARTE : 45 trames sur 45 émissions, une seule réparation
+
+Fenêtre de 15 min avec le firmware de l'étape 1 (binaire `ec0a270c`, 958 688 octets). **45 trames
+publiées pour 45 émissions attendues** — la meilleure fenêtre jamais mesurée sur ce montage.
+
+| mesure | valeur |
+|---|---|
+| trames publiées | **45** (44 intervalles, **tous exactement à 20,0 s**, aucun trou) |
+| compteurs TX distincts | **45** — aucun doublon de livraison (artefact de recollage écarté) |
+| trames réparées | **1** (dont **0** refusée par le garde-fou), contre 4 réparations sur 5 rafales du dump |
+| candidats rejetés | **1** — contre **125** sur 12 min avec la grille fixe à 90 µs |
+| puce présente | **oui** — 0 ligne `Chip ID: 0xFFFF` sur toute la fenêtre |
+| forme du flux | rafales complètes, 178 à 184 impulsions, capture la plus longue 502 |
+| valeurs publiées | 19,3 °C, 65-66 %, direction 90°, lux 26 730, compteur TX avançant de +39/émission |
+
+**Validation indépendante par le compteur TX** (sans passer par le firmware) : sur les 44 intervalles,
+l'écart du compteur correspond au temps écoulé (dt × 1,95 tick/s) avec un **écart relatif médian de
+1,000**, et **0 trame hors tolérance**. Les trames sont donc cohérentes avec elles-mêmes ET avec
+l'horloge — c'est une validation trame par trame, pas un compte.
+
+**Un trou dans la chaîne de preuve, trouvé et corrigé ici même :** `tools/eval_frames.py` rend
+**FAIL** (« 45 trames publiées mais aucune ligne RAW exploitable ») parce que la ligne `V7IN1 RAW`
+(les 21 octets bruts) est en **DEBUG**, donc retirée du binaire en production (niveau INFO) — c'est
+une conséquence directe de l'allègement du YAML. Le niveau des tags du projet est désormais
+**substituable** : `esphome -s niveau_v7in1 DEBUG …` le remonte pour une campagne sans toucher au
+YAML de production. La réception de cette fenêtre n'est pas en cause (le FAIL le dit lui-même).
+
+**Comparaison honnête** : l'ancienne mesure de référence (12 trames en 12 min) avait été prise avec
+la puce en état A (muette sur le SPI, 0xFFFF) — les deux fenêtres ne comparent pas le même état.
+Ce qui se compare, c'est le travail du décodeur : 125 rejets et 4 réparations nécessaires sur 5
+rafales, contre **1 rejet et 1 réparation sur 45 trames** — l'estimateur de rythme mesuré fait
+décoder directement ce que la grille fixe à 90 µs ratait.
+
 ### 03/10 (suite 8) — Étape 1 livrée : période MESURÉE + réparations bornées, 5/6 sur les rafales réelles
 
 Consigne : « essaie la piste de l'horloge », avec une contrainte de production structurante —

@@ -7,6 +7,9 @@ substitutions:
   deviation_khz: "70"
   symbol_rate: "11111"
   bw_khz: "100"
+  # Niveau de journal des tags de ce projet. INFO en production ; une campagne de mesure le remonte
+  # sans éditer le fichier (`esphome -s niveau_v7in1 DEBUG …`, voir le bloc logger).
+  niveau_v7in1: "INFO"
   # Composants récupérés depuis le dépôt public (voir `external_components` plus bas) :
   # ce YAML est copiable tel quel chez n'importe qui, aucun fichier du dépôt n'est requis à côté.
   # Dans CE dépôt, on compile les sources locales : `-s vevor_components components`.
@@ -39,6 +42,15 @@ logger:
   # quiet; raise to DEBUG (or add `logs: {v7in1: DEBUG}`) when chasing a reception problem.
   # Only the frame line (see on_frame) stays at INFO: the host tools parse it.
   level: INFO
+  # Le niveau des tags de ce projet est SUBSTITUABLE, pour qu'une campagne de mesure le remonte
+  # sans éditer ce fichier : la ligne « V7IN1 RAW » (les 21 octets bruts) est en DEBUG, donc absente
+  # d'un build de production — or c'est elle que `tools/eval_frames.py` recoupe avec les valeurs
+  # publiées. Mesuré le 03/10 : sans elle, le vérificateur du projet rend FAIL (« 45 trames publiées
+  # mais aucune ligne RAW exploitable ») alors que la réception est intacte. Recette :
+  #   .venv/bin/esphome -s niveau_v7in1 DEBUG compile esphome/vevor-7in1.yaml
+  logs:
+    v7in1: ${niveau_v7in1}
+    vevor_7in1: ${niveau_v7in1}
 
 api:
   encryption:
