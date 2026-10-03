@@ -1,3 +1,36 @@
+### 03/10 (suite 5) — Pourquoi le rendement est bas : cinq rafales propres sur six ont un contenu corrompu
+
+Analyse hors ligne des 6 rafales « propres » du dump (162-167 impulsions, impulsion courte médiane à
+90 µs, toutes d'apparence identique), en balayant période, polarité et alignement de bit :
+
+| capture | impulsions | décodage |
+|---|---|---|
+| 12 | 162 | aucune trame (le sync apparaît, la somme ne tombe pas) |
+| 13 | 165 | aucune trame (sync trouvé, en-tête absent) |
+| 16 | 166 | aucune trame (sync trouvé, en-tête absent) |
+| 17 | 167 | aucune trame (sync trouvé, somme fausse) |
+| 20 | 167 | aucune trame (sync trouvé, en-tête absent) |
+| 21 | 167 | **TRAME VALIDE** (`aa 00 84 cb …` = température 15,6 °C, 80 %, 289°) |
+
+Autrement dit : dans cinq cas, le mot de synchronisation est un hasard et la trame réelle n'est pas
+là. Ce ne sont ni la fréquence (vérifiée), ni la période de bit, ni la grille du firmware, ni le
+pilote : c'est le **flux démodulé** qui contient des erreurs de bit, et un seul front perdu au milieu
+d'une rafale suffit à ruiner la trame — le piège déjà documenté dans `vevor_protocol.h`.
+
+**Troisième erreur d'analyse du jour, consignée pour mémoire** : un script de diagnostic a conclu que
+la capture 21 ne se décodait qu'à 85,4 µs et que la grille du firmware (87-90) la manquait. Faux : ce
+script utilisait `round()` de Python (arrondi bancaire), alors que le firmware fait
+`(durée + période/2) / période` (arrondi au plus proche). Avec la règle du firmware, la capture
+décode à 86, 87, 88, 89, 90 ET 91 µs. Leçon : rejouer un diagnostic avec la règle de l'implémentation
+qu'on accuse, avant de l'accuser.
+
+**Leviers restants, côté qualité de démodulation** (et non plus décodeur) :
+1. **100 nF** céramique au plus près du VCC du module — le seul des trois gestes matériels non monté ;
+2. test à UNE variable sur la **bande passante du filtre** : 100 kHz pour 70 kHz de déviation est juste
+   au sens de Carson (~150 kHz requis) — à mesurer, pas à supposer.
+
+---
+
 ### 03/10 (suite 4) — LA RÉCEPTION EST REVENUE
 
 Après les trois correctifs du jour, la carte décode à nouveau de vraies trames. Preuve, dans la
