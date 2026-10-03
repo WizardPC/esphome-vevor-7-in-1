@@ -1,0 +1,413 @@
+# =============================================================================
+# Carte Lovelace — Station Vevor 7-en-1 (868 MHz, ESP32-C3 SuperMini + CC1101)
+#
+# Adaptée de la carte « esp32_weather / jardin_vevor » aux entités réellement
+# publiées par esphome/vevor-7in1.yaml (dépôt WizardPC/esphome-vevor-7-in-1).
+#
+# Préfixe des entités : le firmware déclare friendly_name « Station Vevor 7-en-1 »,
+# d'où `station_vevor_7_en_1` (règle HA/ESPHome : l'entity_id est la translittération
+# de « <friendly_name> <nom de l'entité> », « Température extérieure » →
+# temperature_exterieure). Contrôle : Outils de développement → États, filtre « vevor ».
+# Autre nom d'appareil chez vous ? Remplacez le préfixe d'un coup :
+#     sed -i 's/station_vevor_7_en_1/vevor_7in1/g' ha-card.yaml
+#
+# Correspondance avec l'ancienne carte :
+#   sensor.esp32_weather_outside_temperature  → sensor.station_vevor_7_en_1_temperature_exterieure
+#   sensor.esp32_weather_outside_humidity     → sensor.station_vevor_7_en_1_humidite_exterieure
+#   sensor.esp32_weather_illuminance          → sensor.station_vevor_7_en_1_luminosite  (lx, jusqu'à 327 670)
+#   sensor.esp32_weather_uv_index             → sensor.station_vevor_7_en_1_index_uv     (0…16, sans unité)
+#   sensor.esp32_weather_wind_speed           → sensor.station_vevor_7_en_1_vent_vitesse_moyenne
+#   sensor.esp32_weather_wind_gust            → sensor.station_vevor_7_en_1_vent_rafale
+#   sensor.esp32_weather_wind_direction       → sensor.station_vevor_7_en_1_vent_direction  (degrés)
+#   binary_sensor.esp32_weather_weather_station_battery_low
+#                                             → binary_sensor.station_vevor_7_en_1_batterie_station_faible
+#   sensor.jardin_vevor_weather_station_pluie_{horaire,jour,semaine,mois}
+#                                             → sensor.station_vevor_7_en_1_pluie_cumulee (compteur CUMULÉ)
+#
+# Deux ruptures assumées par rapport à l'ancienne carte :
+#   1) le compteur de pluie est CUMULÉ (0,233 mm par bascule, depuis la remise à
+#      zéro) : il n'existe plus d'entités heure/jour/semaine/mois côté firmware.
+#      La version d'origine est reconstructible en HA (bloc « Option A » plus bas).
+#   2) la prévision suit docs/forecast-rules.md (règles 2 à 5 de ce dépôt) au lieu
+#      de seuils fixes. La branche nocturne basée sur l'humidité est supprimée :
+#      l'humidité ne mesure pas la couverture nuageuse, donc la nuit la carte
+#      répond « Nuit » plutôt qu'un état plausible et faux.
+# =============================================================================
+
+type: vertical-stack
+cards:
+  # --- Bandeau : état du ciel, estimé en HA à partir des mesures seules ---------
+  # Limite connue et assumée : la fenêtre de pluie est lue sur le `last_changed` du
+  # compteur cumulé — un redémarrage de la carte (ou un changement de piles) qui
+  # ramène le cumul à zéro peut donc afficher « Pluvieux » pendant 20 min. Un débit
+  # calculé (docs/forecast-rules.md §8) lève l'ambiguïté : la baisse du compteur y
+  # donne un débit négatif, donc « pas de pluie ». Voir l'option B plus bas.
+  - type: custom:mushroom-template-card
+    entity: sensor.station_vevor_7_en_1_temperature_exterieure
+    primary: Prévisions météorologiques
+    secondary: >-
+      {% set t = states('sensor.station_vevor_7_en_1_temperature_exterieure') | float(none) %}
+      {% set rafale = states('sensor.station_vevor_7_en_1_vent_rafale') | float(0) %}
+      {% set lux = states('sensor.station_vevor_7_en_1_luminosite') | float(0) %}
+      {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
+      {% set pluie_mm = states('sensor.station_vevor_7_en_1_pluie_cumulee') | float(none) %}
+      {% set compteur = states.sensor.station_vevor_7_en_1_pluie_cumulee %}
+      {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
+      {% set pluie = pluie_mm is not none and depuis < 1200 %}
+      {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
+      {% if pluie and t is not none and t < 1 %}
+        Neigeux — {{ t }} °C, pluie en cours (alerte verglas du constructeur, < 1 °C)
+      {% elif pluie and rafale >= 40 %}
+        Orageux / Tempête — rafales {{ '%g' % rafale }} km/h
+      {% elif pluie %}
+        Pluvieux — dernière bascule il y a {{ (depuis / 60) | round(0) | int }} min
+      {% elif elev >= 3 and ciel_clair >= 1000 %}
+        {% set r = lux / ciel_clair %}
+        {% if r >= 0.70 %}Dégagé / Ensoleillé — {{ (r * 100) | round(0) | int }} % du ciel clair
+        {% elif r >= 0.35 %}Partiellement nuageux — {{ (r * 100) | round(0) | int }} % du ciel clair
+        {% else %}Nuageux — {{ (r * 100) | round(0) | int }} % du ciel clair{% endif %}
+      {% elif is_state('sun.sun', 'below_horizon') %}
+        Nuit — luminosité non interprétable sans soleil (soleil à {{ elev | round(1) }}°)
+      {% else %}
+        Indéterminé — mesures insuffisantes ({{ lux | round(0) | int }} lx)
+      {% endif %}
+    icon: >-
+      {% set t = states('sensor.station_vevor_7_en_1_temperature_exterieure') | float(none) %}
+      {% set rafale = states('sensor.station_vevor_7_en_1_vent_rafale') | float(0) %}
+      {% set lux = states('sensor.station_vevor_7_en_1_luminosite') | float(0) %}
+      {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
+      {% set pluie_mm = states('sensor.station_vevor_7_en_1_pluie_cumulee') | float(none) %}
+      {% set compteur = states.sensor.station_vevor_7_en_1_pluie_cumulee %}
+      {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
+      {% set pluie = pluie_mm is not none and depuis < 1200 %}
+      {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
+      {% if pluie and t is not none and t < 1 %}mdi:weather-snowy
+      {% elif pluie and rafale >= 40 %}mdi:weather-lightning-rainy
+      {% elif pluie %}mdi:weather-rainy
+      {% elif elev >= 3 and ciel_clair >= 1000 %}
+        {% set r = lux / ciel_clair %}
+        {% if r >= 0.70 %}mdi:weather-sunny
+        {% elif r >= 0.35 %}mdi:weather-partly-cloudy
+        {% else %}mdi:weather-cloudy{% endif %}
+      {% elif is_state('sun.sun', 'below_horizon') %}mdi:weather-night
+      {% else %}mdi:weather-cloudy-alert{% endif %}
+    icon_color: >-
+      {% set t = states('sensor.station_vevor_7_en_1_temperature_exterieure') | float(none) %}
+      {% set rafale = states('sensor.station_vevor_7_en_1_vent_rafale') | float(0) %}
+      {% set lux = states('sensor.station_vevor_7_en_1_luminosite') | float(0) %}
+      {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
+      {% set pluie_mm = states('sensor.station_vevor_7_en_1_pluie_cumulee') | float(none) %}
+      {% set compteur = states.sensor.station_vevor_7_en_1_pluie_cumulee %}
+      {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
+      {% set pluie = pluie_mm is not none and depuis < 1200 %}
+      {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
+      {% if pluie and t is not none and t < 1 %}cyan
+      {% elif pluie and rafale >= 40 %}deep-purple
+      {% elif pluie %}blue
+      {% elif elev >= 3 and ciel_clair >= 1000 %}
+        {% set r = lux / ciel_clair %}
+        {% if r >= 0.70 %}amber
+        {% elif r >= 0.35 %}orange
+        {% else %}blue-grey{% endif %}
+      {% elif is_state('sun.sun', 'below_horizon') %}indigo
+      {% else %}grey{% endif %}
+    badge_icon: >-
+      {% if is_state('binary_sensor.station_vevor_7_en_1_batterie_station_faible', 'on') %}
+        mdi:battery-alert
+      {% endif %}
+    badge_color: red
+
+  # --- Température / humidité / luminosité / UV ---------------------------------
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: custom:mushroom-template-card
+        primary: '{{ states(''sensor.station_vevor_7_en_1_temperature_exterieure'', 1) }} °C'
+        secondary: 'Humidité : {{ states(''sensor.station_vevor_7_en_1_humidite_exterieure'') }} %'
+        icon: mdi:thermometer
+        icon_color: >-
+          {% set temp = states('sensor.station_vevor_7_en_1_temperature_exterieure') | float(0) %}
+          {% if temp < 0 %}indigo{% elif temp < 15 %}blue{% elif temp < 25 %}green{% elif temp < 32 %}orange{% else %}red{% endif %}
+        entity: sensor.station_vevor_7_en_1_temperature_exterieure
+      - type: custom:mushroom-template-card
+        primary: >-
+          {{ (states('sensor.station_vevor_7_en_1_luminosite') | float(0) / 1000) | round(2) }} klx
+        secondary: >-
+          Indice UV : {{ states('sensor.station_vevor_7_en_1_index_uv') | float(0) | round(0) | int }} (0…16)
+        icon: mdi:white-balance-sunny
+        icon_color: >-
+          {% set uv = states('sensor.station_vevor_7_en_1_index_uv') | float(0) %}
+          {% if uv <= 2 %}green{% elif uv <= 5 %}yellow{% elif uv <= 7 %}orange{% else %}red{% endif %}
+        entity: sensor.station_vevor_7_en_1_luminosite
+
+  # --- 24 h de température et d'humidité ---------------------------------------
+  # points_per_hour: la station émet une trame toutes les 20 s (180/h) ; 6 points/h
+  # suffisent à garder la forme du signal sur 24 h sans charger la base.
+  - type: custom:mini-graph-card
+    entities:
+      - entity: sensor.station_vevor_7_en_1_temperature_exterieure
+        name: Température
+      - entity: sensor.station_vevor_7_en_1_humidite_exterieure
+        name: Humidité
+        y_axis: secondary
+    hours_to_show: 24
+    points_per_hour: 6
+    line_width: 2
+    height: 90
+    show:
+      extrema: true
+      name: false
+      icon: false
+      state: false
+      legend: true
+      fill: fade
+
+  # --- Vent et course du soleil -------------------------------------------------
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: custom:compass-card
+        language: fr
+        header:
+          title:
+            value: Vent & Soleil
+        indicator_sensors:
+          - sensor: sensor.station_vevor_7_en_1_vent_direction
+            state_abbreviation:
+              show: false
+            indicator:
+              image: arrow_inward
+              dynamic_style:
+                sensor: sensor.station_vevor_7_en_1_vent_vitesse_moyenne
+                bands:
+                  - from_value: 0
+                    color: green
+                  - from_value: 40
+                    color: orange
+                  - from_value: 80
+                    color: red
+          - sensor: sun.sun
+            attribute: azimuth
+            state_abbreviation:
+              show: false
+            indicator:
+              image: circle
+              dynamic_style:
+                sensor: sun.sun
+                attribute: elevation
+                bands:
+                  - from_value: 0
+                    show: true
+        value_sensors:
+          - sensor: sensor.station_vevor_7_en_1_vent_vitesse_moyenne
+        compass:
+          circle:
+            background_image: /local/image/compass_home.png
+            background_opacity: 0.7
+            show: false
+          north:
+            show: true
+            color: red
+          east:
+            show: true
+          west:
+            show: true
+          south:
+            show: true
+      - type: vertical-stack
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: sensor.station_vevor_7_en_1_vent_vitesse_moyenne
+            name: Vitesse
+            icon: mdi:weather-windy
+            icon_color: light-blue
+          - type: custom:mushroom-entity-card
+            entity: sensor.station_vevor_7_en_1_vent_rafale
+            name: Rafales
+            icon: mdi:weather-windy-variant
+            icon_color: deep-orange
+          - type: custom:mushroom-entity-card
+            entity: sensor.station_vevor_7_en_1_vent_direction
+            name: Direction
+            icon: mdi:compass-outline
+            icon_color: teal
+          - type: custom:mushroom-entity-card
+            entity: sun.sun
+            name: Soleil
+            icon: mdi:sun-angle
+            icon_color: yellow
+
+  # --- Pluie : le compteur est cumulé, il n'y a plus d'agrégats firmware --------
+  # « Cumul » = total depuis la remise à zéro (changement de piles).
+  # « Dernière bascule » = horodatage du dernier +0,233 mm : c'est exactement le
+  # critère « pluie en cours » utilisé par le bandeau (compteur qui a bougé).
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: custom:mushroom-template-card
+        entity: sensor.station_vevor_7_en_1_pluie_cumulee
+        primary: '{{ states(''sensor.station_vevor_7_en_1_pluie_cumulee'', 1) }} mm'
+        secondary: Cumul depuis la remise à zéro
+        icon: mdi:weather-pouring
+        icon_color: light-blue
+      - type: custom:mushroom-template-card
+        entity: sensor.station_vevor_7_en_1_pluie_cumulee
+        primary: >-
+          {% set c = states.sensor.station_vevor_7_en_1_pluie_cumulee %}
+          {{ relative_time(c.last_changed) if c is not none and c.last_changed else 'inconnu' }}
+        secondary: Dernière bascule (+0,233 mm)
+        icon: mdi:water-plus-outline
+        icon_color: blue
+
+  # Cumul sur 7 jours : une marche à chaque averse. Pour des barres
+  # « pluie par jour », voir l'option A plus bas (utility_meter).
+  - type: custom:mini-graph-card
+    name: Cumul de pluie (7 jours)
+    icon: mdi:weather-rainy
+    entities:
+      - entity: sensor.station_vevor_7_en_1_pluie_cumulee
+        name: Cumul
+        color: '#2196f3'
+    hours_to_show: 168
+    points_per_hour: 1
+    line_width: 2
+    show:
+      graph: line
+      name: true
+      icon: true
+      state: true
+      labels: true
+
+# =============================================================================
+# OPTIONS — à ajouter seulement si vous les voulez (rien de tout ceci n'est
+# nécessaire pour que la carte ci-dessus fonctionne).
+# =============================================================================
+
+# Option A — retrouver Heure / Jour / Semaine / Mois et des barres par jour.
+# À mettre dans configuration.yaml : quatre compteurs d'énergie dérivés du cumul.
+# utility_meter traite une baisse de la source comme une remise à zéro du capteur
+# (changement de piles) ; aucun réglage n'est nécessaire pour ça.
+#
+# utility_meter:
+#   pluie_heure:
+#     source: sensor.station_vevor_7_en_1_pluie_cumulee
+#     cycle: hourly
+#   pluie_jour:
+#     source: sensor.station_vevor_7_en_1_pluie_cumulee
+#     cycle: daily
+#   pluie_semaine:
+#     source: sensor.station_vevor_7_en_1_pluie_cumulee
+#     cycle: weekly
+#   pluie_mois:
+#     source: sensor.station_vevor_7_en_1_pluie_cumulee
+#     cycle: monthly
+#
+# Puis, à la place du bloc « Pluie » ci-dessus :
+#
+#   - type: grid
+#     columns: 4
+#     square: false
+#     cards:
+#       - type: custom:mushroom-entity-card
+#         entity: sensor.pluie_heure
+#         name: Heure
+#         icon: mdi:weather-pouring
+#         icon_color: light-blue
+#         layout: vertical
+#       - type: custom:mushroom-entity-card
+#         entity: sensor.pluie_jour
+#         name: Jour
+#         icon: mdi:calendar-week-begin
+#         icon_color: light-blue
+#         layout: vertical
+#       - type: custom:mushroom-entity-card
+#         entity: sensor.pluie_semaine
+#         name: Semaine
+#         icon: mdi:calendar-week
+#         icon_color: light-blue
+#         layout: vertical
+#       - type: custom:mushroom-entity-card
+#         entity: sensor.pluie_mois
+#         name: Mois
+#         icon: mdi:calendar-weekend
+#         icon_color: light-blue
+#         layout: vertical
+#   - type: custom:mini-graph-card
+#     name: Précipitations (7 jours)
+#     icon: mdi:weather-rainy
+#     entities:
+#       - entity: sensor.pluie_jour
+#         name: Pluie / Jour
+#         color: '#2196f3'
+#     hours_to_show: 168
+#     group_by: date
+#     aggregate_func: max
+#     show:
+#       graph: bar
+#       name: true
+#       icon: true
+#       state: true
+#       labels: true
+
+# Option B — seuil « forte pluie » 7,6 mm/h (règle 3, ligne « stormy »).
+# Le bandeau ci-dessus ne déclenche l'orage que sur les rafales (≥ 40 km/h), le seul
+# seuil que les mesures seules permettent de trancher. Pour ajouter la pluie, créer
+# l'intensité documentée en docs/forecast-rules.md §8 (capteur `statistics`, fenêtre
+# de 20 min), puis la ligne :
+#     {% elif pluie and (rafale >= 40 or etat_intensite >= 7.6) %}Orageux / Tempête
+# Attention : le capteur `statistics` ne publie pas la durée couverte ; la règle
+# « pas encore de débit exploitable » (§4) demande une seconde barrière, elle aussi
+# décrite dans ce même §8. Tant qu'elle n'est pas en place, mieux vaut lire l'intensité
+# que de l'afficher comme un débit.
+
+# Option C — alerte verglas du constructeur (température < 1 °C, manuel p. 20).
+#   template:
+#     - binary_sensor:
+#         - name: "Vevor alerte verglas"
+#           unique_id: vevor_alerte_verglas
+#           device_class: cold
+#           state: "{{ states('sensor.station_vevor_7_en_1_temperature_exterieure') | float(99) < 1 }}"
+
+# Option D — diagnostic de la réception (utile quand plus rien n'arrive : c'est
+# « Trames rejetées » contre « Captures RMT » qui distingue un problème de décodage
+# d'une puce muette, voir README §1.6).
+#
+#   - type: grid
+#     columns: 2
+#     square: false
+#     cards:
+#       - type: custom:mushroom-entity-card
+#         entity: sensor.station_vevor_7_en_1_trames_valides
+#         name: Trames valides
+#         layout: vertical
+#       - type: custom:mushroom-entity-card
+#         entity: sensor.station_vevor_7_en_1_trames_rejetees
+#         name: Trames rejetées
+#         layout: vertical
+#       - type: custom:mushroom-entity-card
+#         entity: sensor.station_vevor_7_en_1_captures_rmt
+#         name: Captures RMT
+#         layout: vertical
+#       - type: custom:mushroom-entity-card
+#         entity: sensor.station_vevor_7_en_1_compteur_tx
+#         name: Compteur TX
+#         layout: vertical
+#       - type: custom:mushroom-entity-card
+#         entity: sensor.station_vevor_7_en_1_id_station
+#         name: ID station
+#         layout: vertical
+#       - type: custom:mushroom-entity-card
+#         entity: sensor.station_vevor_7_en_1_dernier_verdict
+#         name: Dernier verdict
+#         layout: vertical
+#       - type: custom:mushroom-entity-card
+#         entity: sensor.station_vevor_7_en_1_derniere_trame_brute
+#         name: Dernière trame brute
+#         layout: vertical
+#       - type: custom:mushroom-entity-card
+#         entity: number.station_vevor_7_en_1_frequence_cc1101
+#         name: Fréquence CC1101
+#         layout: vertical

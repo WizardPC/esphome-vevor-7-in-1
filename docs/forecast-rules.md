@@ -80,6 +80,13 @@ which is exactly why the night case returns `unknown` instead of a plausible-loo
 
 ## 8. Sketch in Home Assistant
 
+A ready-to-paste Lovelace card built on these rules — drop-in replacement for the
+older `esp32_weather` / `jardin_vevor` card — is versioned as
+[`docs/ha-card.yaml`](ha-card.yaml); it needs no helper in Home Assistant (the rain
+window is read from the cumulative counter's `last_changed`), and
+`tools/check_ha_card.py` executes its templates on numeric scenarios so the rules
+below cannot drift away from the card.
+
 Starting point, meant to be adapted and tested in your own configuration — it is not deployed
 anywhere and has not been exercised against a live Home Assistant.
 
