@@ -30,7 +30,15 @@ d'ALIMENTATION/quartz (`CHIP_RDYn` haut = la puce l'annonce elle-même), seul un
 d'alimentation la rétablit — un `reset` logiciel ne redémarre pas l'oscillateur. Un transistor (ou un
 interrupteur de charge) entre le 3,3 V et le VCC du module, piloté par un GPIO, permettrait au
 garde-fou de faire ce cycle au lieu de redémarrer l'ESP32 en espérant. C'est la piste « transistor »
-déjà notée dans le projet, et elle devient la priorité matérielle avec le **100 nF**.
+déjà notée dans le projet, et elle devient la priorité matérielle.
+
+**Correction du 03/10 (l'utilisateur a raison de reprendre) :** un **10 µF** est DÉJÀ monté entre VCC et
+GND du module. Un 100 nF fait un autre travail (les fronts rapides, à souder au plus court sur les
+broches ; un 10 µF voit son impédance remonter au-dessus de ~1 MHz), mais **son absence n'a jamais été
+mesurée comme cause sur cette carte** : elle vient de la note du projet, pas d'une mesure. Ne plus le
+présenter comme LE levier manquant. Ce que la puce dit elle-même (`CHIP_RDYn` haut = alimentation ou
+quartz pas prêts) désigne un problème de DÉMARRAGE, dont le levier actionnable est un cycle
+d'alimentation (bouton dans le fil VCC, transistor pour l'automatiser).
 
 ---
 
