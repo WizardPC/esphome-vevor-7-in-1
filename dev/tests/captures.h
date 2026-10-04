@@ -32,12 +32,18 @@ static const VevorRealCapture VEVOR_REAL_CAPTURES[] = {
 };
 
 static const int VEVOR_REAL_CAPTURE_COUNT = 6;
-// Les 5 rafales décodables portent la MÊME mesure (même station, même température, même
+// Les rafales décodables portent la MÊME mesure (même station, même température, même
 // humidité, même direction) : leur préfixe est identique. Le compteur TX et la somme
 // diffèrent d'une rafale à l'autre — c'est normal, elles viennent d'émissions différentes.
 static const uint8_t VEVOR_CAPTURE_PREFIX[11] = {0xAA, 0x00, 0x84, 0xCB, 0x16,
                                                 0x02, 0x90, 0x50, 0x01, 0x01, 0x00};
 static const int VEVOR_CAPTURE_PREFIX_LEN = 11;
-// Nombre de rafales attendues décodables, et l'indice du contre-exemple assumé.
-static const int VEVOR_CAPTURE_ATTENDUES = 5;
-static const int VEVOR_CAPTURE_CONTRE_EXEMPLE = 2;
+// 2 des 6 rafales ne sont pas décodables — et ne doivent PAS l'être : la seule solution
+// que trouvait l'ancienne réparation par insertion était une FABRICATION. Pour la rafale 3
+// (mesurée le 04/10) elle publiait pluie 536,4 mm contre 59,2 mm dans les rafales voisines,
+// avec un bit inséré au niveau opposé à l'impulsion — physiquement impossible ; le garde-fou
+// de pluie la refusait, elle n'est jamais arrivée dans Home Assistant.
+// Voir docs/zero-wind-fabrication.md. Critère : 4 rafales décodables sur 6.
+static const int VEVOR_CAPTURE_ATTENDUES = 4;
+static const int VEVOR_CAPTURE_CONTRE_EXEMPLES[] = {2, 3};
+static const int VEVOR_CAPTURE_CONTRE_EXEMPLE_COUNT = 2;

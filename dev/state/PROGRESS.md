@@ -1968,3 +1968,50 @@ corrigé (un seul `cc1101.reset`), pull-up 10 kΩ sur CS + 10 µF soudés par l'
 qu'après obtention d'un **état B** (puce qui répond) — un démarrage sur deux lève une puce muette
 sur ce montage, et une fenêtre de 40 minutes tombée en état A avait déjà donné « 0 trame » sans rien
 dire du correctif (`build/valider_etat_b.sh`).
+
+## 2026-10-04 22:xx (heure de Paris) — Défaut de production : vent 46,0 km/h / rafale 102,4 km/h à vent nul
+
+**Signalé par le propriétaire** : « le vent est mesuré à 46 km/h et des rafales à 102,4 km/h alors
+qu'il n'y a pas de vent, et la valeur est retombée à zéro ensuite ; il y a un cas particulier quand
+le vent est à zéro ».
+
+**Cause trouvée, et ce n'est ni la station ni la liaison radio : la réparation par insertion du
+décodeur fabriquait la trame.** Un seul bit perdu dans la rafale fait échouer le décodage direct ;
+la réparation cherche alors une position d'insertion qui rende la trame valide et prend la
+**première** — or elle cherchait un bit de n'importe quelle valeur à n'importe quelle position, et
+`0x01 + 0x01 + 0x00 = 0x02 + 0x80 + 0x80` (mod 256) : à vent nul, la corruption de la fenêtre
+vent/rafale conserve exactement la somme des octets, donc somme de contrôle, compteur TX et toute la
+porte de plausibilité restent verts. Mesuré : 14 des ~168 positions de perte d'un bit produisent
+cette trame fausse.
+
+**Preuves.**
+- Historique Home Assistant, entité `last_raw_frame` : 141 trames entre 15 h 36 et 22 h 07 (heure de
+  Paris), toujours `02 80 80` en b[8..10], encadrées par des trames `01 01 00` (vent 0, rafale 0) —
+  mêmes température, humidité, direction, pluie, lux, UV, seul le compteur progresse (39/20 s).
+- Reproduction hors matériel : sonde jetable, trame réelle à vent nul, impulsions de plus d'un bit
+  raccourcies d'un bit → l'ancienne réparation publiait `02 80 80` = 46,0 km/h / 102,4 km/h.
+- Contre-épreuve exigée par la méthode du projet : le test de la section 15 ÉCHOUE sur l'ancien code
+  (414 vérifications, 1 échec : « FAUSSE impulsion 71 : vent 46.0 rafale 102.4 ») et PASSE après.
+
+**Correction.** `reparer_par_insertion()` n'insère plus qu'un bit qui **prolonge l'impulsion**
+(même niveau que le bit précédent) : un bit perdu vient d'une impulsion arrondie vers le bas, la
+réparation doit donc suivre cette physique au lieu de balayer des valeurs arbitraires.
+
+**Effet mesuré** (3 trames réelles, toutes les impulsions raccourcies) : réparations justes 28→31,
+25→29, 35→37 ; fabrications 4→1, 4→0, 2→0 ; la seule restante porte pluie 15 270 mm et est refusée
+par le garde-fou de pluie (elle n'atteint pas Home Assistant).
+
+**Conséquence assumée sur les vecteurs réels.** Le critère « 5 rafales sur 6 décodables » incluait
+une fabrication : la rafale 3 n'était « décodée » que par une insertion au niveau opposé à
+l'impulsion, publiant pluie 536,4 mm contre 59,2 mm dans les rafales voisines (refusée par le
+garde-fou de pluie, donc jamais dans Home Assistant). Le critère devient **4 sur 6, avec deux
+contre-exemples assumés** (2 et 3) et la raison écrite dans le générateur.
+
+**Suite hôte** : 413 vérifications, 0 échec. Détail complet : `docs/zero-wind-fabrication.md`.
+
+**Reste ouvert.** (a) La réparation reste capable d'accepter une position fausse pour une autre
+fenêtre que `01 01 00` : la contrainte supprime le défaut mesuré, elle ne rend pas la somme de
+contrôle discriminante (borne honnête : le test de la section 15 sur deux trames). (b) Le
+témoin « station ou récepteur » sur le RF reste à faire : il demande le vidage des impulsions brutes
+d'une rafale anormale (bouton « Dump pulses ») — impossible d'ici, la carte refuse la clé d'API de
+`esphome/secrets.yaml` (elle tourne un binaire flashé avec les secrets du propriétaire).
