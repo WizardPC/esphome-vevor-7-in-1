@@ -43,14 +43,25 @@
 type: vertical-stack
 cards:
   # --- Bandeau : état du ciel, estimé en HA à partir des mesures seules ---------
-  # Limite connue et assumée : la fenêtre de pluie est lue sur le `last_changed` du
-  # compteur cumulé — un redémarrage de la carte (ou un changement de piles) qui
-  # ramène le cumul à zéro peut donc afficher « Pluvieux » pendant 20 min. Un débit
-  # calculé (dev/docs/forecast-rules.md §8) lève l'ambiguïté : la baisse du compteur y
-  # donne un débit négatif, donc « pas de pluie ». Voir l'option B plus bas.
+  # Ce n'est PAS une prévision : la station n'émet aucune pression, donc aucun des six
+  # états ne peut être prévu depuis ses mesures (dev/docs/forecast-rules.md §1). Ce titre
+  # vient de l'ancienne carte ; « Ciel actuel (estimé) » dit ce que le bandeau fait.
+  #
+  # Détection de pluie — deux limites, mesurées :
+  #   1) la fenêtre de 20 min est lue sur le `last_changed` du compteur cumulé. Vérifié dans
+  #      la source de HA : `_attr_force_update = static_info.force_update`, soit False pour
+  #      nos capteurs — donc last_changed ne bouge que quand la valeur change réellement ;
+  #   2) une bascule isolée (0,233 mm) vaut 0,7 mm/h sur la fenêtre : la règle documentée la
+  #      classe donc « Pluvieux ». C'est une limite de RÉSOLUTION du pluviomètre, pas un bug :
+  #      avec ce compteur, une bascule isolée et une bruine réelle sont indistinguables.
+  #      Le garde `pluie_mm > 0` ci-dessous écarte au moins le cas « compteur remis à zéro » ;
+  #      pour exiger un vrai débit (et ignorer la bascule isolée), voir l'option B plus bas.
+  #      Diagnostic à faire dans HA → Outils de développement → Modèle :
+  #        compteur = {{ states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') }} mm
+  #        dernière bascule : {{ relative_time(states.sensor.jardin_vevor_7_in_1_weather_station_rain_total.last_changed) }}
   - type: custom:mushroom-template-card
     entity: sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature
-    primary: Prévisions météorologiques
+    primary: Ciel actuel (estimé)
     secondary: >-
       {% set t = states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature') | float(none) %}
       {% set rafale = states('sensor.jardin_vevor_7_in_1_weather_station_wind_gust') | float(0) %}
@@ -59,7 +70,7 @@ cards:
       {% set pluie_mm = states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') | float(none) %}
       {% set compteur = states.sensor.jardin_vevor_7_in_1_weather_station_rain_total %}
       {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
-      {% set pluie = pluie_mm is not none and depuis < 1200 %}
+      {% set pluie = pluie_mm is not none and pluie_mm > 0 and depuis < 1200 %}
       {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
       {% if pluie and t is not none and t < 1 %}
         Neigeux — {{ t }} °C, pluie en cours (alerte verglas du constructeur, < 1 °C)
@@ -85,7 +96,7 @@ cards:
       {% set pluie_mm = states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') | float(none) %}
       {% set compteur = states.sensor.jardin_vevor_7_in_1_weather_station_rain_total %}
       {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
-      {% set pluie = pluie_mm is not none and depuis < 1200 %}
+      {% set pluie = pluie_mm is not none and pluie_mm > 0 and depuis < 1200 %}
       {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
       {% if pluie and t is not none and t < 1 %}mdi:weather-snowy
       {% elif pluie and rafale >= 40 %}mdi:weather-lightning-rainy
@@ -105,7 +116,7 @@ cards:
       {% set pluie_mm = states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') | float(none) %}
       {% set compteur = states.sensor.jardin_vevor_7_in_1_weather_station_rain_total %}
       {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
-      {% set pluie = pluie_mm is not none and depuis < 1200 %}
+      {% set pluie = pluie_mm is not none and pluie_mm > 0 and depuis < 1200 %}
       {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
       {% if pluie and t is not none and t < 1 %}cyan
       {% elif pluie and rafale >= 40 %}deep-purple
@@ -358,16 +369,53 @@ cards:
 #       state: true
 #       labels: true
 
-# Option B — seuil « forte pluie » 7,6 mm/h (règle 3, ligne « stormy »).
-# Le bandeau ci-dessus ne déclenche l'orage que sur les rafales (≥ 40 km/h), le seul
-# seuil que les mesures seules permettent de trancher. Pour ajouter la pluie, créer
-# l'intensité documentée en dev/docs/forecast-rules.md §8 (capteur `statistics`, fenêtre
-# de 20 min), puis la ligne :
-#     {% elif pluie and (rafale >= 40 or etat_intensite >= 7.6) %}Orageux / Tempête
-# Attention : le capteur `statistics` ne publie pas la durée couverte ; la règle
-# « pas encore de débit exploitable » (§4) demande une seconde barrière, elle aussi
-# décrite dans ce même §8. Tant qu'elle n'est pas en place, mieux vaut lire l'intensité
-# que de l'afficher comme un débit.
+# Option B — remplacer la fenêtre `last_changed` par un vrai DÉBIT, et choisir sa sensibilité.
+# C'est la réponse au faux « Pluvieux » : le capteur `statistics` ne compte que les
+# échantillons qu'il a lui-même enregistrés, donc il ne peut pas être trompé par une remise à
+# zéro du compteur ni par la (re)création de l'entité dans HA — contrairement à la fenêtre
+# `last_changed` utilisée par défaut ci-dessus.
+#
+# 1) Créer l'intensité documentée en dev/docs/forecast-rules.md §8 :
+#
+# sensor:
+#   - platform: statistics
+#     name: "Vevor intensité de pluie brute"
+#     unique_id: vevor_pluie_intensite_brute
+#     entity_id: sensor.jardin_vevor_7_in_1_weather_station_rain_total
+#     state_characteristic: change
+#     sampling_size: 20
+#     max_age: { minutes: 20 }
+#   - platform: template
+#     name: "Vevor intensité de pluie"
+#     unique_id: vevor_pluie_intensite
+#     unit_of_measurement: "mm/h"
+#     # `change` = Δmm sur 20 min ; ×3 pour l'exprimer en mm/h. Une baisse du compteur donne
+#     # un Δ négatif, donc 0 ici : le cas « remise à zéro » est écarté par construction.
+#     state: >-
+#       {{ [ (states('sensor.vevor_pluie_intensite_brute') | float(0)) * 3, 0 ] | max | round(2) }}
+#
+# 2) Dans le bandeau, remplacer la ligne de pluie par ces deux-là :
+#
+#       {% set intensite = states('sensor.vevor_pluie_intensite') | float(0) %}
+#       {% set pluie = intensite >= 0.7 %}
+#
+#     Seuil = ce qu'on accepte d'appeler « il pleut » :
+#       0.7 mm/h  → une seule bascule (0,233 mm) dans les 20 min suffit. C'est la lecture de
+#                   la règle §4 du document, et c'est ce que la carte fait aujourd'hui : la
+#                   bascule isolée passe donc pour de la pluie.
+#       1.4 mm/h  → il faut DEUX bascules dans la fenêtre. Une bascule isolée (vent, vibration,
+#                   fausse bascule du pluviomètre) ne déclenche plus rien ; une bruine réelle
+#                   sous 1,4 mm/h devient invisible. C'est un ÉCART assumé au tableau §5.
+#     Choisir 1.4 règle le cas signalé le 03/10 (bandeau « Pluvieux » sans pluie).
+#
+# 3) Le seuil d'orage 7,6 mm/h (§5, ligne « stormy ») s'ajoute alors sans autre détour :
+#
+#       {% elif pluie and (rafale >= 40 or intensite >= 7.6) %}Orageux / Tempête
+#
+# Ce que le capteur `statistics` ne publie pas : la durée réellement couverte. La règle
+# « pas encore de débit exploitable » (§4) demande donc une seconde barrière — décrite dans le
+# même §8 — avant d'afficher un débit comme une mesure. Pour un simple état oui/non, le
+# garde-fou ci-dessus suffit.
 
 # Option C — alerte verglas du constructeur (température < 1 °C, manuel p. 20).
 #   template:

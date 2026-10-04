@@ -273,6 +273,17 @@ scenario("capteur de pluie indisponible — pas de pluie annoncée", t=21.0, lux
 scenario("dernière bascule il y a 25 min — la fenêtre de 20 min est close", t=21.0,
          lux=round(0.85 * clear_40), elev=40, rafale=15, pluie=59.2, il_y_a=1500, attendu="Dégagé",
          icone="mdi:weather-sunny", couleur="amber")
+# Signalé le 03/10 : le bandeau annonçait « Pluvieux » sans pluie. Le compteur remis à zéro
+# (démarrage, changement de piles, ré-ajout de l'entité dans HA) rendait last_changed récent.
+scenario("compteur remis à zéro (0,0 mm) modifié il y a 1 min — pas de pluie", t=21.0,
+         lux=round(0.85 * clear_40), elev=40, rafale=15, pluie=0.0, il_y_a=60, attendu="Dégagé",
+         icone="mdi:weather-sunny", couleur="amber")
+# Limite de RÉSOLUTION assumée du pluviomètre (0,233 mm par bascule), pas un défaut : avec ce
+# compteur, une bascule isolée et une bruine réelle sont indistinguables. C'est ce que règle
+# l'option B de la carte (seuil de débit), au prix d'un écart affiché au tableau §5.
+scenario("UNE bascule isolée (0,233 mm) il y a 3 min — classée « Pluvieux » par la règle §4",
+         t=21.0, lux=round(0.85 * clear_40), elev=40, rafale=15, pluie=0.233, il_y_a=180,
+         attendu="Pluvieux", icone="mdi:weather-rainy", couleur="blue")
 scenario("soleil rasant, référence < 1 000 lx — le rapport n'a plus de sens", t=21.0, lux=600,
          elev=0.5, rafale=15, pluie=59.2, il_y_a=3600, attendu="Indéterminé",
          icone="mdi:weather-cloudy-alert", couleur="grey")
