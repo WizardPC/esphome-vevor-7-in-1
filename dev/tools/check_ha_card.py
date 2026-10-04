@@ -1,27 +1,22 @@
 #!/usr/bin/env python3
-"""Contrôle hors ligne de docs/ha-card.yaml — la carte Lovelace du projet.
+"""Offline check of docs/ha-card.yaml — the project's Lovelace card.
 
-Ce que ce script vérifie, sans Home Assistant et sans matériel :
+Without Home Assistant or hardware, it verifies:
 
-  1. le YAML se charge, et il a la forme d'une carte Lovelace ;
-  2. chaque `entity_id` de l'appareil cité par la carte — options commentées comprises,
-     puisqu'elles seront décommentées un jour — existe réellement dans
-     `docs/ha-entities.txt`, le relevé de Home Assistant. Jamais une reconstruction :
-     l'entity_id dépend du nom d'appareil, modifiable côté HA (le premier jet de la
-     carte pointait `station_vevor_7_en_1_…`, alors que HA expose
-     `jardin_station_vevor_7_en_1_…`) ;
-  3. ce relevé contient exactement les entités que `esphome/vevor-7in1.yaml` déclare,
-     translittérées et préfixées : une entité ajoutée au firmware sans être relevée
-     dans HA (ou l'inverse) est signalée ;
-  4. aucun identifiant de l'ancien projet (`esp32_weather`, `jardin_vevor`) ne subsiste
-     dans une ligne active ;
-  5. les trois modèles du bandeau (état, icône, couleur) sont réellement exécutés sur des
-     scénarios chiffrés et comparés au verdict attendu par `docs/forecast-rules.md` —
-     y compris les cas honnêtes « nuit » et « mesures insuffisantes », et le cas d'un
-     capteur de pluie indisponible.
+  1. the YAML loads and has the shape of a Lovelace card;
+  2. every `entity_id` cited by the card — including commented-out options, which will be
+     uncommented one day — exists in `dev/docs/ha-entities.txt`, HA's listing (never
+     reconstructed: the entity_id depends on the device name, which is renamed in HA);
+  3. that listing holds exactly the entities `esphome/vevor-7in1.yaml` declares — the
+     EXCEPTIONS below included, so a fresh divergence still fails;
+  4. no identifier of the old project remains in an active line (`jardin_vevor_weather_station`,
+     or `esp32_weather_*` apart from the documented Illuminance exception);
+  5. the three banner templates (state, icon, colour) run on numeric scenarios and match the
+     verdict expected by `docs/forecast-rules.md`, including the honest "night", "not enough
+     measurements" and "rain sensor unavailable" cases.
 
-Usage :   .venv/bin/python tools/check_ha_card.py
-Sortie :  0 si tout est conforme, 1 sinon (chaque écart est affiché).
+Usage:   .venv/bin/python tools/check_ha_card.py
+Exit:    0 if all conforms, 1 otherwise (each discrepancy is printed).
 """
 
 from __future__ import annotations
@@ -36,11 +31,11 @@ from pathlib import Path
 try:
     import yaml
     from jinja2 import Environment, Undefined
-except ImportError as exc:  # pragma: no cover - dépendance de l'environnement
+except ImportError as exc:  # pragma: no cover - environment dependency
     sys.exit(f"dépendance manquante ({exc}) — lancer avec .venv/bin/python")
 
 DEV = Path(__file__).resolve().parent.parent   # dev/
-ROOT = DEV.parent                               # racine du dépôt
+ROOT = DEV.parent                               # repo root
 CARD = DEV / "docs" / "ha-card.yaml"
 ENTITIES = DEV / "docs" / "ha-entities.txt"
 FIRMWARE = ROOT / "esphome" / "vevor-7in1.yaml"
@@ -57,7 +52,7 @@ def check(condition: bool, message: str) -> bool:
 
 
 def slugify(value: str) -> str:
-    """Translittération HA/ESPHome (« Outdoor temperature » → outdoor_temperature)."""
+    """HA/ESPHome transliteration ("Outdoor temperature" -> outdoor_temperature)."""
     value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
 
@@ -78,11 +73,8 @@ reference = {
     for line in ENTITIES.read_text(encoding="utf-8").splitlines()
     if line.split("#")[0].strip()
 }
-# ANCRAGE : suffixe d'identifiant qui sert à retrouver le préfixe du nom d'appareil dans le relevé.
-# Une SEULE constante, employée pour choisir la sonde ET pour la découper : les deux usages ne
-# peuvent donc plus diverger — ils l'ont fait, et la vérification prenait alors l'identifiant
-# complet pour un préfixe d'appareil. Cette valeur suit le `name:` de l'entité de température du
-# YAML : la renommer là-bas oblige à la renommer ici.
+# ANCHOR: entity-id suffix used to find the device-name prefix in the listing. One constant for
+# both selecting and trimming the probe, so the two uses cannot diverge. Must match the YAML name.
 ANCRAGE = "outdoor_temperature"
 probe = next((entity for entity in sorted(reference) if entity.endswith("_" + ANCRAGE)), None)
 if not probe:
@@ -90,8 +82,16 @@ if not probe:
              "le préfixe d'appareil (mettre ANCRAGE à jour si le nom de l'entité a changé)")
 prefix = probe.split(".", 1)[1][: -(len(ANCRAGE) + 1)]
 
+# EXCEPTIONS: entity ids HA did NOT derive from the device name, measured on the listing.
+# "Illuminance" kept the entity_id of the previous ESPHome node that HA reused under this device
+# (see dev/docs/ha-entities.txt). Keyed by the firmware entity name, slugified. An entry here is
+# a measurement, not a workaround: the cross-check below stays an equality check, exception
+# included, so a fresh divergence still fails.
+EXCEPTIONS = {"illuminance": "sensor.esp32_weather_illuminance"}
+
 cited = sorted(set(re.findall(
-    rf"\b(?:sensor|binary_sensor|text_sensor|number|button)\.{re.escape(prefix)}_[a-z0-9_]+", raw)))
+    rf"\b(?:sensor|binary_sensor|text_sensor|number|button)\.{re.escape(prefix)}_[A-Za-z0-9_]+", raw))
+    | {entity for entity in EXCEPTIONS.values() if entity in raw})
 print(f"2. Entités : appareil « {prefix} », {len(reference)} entités relevées dans HA, "
       f"{len(cited)} citées par la carte")
 unknown = [entity for entity in cited if entity not in reference]
@@ -109,9 +109,10 @@ for line in firmware.splitlines():
         domain = head.group(1)
     name = re.match(r'\s+name:\s+"([^"]+)"', line)
     if name and domain:
-        # HA expose les text_sensor d'ESPHome dans le domaine `sensor` (constaté sur le relevé).
+        # HA exposes ESPHome text_sensor in the `sensor` domain (seen in the listing).
         ha_domain = "sensor" if domain == "text_sensor" else domain
-        declared.add(f"{ha_domain}.{prefix}_{slugify(name.group(1))}")
+        slug = slugify(name.group(1))
+        declared.add(EXCEPTIONS.get(slug, f"{ha_domain}.{prefix}_{slug}"))
 
 only_firmware = sorted(declared - reference)
 only_ha = sorted(reference - declared)
@@ -126,11 +127,13 @@ active = "\n".join(
     line for line in raw.splitlines()
     if line.strip() and not line.lstrip().startswith("#")
 )
-legacy = [line.strip() for line in active.splitlines() if re.search(r"esp32_weather|jardin_vevor", line)]
+# The current prefix itself contains "jardin_vevor", and the Illuminance exception is a
+# documented `esp32_weather_*` id: match the OLD project's patterns, exception excluded.
+legacy = [line.strip() for line in active.splitlines()
+          if re.search(r"jardin_vevor_weather_station|esp32_weather_(?!illuminance)", line)]
 check(not legacy, f"aucun identifiant de l'ancien projet dans les lignes actives ({legacy or 'aucun'})")
 
-# Les blocs d'options vivent en commentaires : ils seront décommentés un jour, donc on
-# vérifie ici qu'ils se chargent comme du YAML (et non seulement qu'ils se lisent bien).
+# Option blocks live in comments and will be uncommented one day, so check they parse as YAML.
 blocks: list[str] = []
 cur: list[str] = []
 base: int | None = None
@@ -158,7 +161,7 @@ broken: list[str] = []
 for block in blocks:
     try:
         yaml.safe_load(block)
-    except Exception as exc:  # noqa: BLE001 - on rapporte le texte fautif
+    except Exception as exc:  # noqa: BLE001 - report the faulty text
         broken.append(f"{exc} → {block.splitlines()[0][:60]}")
 check(not broken, f"les {len(blocks)} blocs d'options commentés se chargent comme du YAML "
                   f"({broken or 'aucun écart'})")
@@ -171,7 +174,7 @@ class State:
 
 
 class States:
-    """`states('x.y')` ET `states.sensor.x` (objet d'état, pour last_changed)."""
+    """`states('x.y')` AND `states.sensor.x` (state object, for last_changed)."""
 
     def __init__(self, data: dict):
         self._data = data
@@ -184,7 +187,7 @@ class States:
         if dom.startswith("_"):
             raise AttributeError(dom)
 
-        data = object.__getattribute__(self, "_data")  # pas de récursion via __getattr__
+        data = object.__getattribute__(self, "_data")  # avoid recursion through __getattr__
 
         class Domain:
             def __getattr__(self, obj: str):
@@ -196,7 +199,7 @@ class States:
 
 
 def render(template: str, data: dict) -> str:
-    """Exécute un modèle avec les filtres et fonctions de HA utilisés par la carte."""
+    """Render a template with the HA filters and functions the card uses."""
     states = States(data)
     env = Environment(undefined=Undefined)
     env.filters["sin"] = lambda v, default=0: math.sin(math.radians(float(v)))
@@ -213,11 +216,11 @@ def render(template: str, data: dict) -> str:
 
 header = card["cards"][0]
 TEMPLATES = {"état": header["secondary"], "icône": header["icon"], "couleur": header["icon_color"]}
-clear_40 = 133800 * math.sin(math.radians(40)) ** 1.15  # référence ciel clair à 40° (§6)
+clear_40 = 133800 * math.sin(math.radians(40)) ** 1.15  # clear-sky reference at 40 deg (sec. 6)
 ENTITY = {
     "temp": f"sensor.{prefix}_outdoor_temperature",
     "rafale": f"sensor.{prefix}_wind_gust",
-    "lux": f"sensor.{prefix}_illuminance",
+    "lux": EXCEPTIONS.get("illuminance", f"sensor.{prefix}_illuminance"),
     "pluie": f"sensor.{prefix}_rain_total",
 }
 

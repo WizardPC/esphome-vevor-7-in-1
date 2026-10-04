@@ -31,7 +31,7 @@ grep -rn --exclude-dir=logs --exclude-dir=reviews --exclude-dir=.git \
 | `decoder_dump.py` | decodes those raw durations off-board (4 periods × 2 polarities × 8 alignments) |
 | `ab_cycle.py` | alternates several frozen binaries in interleaved windows (reference / ours) |
 | `_common.py` | shared base: reads `api_key`, `maybe_await`, variant tables, atomic writes |
-| `check_ha_card.py` | checks `docs/ha-card.yaml` offline: every entity id against the firmware's own declarations, and the banner's three templates executed on numeric scenarios (`docs/forecast-rules.md`) |
+| `check_ha_card.py` | checks `dev/docs/ha-card.yaml` offline: every entity id against the measured HA listing (`dev/docs/ha-entities.txt`), that listing against the firmware's own declarations, and the banner's three templates executed on numeric scenarios (`dev/docs/forecast-rules.md`) |
 
 Related experiment scripts live in `build/`: `valider_etat_b.sh` (only measures in state B of the
 chip), `bissect_1mhz.sh`, `loterie_etats.sh`, `experience_*.sh`.
