@@ -182,7 +182,27 @@ async def balayer(reglage: str, valeurs: list[float], secondes: float, etiquette
 
     resultats = []
     for valeur in valeurs:
-        await maybe_await(cli.number_command(cible.key, float(valeur)))
+        # Robustesse : une commande peut bloquer ou tomber sur une socket morte (la carte n'accepte
+        # qu'un nombre limité de clients). Sans ces bornes, la boucle restait bloquée sur la première
+        # valeur — constaté le 05/10 au soir : vingt minutes sans une seule mesure.
+        try:
+            await asyncio.wait_for(maybe_await(cli.number_command(cible.key, float(valeur))), 20)
+        except Exception as exc:
+            print(f"  !! commande « {valeur} » impossible ({exc!r}) — reconnexion", flush=True)
+            b.note(ev="perte_pendant_valeur", valeur=valeur, detail=repr(exc)[:120])
+            nouveau, paquet = await rejoindre()
+            if nouveau is not None and paquet is not None and paquet[0] is not None:
+                cli, (cible, etats) = nouveau, paquet
+                await asyncio.sleep(3)
+                try:
+                    await asyncio.wait_for(
+                        maybe_await(cli.number_command(cible.key, float(valeur))), 20)
+                except Exception as exc2:
+                    b.note(ev="valeur_abandonnee", valeur=valeur, detail=repr(exc2)[:120])
+                    print(f"  !! valeur « {valeur} » abandonnée : {exc2!r}"[:140], flush=True)
+                    continue
+            else:
+                continue
         await asyncio.sleep(2)
         relu = etats.get(cible.key)
         try:

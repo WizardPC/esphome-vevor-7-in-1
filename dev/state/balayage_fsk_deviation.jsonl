@@ -1,0 +1,3 @@
+{"t": 1791226326.662, "h": "18:52:06", "ev": "debut", "reglage": "FSK deviation", "cle": 2194983663, "depart": 70.0, "valeurs": [70.0, 37.0, 50.0, 90.0, 100.0], "secondes": 150.0}
+{"t": 1791226490.669, "h": "18:54:50", "ev": "valeur", "reglage": "FSK deviation", "valeur": 70.0, "prise": true, "relu": 70.0, "dcaptures": 34, "dtrames": 3, "drejets": 44, "impulsions": 74, "rapport": 0.088, "ecarts": [20.0, 20.0, 20.0], "secondes": 150.0}
+{"t": 1791226654.738, "h": "18:57:34", "ev": "valeur", "reglage": "FSK deviation", "valeur": 37.0, "prise": true, "relu": 37.0, "dcaptures": 20, "dtrames": 0, "drejets": 36, "impulsions": 70, "rapport": 0.0, "ecarts": [], "secondes": 150.1}
