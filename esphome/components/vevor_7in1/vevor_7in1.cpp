@@ -336,6 +336,52 @@ void Vevor7in1::surveiller_radio_() {
   //       try again — bounded, since a dead chip loses nothing by it.
   const bool capture_saine = this->last_pulse_count_ >= this->seuil_impulsions_;
 
+  // 1. SLOT BOOKKEEPING, THEN THE RESTART — THE LAST RESORT — BEFORE ANYTHING ELSE.
+  //    A re-arm is a cheap lottery, NOT a reboot: on 05/10/2026 a chip that came out of a flash deaf
+  //    needed SEVEN successive re-arms before one took (18:30 → 18:34:58). The first version of this
+  //    policy returned early from the fast criterion, and so STARVED the restart: a chip no soft
+  //    re-arm can wake would have stayed deaf for good. Nothing below may run before this block.
+  //    The criterion is the DECODED frame, never a capture: a capture can be pure noise, and it is
+  //    deliberately NOT the published frame — a frame dropped by the station filter still proves the
+  //    RECEPTION works, and a wrong pin must never send the watchdog hunting a radio fault.
+  const bool trame_decodee = (this->decoded_ != this->trames_veille_);
+  if (trame_decodee) {
+    this->trames_veille_ = this->decoded_;
+    this->creneaux_muets_ = 0;
+    this->rearmements_ = 0;
+    if (this->reboots_veille_ != 0) {
+      this->reboots_veille_ = 0;
+      this->pref_reboots_.save(&this->reboots_veille_);
+    }
+  } else {
+    this->creneaux_muets_++;
+  }
+  const uint32_t muettes_s = this->creneaux_muets_ * (VEILLE_CRENEAU_MS / 1000u);
+  const bool radio_en_echec = (this->radio_ != nullptr) && this->radio_->is_failed();
+
+  if (muettes_s >= this->duree_max_avant_redemarrage_s_) {
+    this->reboots_veille_++;
+    this->pref_reboots_.save(&this->reboots_veille_);
+    // Brake: past ten restarts, only one slot in 45 (15 min) is used, so a genuinely mute board
+    // cannot loop forever.
+    if (this->reboots_veille_ > 10 && (this->creneaux_muets_ % 45u) != 0u) {
+      return;
+    }
+    ESP_LOGW(TAG, "aucune trame depuis %u s (radio %s, captures %u) — redémarrage n°%u",
+             (unsigned) muettes_s, radio_en_echec ? "EN ECHEC" : "ok", (unsigned) this->captures_,
+             (unsigned) this->reboots_veille_);
+    App.safe_reboot();
+    return;
+  }
+
+  // 2. A decoded frame ends the round here: nothing below has anything to fix.
+  if (trame_decodee) {
+    return;
+  }
+  ESP_LOGD(TAG, "veille : aucune trame depuis %u s (radio %s, captures %u)", (unsigned) muettes_s,
+           radio_en_echec ? "EN ECHEC" : "ok", (unsigned) this->captures_);
+
+  // 3. The fast criterion and its verification (see the policy above).
   if (this->essais_rearmement_ > 0) {
     if (capture_saine) {
       ESP_LOGI(TAG, "ré-armement VÉRIFIÉ après %u essai(s) : capture saine (%u impulsions)",
@@ -374,39 +420,7 @@ void Vevor7in1::surveiller_radio_() {
     return;
   }
 
-  // The criterion is the DECODED frame, never a capture: a capture can be pure noise. It is
-  // deliberately NOT the published frame: a frame dropped by the station filter still proves the
-  // RECEPTION works, and a wrong pin must never send the watchdog hunting a radio fault.
-  if (this->decoded_ != this->trames_veille_) {
-    this->trames_veille_ = this->decoded_;
-    this->creneaux_muets_ = 0;
-    this->rearmements_ = 0;
-    if (this->reboots_veille_ != 0) {
-      this->reboots_veille_ = 0;
-      this->pref_reboots_.save(&this->reboots_veille_);
-    }
-    return;
-  }
-  this->creneaux_muets_++;
-  const uint32_t muettes_s = this->creneaux_muets_ * (VEILLE_CRENEAU_MS / 1000u);
-  const bool radio_en_echec = (this->radio_ != nullptr) && this->radio_->is_failed();
-  ESP_LOGD(TAG, "veille : aucune trame depuis %u s (radio %s, captures %u)", (unsigned) muettes_s,
-           radio_en_echec ? "EN ECHEC" : "ok", (unsigned) this->captures_);
-
-  if (muettes_s >= this->duree_max_avant_redemarrage_s_) {
-    this->reboots_veille_++;
-    this->pref_reboots_.save(&this->reboots_veille_);
-    // Brake: past ten restarts, only one slot in 45 (15 min) is used, so a genuinely mute board
-    // cannot loop forever.
-    if (this->reboots_veille_ > 10 && (this->creneaux_muets_ % 45u) != 0u) {
-      return;
-    }
-    ESP_LOGW(TAG, "aucune trame depuis %u s (radio %s, captures %u) — redémarrage n°%u",
-             (unsigned) muettes_s, radio_en_echec ? "EN ECHEC" : "ok", (unsigned) this->captures_,
-             (unsigned) this->reboots_veille_);
-    App.safe_reboot();
-    return;
-  }
+  // 4. The slow criterion (a whole silent slot, gated on the chip delivering nothing).
 
   const uint32_t pas = this->creneaux_avant_rearmement_ > 0 ? this->creneaux_avant_rearmement_ : 1u;
   if (this->creneaux_muets_ >= pas && (this->creneaux_muets_ % pas) == 0u) {
