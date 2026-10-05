@@ -243,10 +243,9 @@ number:
         - cc1101.set_frequency: !lambda "return x * 1000000.0f;"
   # Radio settings exposed so they can be SWEPT LIVE: the driver registers cc1101.set_* actions, so
   # a change takes effect without recompiling. Inert until moved, and no restore_value: a reboot
-  # returns to the compiled values. Why: our RX filter (100 kHz requested, 101.6 kHz actually written
-  # into MDMCFG4) is narrower than a 2-FSK signal at ±70 kHz deviation occupies (~151-163 kHz,
-  # Carson), which distorts the demodulated waveform — the mark/space duty asymmetry measured on our
-  # captures. Initial values are the COMPILED ones, so a boot write is a no-op.
+  # returns to the compiled values. Initial values are the COMPILED ones, and they MUST stay in step
+  # with the substitutions above: these entities WRITE their initial value at boot, so a stale 100
+  # here silently overrides a compiled 162 (caught 05/10/2026 before the flash).
   - platform: template
     name: "RX filter bandwidth"
     id: bw_number
@@ -254,7 +253,7 @@ number:
     min_value: 58
     max_value: 812
     step: 1
-    initial_value: 100
+    initial_value: 162
     optimistic: true
     restore_value: false
     entity_category: config
