@@ -6,7 +6,14 @@ substitutions:
   freq_mhz: "868.35"
   deviation_khz: "70"
   symbol_rate: "11111"
-  bw_khz: "100"
+  # 162 kHz, pas 100 : mesuré le 05/10/2026 en fin de soirée, après une panne d'une heure.
+  # Le filtre de 100 kHz (±50 kHz) laissait HORS BANDE l'un des deux tons FSK du signal : la
+  # déviation est de ±70 kHz, et un quartz dérive de quelques dizaines de kHz sur un écart de
+  # température de 5 °C. Résultat : le démodulateur ne rendait que des fragments (47-74 impulsions
+  # au lieu de 176), et les captures ne contenaient que du bruit (durées jusqu'à 3352 µs).
+  # Balayage mesuré, 150 s par valeur, sur six filtres : 58 kHz → 1 trame ; 81 → 0 ; 100 → 0 ;
+  # 162 → 5 trames à la cadence exacte de la station (20 s) ; 203 → 0 ; 232 → non mesuré.
+  bw_khz: "162"
   # Log level (see the logger block): INFO in production, DEBUG for a measurement campaign.
   # Raised without editing the file: esphome -s niveau_journal DEBUG compile
   niveau_journal: "INFO"
