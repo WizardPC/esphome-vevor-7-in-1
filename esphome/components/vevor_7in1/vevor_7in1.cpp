@@ -72,6 +72,14 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   const std::vector<int32_t> &timings = src.get_raw_data();
   this->captures_++;
   this->last_pulse_count_ = timings.size();
+  // FAST symptom, counted on every capture: a capture too short to hold anything decodable. A
+  // fragment (the RMT cuts a burst in two) is 70-96 pulses and perfectly normal; a deaf chip
+  // delivers 2-7. The watchdog reads this counter and re-arms the radio at once.
+  if (timings.size() < this->seuil_impulsions_) {
+    this->captures_creuses_++;
+  } else {
+    this->captures_creuses_ = 0;
+  }
   if (timings.size() > this->longest_capture_) {
     this->longest_capture_ = timings.size();
   }
@@ -269,6 +277,9 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
 static const uint8_t PARAM_CRENEAUX_AVANT_REARMEMENT = 0;
 static const uint8_t PARAM_DUREE_MAX_AVANT_REDEMARRAGE = 1;
 static const uint8_t PARAM_STATION_ID = 2;
+// Below this many pulses, a capture cannot hold a burst: it is a fragment (70-96 pulses, normal) or
+// silence (2-7, a deaf chip). 40 sits between the two, measured on this hardware.
+static const uint8_t PARAM_SEUIL_IMPULSIONS = 3;
 // Watchdog slot duration: the station's transmission period (see setup() in the .h).
 static const uint32_t VEILLE_CRENEAU_MS = 20000;
 
@@ -278,6 +289,9 @@ float Vevor7in1::get_parametre(uint8_t p) const {
   }
   if (p == PARAM_STATION_ID) {
     return static_cast<float>(this->station_id_);
+  }
+  if (p == PARAM_SEUIL_IMPULSIONS) {
+    return static_cast<float>(this->seuil_impulsions_);
   }
   return static_cast<float>(this->creneaux_avant_rearmement_);
 }
@@ -296,6 +310,8 @@ void Vevor7in1::set_parametre(uint8_t p, float valeur) {
   const uint32_t v = valeur < 1.0f ? 1u : static_cast<uint32_t>(valeur + 0.5f);
   if (p == PARAM_DUREE_MAX_AVANT_REDEMARRAGE) {
     this->duree_max_avant_redemarrage_s_ = v;
+  } else if (p == PARAM_SEUIL_IMPULSIONS) {
+    this->seuil_impulsions_ = v;
   } else {
     this->creneaux_avant_rearmement_ = v;
   }
@@ -309,6 +325,21 @@ void Vevor7in1::reapprendre_station_id() {
 }
 
 void Vevor7in1::surveiller_radio_() {
+  // FAST criterion, first: a chip that has gone deaf delivers a handful of pulses where a burst has
+  // 176. Waiting for a whole silent slot (60 s) costs three emissions that can NEVER be recovered —
+  // the station transmits every 20 s whatever the receiver does. Two consecutive silent captures
+  // (~40 s, the RMT cuts a burst in two) are enough. Placed BEFORE the early return below: a frame
+  // that decoded means a healthy capture happened, which already zeroed captures_creuses_.
+  if (this->captures_creuses_ >= 2) {
+    this->captures_creuses_ = 0;
+    this->rearmements_surdite_++;
+    ESP_LOGW(TAG, "captures creuses (%u impulsions < seuil %u) : ré-armement radio immédiat n°%u",
+             (unsigned) this->last_pulse_count_, (unsigned) this->seuil_impulsions_,
+             (unsigned) this->rearmements_surdite_);
+    if (this->radio_ != nullptr) {
+      this->radio_->reset();
+    }
+  }
   // The criterion is the DECODED frame, never a capture: a capture can be pure noise. It is
   // deliberately NOT the published frame: a frame dropped by the station filter still proves the
   // RECEPTION works, and a wrong pin must never send the watchdog hunting a radio fault.

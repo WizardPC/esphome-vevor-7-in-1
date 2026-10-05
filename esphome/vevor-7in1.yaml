@@ -169,6 +169,7 @@ interval:
           id(valid_sensor).publish_state(id(vevor_rx).get_frames());
           id(rejected_sensor).publish_state(id(vevor_rx).get_rejected());
           id(duplicates_sensor).publish_state(id(vevor_rx).get_duplicates());
+          id(rearmements_surdite_sensor).publish_state(id(vevor_rx).get_rearmements_surdite());
 
 button:
   # Instruments de diagnostic. Le composant les possède (platform: vevor_7in1) : le YAML ne fait
@@ -201,6 +202,14 @@ number:
     type: duree_max_avant_redemarrage
     name: "Watchdog max silence before restart"
     unit_of_measurement: "s"
+    entity_category: config
+  # Fast criterion: a capture below this many pulses cannot hold a burst. 40 sits between a fragment
+  # (70-96 pulses, normal after an RMT cut) and silence (2-7 pulses, a chip that stopped delivering).
+  - platform: vevor_7in1
+    vevor_7in1_id: vevor_rx
+    type: seuil_impulsions
+    name: "Silent capture pulse threshold"
+    unit_of_measurement: "pulses"
     entity_category: config
   # Station identity: 0 (default) learns the first station seen; any other value PINS that station
   # and drops every other ID (a neighbour's station on the same protocol). See vevor_7in1.cpp.
@@ -305,6 +314,13 @@ sensor:
   - platform: template
     name: "Duplicates ignored"
     id: duplicates_sensor
+    accuracy_decimals: 0
+    entity_category: diagnostic
+  # Re-arms triggered by the FAST criterion (a capture too short to hold a burst) — as opposed to the
+  # slow criterion (a whole silent slot). The two are counted separately on purpose.
+  - platform: template
+    name: "Radio re-arms (deaf chip)"
+    id: rearmements_surdite_sensor
     accuracy_decimals: 0
     entity_category: diagnostic
 

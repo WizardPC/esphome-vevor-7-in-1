@@ -164,6 +164,9 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // Frames refused by the RAIN continuity check (physically impossible rise): the counter to watch
   // for recurrence of the reception fault.
   uint32_t get_rain_rejected() const { return this->rain_rejected_; }
+  // Re-arms triggered by the FAST criterion (captures too short to hold anything), as opposed to
+  // those triggered by a whole silent slot: telling them apart is what makes the fix measurable.
+  uint32_t get_rearmements_surdite() const { return this->rearmements_surdite_; }
 
  protected:
   // Stitches the end of the previous capture to the start of the current one, merging the two
@@ -187,6 +190,15 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // Frames refused because rain rose by a physically impossible jump (see pluie_plausible).
   // Separate counter: a reception fault, not a protocol rejection.
   uint32_t rain_rejected_{0};
+  // --- Silent captures: the FAST symptom of a chip that stopped delivering --------------------
+  // Measured on this hardware: a burst is 176-184 pulses, a FRAGMENT (the C3's RMT cuts a burst in
+  // two) is ~70-96, and a DEAF chip delivers 2-7. The threshold therefore separates a fragment
+  // (perfectly normal) from silence (nothing decodable is arriving). Counted in dump(), acted on by
+  // surveiller_radio_(), which re-arms the radio AT ONCE instead of waiting for a whole 20 s slot
+  // (two emissions at the station's real rate of one frame every 20 s).
+  uint32_t captures_creuses_{0};
+  uint32_t seuil_impulsions_{40};
+  uint32_t rearmements_surdite_{0};
   // Tracking for the heartbeat (see loop()).
   uint32_t last_report_ms_{0};
   uint32_t reported_captures_{0};
