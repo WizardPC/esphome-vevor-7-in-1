@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
-"""Qualifie les paquets reçus par le CC1101 : bruit de fond ou vraie station ?
+"""Qualify the packets the CC1101 receives: background noise or a real station?
 
-Aucune conclusion non mesurée : tout est calculé à partir d'une capture de logs
-série (`esphome logs --device /dev/ttyACM0`) et des constantes du protocole.
+Everything is computed from a serial-log capture and the protocol constants.
 
 Usage: tools/analyze_noise.py logs/serial_*.log [--json logs/noise_analysis.json]
 
-Critère principal : en mode packet, le CC1101 ne remplit la FIFO qu'après un
-**verrou de syncword**. Un syncword de 16 bits se verrouille sur le bruit à la
-cadence théorique   baud / 2^16   (soit ~0,18 /s à 11 505 bauds), alors qu'un
-syncword de 32 bits donne ~2,7e-6 /s (négligeable). Donc :
-  - cadence observée de l'ordre de baud/2^16  -> faux verrous sur le bruit ;
-  - cadence observée << baud/2^16             -> vrais paquets d'un émetteur.
-On y ajoute la structure de trame attendue (b[0]=0xAA, b[1]=0x00, checksum).
+Main criterion: in packet mode the CC1101 fills the FIFO only after a syncword lock. A 16-bit
+syncword locks on noise at ~baud/2^16 (~0.18/s at 11 505 baud); a 32-bit one at ~2.7e-6/s. So a
+rate near baud/2^16 means false noise locks, far below means real packets. The expected frame
+structure (b[0]=0xAA, b[1]=0x00, checksum) is checked too.
 """
 import argparse
 import json
@@ -29,8 +25,8 @@ REJ_RE = re.compile(r"V7IN1 REJ (\S+)")
 OK_RE = re.compile(r"V7IN1 OK ")
 
 FRAME_BYTES = 21
-SYMBOL_RATE = 11505.0          # bauds effectifs (DRATE_E=8, DRATE_M=208)
-SYNC_BITS = 16                 # sync_mode 16/16 -> 2 octets (CA 54)
+SYMBOL_RATE = 11505.0          # effective baud (DRATE_E=8, DRATE_M=208)
+SYNC_BITS = 16                 # sync_mode 16/16 -> 2 bytes (CA 54)
 
 
 def ts_to_s(ts):
@@ -79,7 +75,7 @@ def main():
         "tetes": ["%02x %02x" % (f["bytes"][0], f["bytes"][1]) for f in frames],
     }
 
-    # Cadence observée
+    # Observed rate
     ts_list = [f["t_s"] for f in frames if f["t_s"] is not None]
     if len(ts_list) >= 2:
         span = ts_list[-1] - ts_list[0]
@@ -88,13 +84,13 @@ def main():
         out["cadence_paquets_par_s"] = round((len(ts_list) - 1) / span, 4)
         out["intervalles_s"] = gaps
 
-    # Taux de faux verrou théorique
+    # Theoretical false-lock rate
     out["faux_verrou_theorique_par_s"] = {
         "%d bits" % SYNC_BITS: round(SYMBOL_RATE / (2 ** SYNC_BITS), 4),
         "32 bits": round(SYMBOL_RATE / (2 ** 32), 9),
     }
 
-    # Structure de trame attendue (protocole Vevor) + uniformité des octets
+    # Expected frame structure (Vevor protocol) + byte uniformity
     allb = [b for f in frames for b in f["bytes"]]
     if allb:
         hist = Counter(allb)
@@ -108,7 +104,7 @@ def main():
             "entropie_max_bits": 8.0,
             "fraction_octets_>=0x80": round(sum(1 for b in allb if b >= 0x80) / len(allb), 3),
         }
-        out["trame_valide_possible"] = False  # tranché ci-dessous
+        out["trame_valide_possible"] = False  # decided below
 
     # Verdict
     verdict, raisons = "INDETERMINE", []
@@ -137,7 +133,7 @@ def main():
 
     with open(args.json, "w") as fh:
         json.dump(out, fh, indent=2, ensure_ascii=False)
-    # Trace brute exigée par MISSION.md (append : jamais de réécriture de l'historique).
+    # Raw trace required by MISSION.md (append: never rewrite history).
     if frames:
         with open("logs/raw_frames.jsonl", "a") as fh:
             for f in frames:

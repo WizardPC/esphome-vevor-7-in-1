@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# Empreinte d'état déterministe pour la boucle autonome.
+# Deterministic state fingerprint for the autonomous loop.
 #
-# Le planificateur compare la sortie de ce script d'un tick à l'autre :
-#   - sortie IDENTIQUE  -> l'agent n'est pas lancé du tout (aucun coût, aucun message) ;
-#   - sortie DIFFÉRENTE -> l'agent est réveillé avec le diff et fait une itération.
+# The scheduler compares this script's output from tick to tick: IDENTICAL output -> the agent
+# is not launched at all (no cost, no message); DIFFERENT output -> the agent wakes with the
+# diff and runs one iteration.
 #
-# C'est ce qui rend la boucle silencieuse tant qu'il n'y a rien à faire, tout en la réveillant
-# dès qu'un port série apparaît, qu'un ESP32 devient joignable, ou que l'agent a fait avancer
-# la phase du projet (fichier state/PHASE).
+# This keeps the loop silent while there is nothing to do, and wakes it as soon as a serial
+# port appears, an ESP32 becomes reachable, or the agent advanced state/PHASE.
 #
-# Ne JAMAIS mettre d'horodatage fin ici (sinon l'empreinte change à chaque tick) — d'où le
-# « bucket » de 6 h qui ne sert qu'à garantir un réveil de contrôle 4 fois par jour.
+# NEVER put a fine-grained timestamp here (it would change the fingerprint every tick) — hence
+# the 6 h bucket, which only guarantees a control wake-up 4 times a day.
 set -uo pipefail
 DEV="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT="$(cd "$DEV/.." && pwd)"

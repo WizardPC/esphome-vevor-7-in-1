@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Lecture brute de la console série d'un ESP32 depuis ce conteneur.
+"""Raw read of an ESP32 serial console from this container.
 
 Usage: serial_log.py [--port /dev/ttyACM0] [--seconds 25] [--baud 115200]
 
-Sert de diagnostic quand la carte n'est pas joignable sur le réseau : on lit le journal de
-démarrage (Wi-Fi, composants, erreurs CC1101). L'ouverture du port provoque une remise à zéro
-de la carte (DTR/RTS) — c'est voulu pour capturer le démarrage complet.
+Diagnostic when the board is not reachable on the network: reads the boot log (Wi-Fi,
+components, CC1101 errors). Opening the port resets the board (DTR/RTS) — intended to
+capture the full boot.
 """
 from __future__ import annotations
 

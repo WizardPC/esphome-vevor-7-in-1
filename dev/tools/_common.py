@@ -1,26 +1,8 @@
 #!/usr/bin/env python3
-"""Socle partagé des outils du projet Vevor 7-en-1.
+"""Shared foundation for the Vevor 7-in-1 tools: paths, API key, connection, variants.
 
-Rassemble ce qui était recopié d'un script à l'autre : chemins, chargement de la
-clé API (UN seul comportement), connexion native ESPHome, table des variantes de
-firmware, motifs de regex et écritures atomiques.
-
-Contrat de code retour (imposé à tout le dépôt) :
-    RC_OK           = 0  succès ; comprend le RÉSULTAT NÉGATIF « aucune trame »
-                          (une mesure faite qui ne trouve rien est un résultat,
-                          pas un échec).
-    RC_SIGNAL_ABSENT= 1  réservé aux outils dont le contrat historique distingue
-                          explicitement « rien reçu » (ex. tcp_probe, eval_frames).
-    RC_ERREUR       = 2  échec TECHNIQUE : connexion, fichier, capture, écriture
-                          d'un réglage non prise par la carte.
-    RC_MESURE_NULLE = 3  RIEN N'A ÉTÉ MESURÉ : aucun état d'entité reçu, fichier
-                          de log vide, capture vide, aucune ligne de démarrage.
-                          Toujours distinct d'un RC_OK « aucune trame ».
-
-Aucun effet de bord à l'import : pas d'argparse, pas d'asyncio.run, pas de
-connexion. aioesphomeapi n'est importé qu'au moment d'ouvrir un `Device`, pour
-que les outils purement fichiers (eval_frames, summarize_window) restent
-utilisables sans la bibliothèque d'API.
+Return codes: 0 OK (including the negative result "no frame"), 1 reserved for tools that
+distinguish "nothing received", 2 technical error, 3 nothing measured.
 """
 from __future__ import annotations
 
@@ -33,56 +15,42 @@ import pathlib
 import re
 import tempfile
 
-# --- Chemins : UNE SEULE racine, jamais le CWD ------------------------------
+# --- Paths: a single root, never the CWD ------------------------------------
 DEV = pathlib.Path(__file__).resolve().parent.parent   # dev/
-ROOT = DEV.parent                                      # racine du dépôt
+ROOT = DEV.parent                                      # repo root
 DEFAULT_YAML = ROOT / "esphome" / "vevor-7in1.yaml"
 SECRETS_YAML = ROOT / "esphome" / "secrets.yaml"
-# Aucune adresse en dur : celle du réseau de l'auteur n'a rien à faire dans le dépôt. Elle
-# vient de l'environnement, ou l'outil la réclame et renvoie vers find_esp32.py.
+# No hardcoded address: the host comes from $VEVOR_HOST, else the tool asks for it.
 DEFAULT_HOST = os.environ.get("VEVOR_HOST", "")
 DEFAULT_PORT = 6053
 ESPHOME = ROOT / ".venv" / "bin" / "esphome"
 PY = ROOT / ".venv" / "bin" / "python"
-# Témoin (projet de référence) construit HORS dépôt ; paramétrable.
+# Witness (reference project) is built outside the repo; overridable via $VEVOR_TEMOIN_DIR.
 TEMOIN = pathlib.Path(os.environ.get(
     "VEVOR_TEMOIN_DIR", str(pathlib.Path.home() / "projets" / "_temoins")))
 
-# --- Codes retour -----------------------------------------------------------
+# --- Return codes -----------------------------------------------------------
 RC_OK = 0
 RC_SIGNAL_ABSENT = 1
 RC_ERREUR = 2
 RC_MESURE_NULLE = 3
 
 
-# Bloc `encryption:` du YAML ESPHome (privé : le seul point d'entrée public de
-# la clé est `key_from_yaml` / `resolve_key`).
+# ESPHome YAML `encryption:` block (private: use key_from_yaml / resolve_key).
 _KEY_RE = re.compile(r"encryption:\s*\n(?:[ \t].*\n)*?[ \t]+key:\s*(.+?)\s*$", re.M)
 
 
 def out_path(p) -> pathlib.Path:
-    """Résout un chemin de SORTIE : un chemin relatif vise la RACINE du projet.
-
-    Décision unique du dépôt (§1.6 de la revue) : `--out`/`--json` relatifs ne
-    dépendent jamais du répertoire courant, sinon lancer un outil depuis /tmp
-    écrit ailleurs selon le script.
-    """
+    """Resolve an output path: a relative path targets the repo ROOT, never the CWD."""
     path = pathlib.Path(p)
     return path if path.is_absolute() else ROOT / path
 
 
 def key_from_yaml(path=None) -> str | None:
-    """Clé de chiffrement de l'API native, lue dans le YAML ESPHome.
+    """API encryption key from the ESPHome YAML; resolves `!secret` in the sibling secrets.yaml.
 
-    UN SEUL comportement, pour tout le dépôt :
-    - `key: <base64>`          -> renvoyée telle quelle ;
-    - `key: !secret <nom>`     -> résolue dans le `secrets.yaml` situé À CÔTÉ
-                                  du YAML (par défaut `esphome/secrets.yaml`).
-    Renvoie None si `path` n'existe pas ou si le bloc `encryption:` est absent
-    (API non chiffrée).
-    Lève FileNotFoundError si `!secret` est demandé mais que le nom ou le
-    `secrets.yaml` manque : JAMAIS un None silencieux (il produisait le message
-    trompeur « Connection requires encryption »).
+    Returns None when the file or the `encryption:` block is absent; raises FileNotFoundError when
+    `!secret` is requested but its name or secrets.yaml is missing (never a silent None).
     """
     yaml_path = pathlib.Path(path) if path else DEFAULT_YAML
     if not yaml_path.is_absolute():
@@ -109,31 +77,25 @@ def key_from_yaml(path=None) -> str | None:
 
 
 def resolve_key(explicit=None, yaml_path=None) -> str | None:
-    """Point d'entrée unique : --key > $ESPHOME_API_KEY > YAML (via key_from_yaml)."""
+    """Single entry point: --key > $ESPHOME_API_KEY > YAML (via key_from_yaml)."""
     return explicit or os.environ.get("ESPHOME_API_KEY") or key_from_yaml(yaml_path)
 
 
-# --- Utilitaires async ------------------------------------------------------
+# --- Async helpers ----------------------------------------------------------
 async def maybe_await(value):
-    """`subscribe_logs`/`subscribe_states`/`button_command` renvoient tantôt une
-    coroutine tantôt l'objet selon la version d'aioesphomeapi : un `await` en dur
-    casse selon la version."""
+    """Return the value, awaiting it only if awaitable (aioesphomeapi varies by version)."""
     return await value if inspect.isawaitable(value) else value
 
 
 def _aioesphomeapi():
-    """Import tardif : les outils purement fichiers ne dépendent pas de l'API."""
+    """Lazy import: file-only tools must not depend on the API library."""
     import aioesphomeapi
     return aioesphomeapi
 
 
-# --- Connexion native ESPHome ----------------------------------------------
+# --- Native ESPHome connection ----------------------------------------------
 class Device:
-    """Contexte async : connexion, liste d'entités, états abonnés, compteurs.
-
-    Remplace les connexions ad hoc recopiées (press_button, dump_pulses,
-    scan_async) et la classe dupliquée de scan_freq.
-    """
+    """Async context: connection, entity list, states, counters (replaces ad-hoc copies)."""
 
     def __init__(self, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
                  key: str | None = None):
@@ -185,7 +147,7 @@ class Device:
         return self.state.get(k) if k is not None else None
 
     def set_freq(self, mhz: float):
-        """Écrit la fréquence ; lève SystemExit si l'entité est introuvable."""
+        """Write the frequency; raise SystemExit if the entity is missing."""
         k = self.key_of(FREQ_RE)
         if k is None:
             raise SystemExit("entité « Fréquence CC1101 » introuvable — firmware à jour ? (--list)")
@@ -207,8 +169,8 @@ class Device:
         return num(self.get("Trames valides")), num(self.get("Trames rejetées")), rssi
 
 
-# --- Table des variantes : SOURCE DE VÉRITÉ UNIQUE --------------------------
-# nom : (répertoire de travail, YAML, binaire OTA figé, description)
+# --- Variant table: single source of truth ----------------------------------
+# name: (workdir, YAML, frozen OTA binary, description)
 VARIANTS: dict[str, tuple[pathlib.Path, str, pathlib.Path, str]] = {
     "temoin": (TEMOIN / "witness-test", "witness.yaml",
                TEMOIN / "witness-test/.esphome/build/vevor-weather-station/build/firmware.ota.bin",
@@ -229,11 +191,7 @@ VARIANTS: dict[str, tuple[pathlib.Path, str, pathlib.Path, str]] = {
 
 
 def variant_of(name: str) -> tuple[pathlib.Path, str, pathlib.Path, str]:
-    """Renvoie l'entrée VARIANTS ou échoue explicitement et lisiblement.
-
-    Remplace le KeyError nu de boot_probe.py : un nom inconnu n'est plus une
-    trace, c'est un message qui liste les variantes disponibles.
-    """
+    """Return the VARIANTS entry, or exit with the list of available variants (no bare KeyError)."""
     try:
         return VARIANTS[name]
     except KeyError:
@@ -241,16 +199,13 @@ def variant_of(name: str) -> tuple[pathlib.Path, str, pathlib.Path, str]:
             f"variante inconnue : {name!r} — disponibles : {', '.join(sorted(VARIANTS))}")
 
 
-# --- Motifs partagés --------------------------------------------------------
+# --- Shared patterns --------------------------------------------------------
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
-# Ancrés au début de ligne : `TS_RE` ne doit pas matcher un [12:34:56] en milieu.
+# Anchored at line start: TS_RE must not match a [12:34:56] mid-line.
 TS_RE = re.compile(r"^\[(\d{2}:\d{2}:\d{2})\]")
-# ANCRÉ volontairement : `fr[ée]quence` sans ancre matchait aussi « Offset
-# fréquence » (capteur), et `key_of()` prend le premier nom correspondant dans
-# l'ordre de livraison des entités. Un `number_command` envoyé à la clé d'un
-# capteur est silencieusement ignoré par l'appareil : le réglage ne faisait RIEN,
-# sans aucune erreur. NE JAMAIS désancrer ce motif.
-FREQ_RE = re.compile(r"^\s*fr[ée]quence", re.I)      # « Fréquence CC1101 »
+# Anchored on purpose: unanchored `fr[ée]quence` also matched the "Offset fréquence" sensor,
+# whose key silently ignores number_command — the setting did nothing. Never unanchor it.
+FREQ_RE = re.compile(r"^\s*fr[ée]quence", re.I)      # entity "Fréquence CC1101"
 VALID_RE = re.compile(r"^\s*trames valides", re.I)
 REJECT_RE = re.compile(r"^\s*trames rejet", re.I)
 RSSI_RE = re.compile(r"^\s*rssi\b", re.I)
@@ -259,11 +214,9 @@ RAW_RE = re.compile(r"RAW[ :=]+((?:[0-9a-fA-F]{2}[ \t]+){20}[0-9a-fA-F]{2})")
 OK_RE = re.compile(r"OK[ :=]+(\{.*\})")
 
 
-# --- Écriture atomique ------------------------------------------------------
+# --- Atomic write -----------------------------------------------------------
 def atomic_write_text(out, text: str) -> pathlib.Path:
-    """Écriture ATOMIQUE : fichier temporaire dans le même répertoire, fsync,
-    puis os.replace. Jamais de fichier tronqué si l'outil est interrompu.
-    Un chemin relatif est résolu par rapport à ROOT (jamais au CWD)."""
+    """Atomic write: temp file, fsync, os.replace; relative paths resolve to ROOT."""
     p = out_path(out)
     p.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=str(p.parent), prefix=p.name + ".", suffix=".tmp")
@@ -283,5 +236,5 @@ def atomic_write_text(out, text: str) -> pathlib.Path:
 
 
 def atomic_write_json(out, obj) -> pathlib.Path:
-    """Idem `atomic_write_text`, pour un objet JSON (indenté, non ASCII échappé)."""
+    """Same as atomic_write_text, for a JSON object (indented, non-ASCII kept)."""
     return atomic_write_text(out, json.dumps(obj, ensure_ascii=False, indent=2))

@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
-"""Appuie sur un bouton NOMMÉ de la carte et ramène les logs de la fenêtre qui suit.
+"""Presses a NAMED board button and returns the logs of the following window.
 
-Généralisation de `dump_pulses.py` : celui-ci n'appuie que sur « Dump impulsions ». Or
-« Réappliquer la config radio » est le seul levier à chaud pour trancher « l'état de la puce est
-fautif » contre « le chemin RF a changé » — sans reflasher. Le script note aussi l'heure exacte de
-l'appui (témoin d'horodatage utilisé pour découper la fenêtre avant/après).
+Generalizes `dump_pulses.py` (which only presses "Dump impulsions"): any named button can be
+pressed without reflashing. The exact press time is logged to slice the window.
 
 Usage:
  dev/tools/press_button.py --name "Réappliquer la config radio" [--seconds 300] [--out logs/x.log]
 
-Code retour :
-    0  fenêtre capturée, au moins une ligne de log reçue ;
-    2  échec technique (connexion, bouton introuvable, exception) ;
-    3  MESURE NULLE : connexion réussie mais AUCUNE ligne de log reçue.
+Return codes:
+    0  window captured, at least one log line received;
+    2  technical failure (connection, button not found, exception);
+    3  NULL MEASUREMENT: connection succeeded but NO log line received.
 """
 from __future__ import annotations
 
@@ -34,11 +32,11 @@ async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
                     required="VEVOR_HOST" not in os.environ,
-                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
-    ap.add_argument("--key", default=None, help="clé API base64 (défaut: env ESPHOME_API_KEY ou YAML)")
-    ap.add_argument("--name", required=True, help="nom exact du bouton (voir --list-buttons)")
+                    help="board IP address. Fallback: VEVOR_HOST environment variable, or dev/tools/find_esp32.py to discover it")
+    ap.add_argument("--key", default=None, help="base64 API key (default: ESPHOME_API_KEY env or YAML)")
+    ap.add_argument("--name", required=True, help="exact button name (see --list-buttons)")
     ap.add_argument("--seconds", type=float, default=300.0)
-    ap.add_argument("--out", default=None, help="fichier de sortie (relatif = racine du projet)")
+    ap.add_argument("--out", default=None, help="output file (relative = project root)")
     ap.add_argument("--list-buttons", action="store_true")
     args = ap.parse_args()
 

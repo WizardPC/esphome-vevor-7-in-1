@@ -24,6 +24,9 @@ VevorParametre = vevor_7in1_ns.class_(
 PARAMETRES = {
     "creneaux_avant_rearmement": (0, 1.0, 30.0, 1.0),
     "duree_max_avant_redemarrage": (1, 60.0, 3600.0, 20.0),
+    # Station identity: decimal, like the "Station ID" sensor publishes it (33995 = 0x84cb).
+    # 0 = learn the first station seen; any other value pins it and drops every other ID.
+    "station_id": (2, 0.0, 65535.0, 1.0),
 }
 
 CONFIG_SCHEMA = number.number_schema(VevorParametre).extend(

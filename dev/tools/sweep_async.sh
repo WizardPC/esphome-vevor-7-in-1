@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# Balayage de fréquence en mode ASYNCHRONE.
+# Frequency sweep in ASYNCHRONOUS mode.
 #
-# En mode packet, on jugeait un palier au nombre de « paquets » reçus. Ce compteur n'existe plus
-# ici : on compte donc les trames réellement EXTRAITES du flux démodulé (préambule + syncword +
-# 21 octets), ce qui est un critère bien plus fort — une trame extraite et validée par le
-# checksum ne peut pas venir du bruit.
+# In packet mode a step was judged by the number of received "packets"; that counter no longer
+# exists here, so frames REALLY EXTRACTED from the demodulated stream (preamble + syncword +
+# 21 bytes) are counted — a stronger criterion: a checksum-validated frame cannot come from noise.
 #
-# Usage: tools/sweep_async.sh [hôte] [secondes_par_palier] [début_MHz] [fin_MHz] [pas_MHz]
+# Usage: tools/sweep_async.sh [host] [seconds_per_step] [start_MHz] [stop_MHz] [step_MHz]
 set -uo pipefail
-DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/ : outils, tests, docs, journaux
-ROOT="$(cd "$DEV/.." && pwd)"            # racine du dépôt : esphome/ y vit, et rien d'autre
+DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/: tools, tests, docs, logs
+ROOT="$(cd "$DEV/.." && pwd)"            # repo root: esphome/ lives here, and nothing else
 HOST="${1:-${VEVOR_HOST:-}}"
 if [ -z "$HOST" ]; then
   echo "usage: $(basename "$0") <ip-de-la-carte> [secondes/palier] [début] [fin] [pas]" >&2

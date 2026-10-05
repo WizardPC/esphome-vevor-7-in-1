@@ -1,22 +1,17 @@
 #!/usr/bin/env python3
-"""Flashe un firmware puis capture IMMÉDIATEMENT ses lignes de démarrage (via l'API native).
+"""Flash a firmware then capture its boot lines IMMEDIATELY (via the native API).
 
-Pourquoi : le journal de démarrage du CC1101 (« CC1101 found! Chip ID », entrée en RX, échecs
-de verrouillage PLL) est tronqué dans nos captures habituelles, qui démarrent 12 s après le
-flash. Or c'est LUI qui dit si la puce a été configurée et mise en écoute. Ce script ne laisse
-aucun délai : la connexion API se fait pendant que la carte démarre, et le tampon de logs du
-firmware (rejoué à la connexion) contient le setup complet.
+The usual captures start 12 s after the flash, truncating the CC1101 boot log ("CC1101 found!",
+Chip ID, RX entry, PLL lock failures). This script leaves no delay: the API connects while the
+board boots, and the firmware log buffer (replayed on connect) holds the full setup.
 
-Les variantes sont celles de `_common.VARIANTS` (mêmes que `ab_cycle.py` : source de vérité
-unique). Un nom inconnu échoue lisiblement ; sans argument, les variantes par défaut sont
-`temoin prod` (défaut VALIDE — l'ancien `nous_v0` n'existe plus, il causait un KeyError).
+Variants come from `_common.VARIANTS` (single source of truth, shared with ab_cycle.py); an
+unknown name fails readably. Default without arguments: `temoin prod`.
 
-Usage : tools/boot_probe.py [temoin prod origine prod_avant_revue]
+Usage: tools/boot_probe.py [temoin prod origine prod_avant_revue]
 
-Code retour :
-    0  toutes les captures ont ramené des lignes ;
-    2  au moins une capture a échoué techniquement ;
-    3  MESURE NULLE : au moins une capture est vide — rien n'a été mesuré.
+Return codes: 0 all captures returned lines; 2 at least one capture failed technically;
+3 empty measurement: at least one capture is empty.
 """
 from __future__ import annotations
 
@@ -40,7 +35,7 @@ def main() -> int:
     names = sys.argv[1:] or ["temoin", "prod"]
     worst = RC_OK
     for name in names:
-        workdir, yaml, binary, _desc = variant_of(name)   # nom inconnu -> message lisible
+        workdir, yaml, binary, _desc = variant_of(name)   # unknown name -> readable message
         if not binary.exists():
             print(f"# ERREUR : binaire absent pour {name} : {binary}", file=sys.stderr)
             return RC_ERREUR
@@ -52,7 +47,7 @@ def main() -> int:
         out = proc.stdout + proc.stderr
         flash_ok = "OTA successful" in out
         print("flash:", "OK" if flash_ok else f"FAIL ({proc.returncode})", flush=True)
-        # capture IMMÉDIATE (aucune attente) : on veut le setup dans le tampon de logs
+        # IMMEDIATE capture (no wait): the setup must still be in the log buffer
         cap = subprocess.run([str(PY), str(DEV / "tools" / "capture_logs.py"),
                               "--host", DEFAULT_HOST, "--seconds", "40", "--out", str(log)],
                              capture_output=True, text=True, timeout=120)
@@ -61,8 +56,7 @@ def main() -> int:
             print(f"  !! capture en échec (code {cap.returncode}) — rien à conclure", flush=True)
             worst = RC_ERREUR
         elif cap.returncode == RC_MESURE_NULLE:
-            # Capture réussie mais VIDE : ce n'est pas « pas de ligne de démarrage », c'est
-            # « rien n'a été mesuré ».
+            # Successful but EMPTY capture: not "no boot line", but "nothing measured".
             print("  !! capture VIDE (0 ligne) — MESURE NULLE, rien à conclure", flush=True)
             if worst == RC_OK:
                 worst = RC_MESURE_NULLE

@@ -68,6 +68,12 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // number/ sub-platform). The component owns them; the YAML only names and bounds them.
   float get_parametre(uint8_t p) const;
   void set_parametre(uint8_t p, float valeur);
+  // Put the station filter back in learning mode: the station's ID changes at every battery change,
+  // so re-learning must never require a reflash.
+  void reapprendre_station_id();
+  // Initial pin, straight from the YAML (0 = learn). 2 is PARAM_STATION_ID in the .cpp, and the
+  // same identifier the number platform uses — the mapping lives in number/__init__.py.
+  void set_station_id(uint16_t id) { this->set_parametre(2, static_cast<float>(id)); }
 
   // On-demand re-arm (the "Re-apply radio config" button): EXACTLY the same gesture as the
   // watchdog, so the two cannot drift apart. It also clears the silence counter: a manual re-arm
@@ -210,6 +216,17 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   uint32_t reboots_veille_{0};
   ESPPreferenceObject pref_reboots_{};
   void surveiller_radio_();
+
+  // --- Station identity filter -----------------------------------------------------------------
+  // 0 = learn: the FIRST valid frame's ID is adopted, then any OTHER ID is dropped (a neighbour's
+  // station on the same protocol). decoded_ and frames_ keep the two cases apart: a dropped frame
+  // still proves the RECEPTION works, so the watchdog must not fight it. Settable from Home
+  // Assistant (number entity) and re-learnable (button) without reflashing — the station's ID
+  // changes at every battery change.
+  uint16_t station_id_{0};
+  uint32_t decoded_{0};          // valid frames DECODED, before the filter: the watchdog criterion
+  uint32_t id_etrangere_{0};     // valid frames dropped because they are not the adopted station
+  bool id_etrangere_signalee_{false};
   // Last capture received: stored ONLY if it was a fragment (see dump()), so we only stitch a
   // fragment to a fragment.
   std::vector<int32_t> prev_fragment_;

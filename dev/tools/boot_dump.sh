@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# Lit le dump de démarrage d'une carte ESPHome : l'API native ne livre pas l'historique, donc
-# pour voir un `dump_config()` il faut être connecté AVANT le boot. Ce script enchaîne des
-# captures courtes (qui se reconnectent), reflashe en OTA, puis imprime les lignes de
-# configuration trouvées dans les captures.
+# Reads the boot dump of an ESPHome board: the native API has no history, so seeing a
+# `dump_config()` requires being connected BEFORE boot. Chains short reconnecting captures,
+# reflashes over OTA, then prints the configuration lines found.
 #
 # Usage: tools/boot_dump.sh [--host IP] [--rounds N] [--seconds S] [--no-flash]
 set -uo pipefail
-DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/ : outils, tests, docs, journaux
-ROOT="$(cd "$DEV/.." && pwd)"            # racine du dépôt : esphome/ y vit, et rien d'autre
+DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/: tools, tests, docs, logs
+ROOT="$(cd "$DEV/.." && pwd)"            # repo root: esphome/ lives here, and nothing else
 HOST=<ip-de-la-carte>
 ROUNDS=6
 SEC=25

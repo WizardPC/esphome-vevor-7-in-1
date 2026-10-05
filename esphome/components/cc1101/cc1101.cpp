@@ -111,20 +111,15 @@ void CC1101Component::setup() {
     this->gdo0_pin_->setup();
   }
 
-  // CORRECTIF DU 03/10 — ATTACHER L'INTERRUPTION GDO0 AVANT TOUT RETOUR ANTICIPÉ.
-  // Elle est ce qui RÉVEILLE loop() : loop() appelle disable_loop() en entrée, et seul
-  // gpio_intr() -> enable_loop_soon_any_context() la relance quand une trame se présente.
-  // Placée plus bas, elle était sautée à chaque démarrage où la puce ne répondait pas du
-  // premier coup (le cas « une fois sur deux » mesuré) : la relecture finissait par réussir,
-  // configure() entrait en RX, la puce remplissait son FIFO, GDO0 montait — et PERSONNE ne
-  // venait lire, définitivement. Symptôme : écritures conformes, radio=ok, 0 trame. Le
-  // pilote d'origine, qui n'a pas ce retour anticipé, n'a jamais ce défaut.
+  // Attach the GDO0 interrupt BEFORE any early return: loop() calls disable_loop() on entry
+  // and only gpio_intr() -> enable_loop_soon_any_context() wakes it. If skipped, the chip fills
+  // its FIFO unwatched: writes ok, radio ok, 0 frame (README-LOCAL.md).
   this->attacher_interruption_gdo0_();
 
   this->configure();
   if (this->state_.VERSION == 0 || this->state_.PARTNUM == 0xFF) {
-    // La puce ne répond pas encore : on ne renonce NI ne bloque. Relectures depuis loop(),
-    // une toutes les 250 ms pendant au plus 15 s (budget 60), sans jamais dépasser le watchdog.
+    // Chip not answering yet: neither give up nor block. Re-reads from loop(), one every 250 ms
+    // for at most 15 s (budget 60), never exceeding the watchdog.
     this->retry_budget_ = 60;
     this->next_retry_ms_ = millis() + 250;
     ESP_LOGW(TAG, "puce absente du bus SPI au démarrage — %u relectures non bloquantes prévues "
@@ -166,18 +161,9 @@ void CC1101Component::configure() {
   this->strobe_(Command::RES);
   delay(5);
 
-  // MODIFICATION LOCALE (projet vevor-7in1, 01/10/2026) — vérification d'identité AVEC RELECTURES.
-  //
-  // Pourquoi : la datasheet CC1101 (SWRS061I) dit au §10.1 que CHIP_RDYn — bit s7 du status byte —
-  // « reste haut jusqu'à ce que l'alimentation ET le quartz soient stabilisés », et que pendant ce
-  // temps l'en-tête SPI renvoie 0xFF sur SO ; au §4.9 + Table 18, que la rampe d'alimentation doit
-  // faire 5 ms de 0 à 1,8 V faute de quoi l'état de la puce est INDÉTERMINÉ jusqu'à un SRES.
-  // Autrement dit : un Chip ID 0xFFFF veut dire « la puce n'est pas prête », pas « le câblage est
-  // faux ». Or la version d'origine lit PARTNUM puis VERSION UNE SEULE FOIS et appelle
-  // mark_failed() : une puce un peu lente devient muette pour toute la session. RadioLib, la
-  // bibliothèque de référence, boucle 10 relectures espacées de 10 ms pour la même raison
-  // (jgromes/RadioLib, CC1101.cpp) ; on fait pareil, en plus large (jusqu'à ~5 s), et on journalise
-  // CHIP_RDYn pour distinguer « puce pas prête » de « liaison SPI muette ».
+  // MODIFICATION LOCALE — identity check with re-reads (README-LOCAL.md). Per datasheet SWRS061I
+  // §10.1, CHIP_RDYn (status bit 7) stays high until power AND crystal are stable, so Chip ID 0xFFFF
+  // means "chip not ready", not "bad wiring"; here 4 attempts at 50 ms instead of a single read.
   uint8_t tentatives = 0;
   uint8_t chip_rdy_haute = 0;
   while (tentatives < 4) {
@@ -201,8 +187,8 @@ void CC1101Component::configure() {
     delay(50);
   }
   if (this->state_.VERSION == 0 || this->state_.PARTNUM == 0xFF) {
-    // PAS de mark_failed() ici : l'échec est peut-être transitoire (puce pas encore prête, cf.
-    // CHIP_RDYn). C'est setup() qui décide — relectures non bloquantes depuis loop(), budget 15 s.
+    // No mark_failed() here: the failure may be transient (chip not ready, see CHIP_RDYn).
+    // setup() decides instead — non-blocking re-reads from loop(), 15 s budget.
     ESP_LOGE(TAG, "identité CC1101 illisible après %u relectures (%u fois CHIP_RDYn haut)",
              (unsigned) tentatives, (unsigned) chip_rdy_haute);
     return;
@@ -210,16 +196,9 @@ void CC1101Component::configure() {
 
   this->initialized_ = true;
 
-  // MODIFICATION LOCALE — écriture VÉRIFIÉE, réessayée jusqu'à ce qu'elle prenne.
-  //
-  // Pourquoi : mesuré le 02/10 à 01h02, la puce répond parfaitement en LECTURE (identité 0x0014,
-  // registres relus) mais certaines ÉCRITURES se perdent — MDMCFG3 écrit 0xC0 relu 0x22, FREQ0
-  // écrit 0xE8 relu 0xEC, MDMCFG4 écrit 0xC8 relu 0x8C — et dans une autre session les huit mêmes
-  // registres se relisaient tous conformes. C'est intermittent. Une puce dont les registres ne
-  // prennent pas ne démodule rien, à aucune fréquence : c'est ce qui rendait le balayage de
-  // fréquence muet et la réception impossible. On relit donc CHAQUE registre après l'avoir écrit et
-  // on le réécrit tant qu'il ne prend pas (la lecture, elle, est fiable). Les registres TEST0/1/2
-  // ne se relisent pas de façon fiable : écrits une fois, sans vérification.
+  // MODIFICATION LOCALE — verified write, rewritten until it takes. Some register writes are lost
+  // intermittently (MDMCFG3 0xC0->0x22, FREQ0 0xE8->0xEC, MDMCFG4 0xC8->0x8C) while reads are
+  // reliable: a chip whose registers do not take demodulates nothing. TEST0/1/2 written once.
   uint8_t non_prises = 0;
   uint8_t reprises = 0;
   for (uint8_t i = 0; i <= static_cast<uint8_t>(Register::TEST0); i++) {
@@ -227,15 +206,9 @@ void CC1101Component::configure() {
       continue;
     }
     const uint8_t voulu = this->state_.regs()[i];
-    // Registres écrits UNE fois, sans vérification, parce que la relecture ne PEUT pas correspondre :
-    //  - TEST0/1/2 (0x2C et au-delà) : relecture non fiable, déjà documenté ;
-    //  - FSCAL3/FSCAL2/FSCAL1/FSCAL0 (0x23-0x26) : registres de CALIBRATION du synthétiseur, que la
-    //    PUCE réécrit elle-même pendant sa calibration VCO. Mesuré le 03/10 : nous écrivons 0x2C dans
-    //    FSCAL2 et la calibration y laisse 0x0C — notre boucle croyait donc l'écriture perdue et la
-    //    réécrivait quatre fois à CHAQUE configuration. Ces faux positifs faisaient 21 des 30 alertes
-    //    de la journée et masquaient les vraies pertes (FREQ0, AGCCTRL0, MCSM0). La valeur écrite ici
-    //    reste celle recommandée par la datasheet, qui accélère la calibration : elle est simplement
-    //    écrite une fois, puis la puce en fait ce qu'elle doit.
+    // Written once, unchecked, because the read-back cannot match: TEST0/1/2 (0x2C and above) read
+    // back unreliably, and FSCAL3/2/1/0 (0x23-0x26) are calibration registers the chip rewrites
+    // during VCO calibration — e.g. FSCAL2 0x2C left as 0x0C (21 of 30 write alarms in a day).
     if (i > 0x2B || (i >= static_cast<uint8_t>(Register::FSCAL3) && i <= static_cast<uint8_t>(Register::FSCAL0))) {
       this->write_(static_cast<Register>(i));
       continue;
@@ -250,7 +223,7 @@ void CC1101Component::configure() {
           reprises++;
         }
       } else {
-        this->state_.regs()[i] = voulu;  // on repart de la valeur voulue pour l'essai suivant
+        this->state_.regs()[i] = voulu;  // restart from the wanted value for the next attempt
       }
     }
     if (!pris) {
@@ -263,14 +236,9 @@ void CC1101Component::configure() {
            (unsigned) reprises, (unsigned) non_prises);
   this->set_output_power(this->output_power_requested_);
 
-  // MODIFICATION LOCALE — CONTRÔLE DES ÉCRITURES (relire ce qu'on vient d'écrire).
-  //
-  // Pourquoi : sur ce montage, il arrive que la puce réponde à la lecture d'identité (0x0014) et se
-  // déclare prête (CHIP_RDYn bas), mais ne reçoive RIEN — et un balayage de ±100 kHz autour de la
-  // fréquence nominale ne ramène AUCUNE trame. Un décalage de quartz aurait été rattrapé par ce
-  // balayage ; son échec total désigne les écritures de configuration : si elles ne prennent pas,
-  // la puce reste sur sa configuration d'usine et ne reçoit à aucune fréquence. Sans cette
-  // comparaison, « configuration appliquée » et « configuration ignorée » se ressemblent exactement.
+  // MODIFICATION LOCALE — write check (read back what was just written). The chip can answer the
+  // identity read (0x0014) and declare ready (CHIP_RDYn low) yet receive nothing; a ±100 kHz sweep
+  // catches a crystal offset, so failing that points to the config writes (firmware-design-notes.md).
   {
     struct Surveille {
       Register reg;
@@ -301,10 +269,8 @@ void CC1101Component::configure() {
     }
   }
 
-  // MODIFICATION LOCALE — délai de stabilisation avant l'entrée en RX.
-  // Constat du 02/10 : l'entrée en RX réussissait au démarrage à froid (la station a été reçue,
-  // +3 captures toutes les 20 s) mais échouait à chaque ré-armement à chaud. On laisse donc à la
-  // puce le temps de se remettre d'un reset logiciel avant de lui demander la réception.
+  // MODIFICATION LOCALE — settle delay before entering RX. Measured: RX entry succeeded on a cold
+  // boot but failed on every warm re-arm, so the chip is given time to recover from its reset.
   delay(20);
   if (!this->enter_rx_()) {
     ESP_LOGW(TAG, "Failed to enter RX state!");
@@ -312,13 +278,9 @@ void CC1101Component::configure() {
     return;
   }
 
-  // MODIFICATION LOCALE — état de la calibration VCO/PLL APRÈS l'entrée en RX.
-  // Pourquoi : l'errata TI SWRZ020E dit que le détecteur de verrouillage PLL « n'est pas fiable à
-  // 100 % » et que le test fiable est FSCAL1 != 0x3F. Sur ce montage, il arrive que la puce réponde,
-  // se déclare prête (CHIP_RDYn bas) et que ses registres soient relus CONFORMES à ce qu'on a écrit
-  // — et qu'elle ne démodule pourtant rien du tout (aucune livraison RMT pendant dix minutes). Si
-  // FSCAL1 vaut 0x3F, la calibration a échoué : c'est une signature matérielle (quartz,
-  // alimentation, adaptation d'antenne), pas logicielle — et ça oriente le fer à souder, pas le code.
+  // MODIFICATION LOCALE — VCO/PLL calibration state after entering RX. TI errata SWRZ020E: the
+  // PLL lock detector is unreliable and the reliable test is FSCAL1 != 0x3F; a chip can read back
+  // compliant and still demodulate nothing, so 0x3F points to hardware (crystal, power), not code.
   {
     this->read_(Register::FSCAL1);
     const uint8_t fscal1 = this->state_.FSCAL1;
@@ -347,10 +309,9 @@ void CC1101Component::call_listeners_(const std::vector<uint8_t> &packet, float 
   this->packet_trigger_.trigger(packet, freq_offset, rssi, lqi);
 }
 
-// MODIFICATION LOCALE — relecture NON BLOQUANTE de l'identité de la puce, appelée depuis loop().
-// Une tentative par tranche de 250 ms, budget borné : le pendant de la boucle RadioLib (10
-// relectures espacées de 10 ms), mais sans jamais immobiliser la boucle principale — une boucle
-// bloquante de plusieurs secondes dans setup() fait planter l'ESP32 (watchdog de tâche).
+// MODIFICATION LOCALE — non-blocking chip identity re-read, called from loop(). One attempt every
+// 250 ms, bounded budget: the counterpart of RadioLib's 10 re-reads 10 ms apart, never blocking the
+// main loop — a multi-second blocking loop in setup() trips the ESP32 task watchdog.
 void CC1101Component::retry_radio_init_() {
   const uint32_t now = millis();
   if (now < this->next_retry_ms_) {
@@ -367,7 +328,7 @@ void CC1101Component::retry_radio_init_() {
   if (this->state_.VERSION != 0 && this->state_.PARTNUM != 0xFF) {
     ESP_LOGI(TAG, "CC1101 trouvé après relecture (Chip ID: 0x%04X, status 0x%02X) — configuration",
              this->chip_id_, status);
-    this->configure();  // configuration complète + entrée en RX
+    this->configure();  // full configuration + RX entry
     this->retry_budget_ = 0;
     return;
   }
@@ -496,8 +457,8 @@ void CC1101Component::begin_rx() {
 void CC1101Component::reset() {
   this->strobe_(Command::RES);
   this->configure();
-  // Reconfigurer la puce ne suffit pas si l'interruption GDO0 a été perdue : loop() resterait
-  // endormie et le ré-armement ne récupérerait rien. detach puis attach = toujours sans risque.
+  // Reconfiguring the chip is not enough if the GDO0 interrupt was lost: loop() would stay asleep
+  // and the re-arm would recover nothing. Detach then attach is always safe.
   if (this->gdo0_pin_ != nullptr) {
     this->gdo0_pin_->detach_interrupt();
     this->gdo0_pin_->attach_interrupt(&CC1101Component::gpio_intr, this, gpio::INTERRUPT_RISING_EDGE);
@@ -523,16 +484,9 @@ bool CC1101Component::wait_for_state_(State target_state, uint32_t timeout_ms) {
 }
 
 bool CC1101Component::enter_calibrated_(State target_state, Command cmd) {
-  // MODIFICATION LOCALE (02/10/2026) — ne plus ABANDONNER sur un dépassement de délai.
-  //
-  // Pourquoi : mesuré après les soudures de l'utilisateur, « Failed to enter RX state! » quatre fois
-  // de suite alors que (a) les écritures de registres passaient toutes — « 0 definitivement non
-  // pris » — et que (b) la calibration se relisait valide (FSCAL1 = 0x18, MARCSTATE = 0x0D). Donc la
-  // puce était joignable et correctement configurée, et c'est ce `return false` sur un simple
-  // dépassement des 100 ms qui faisait échouer l'entrée en RX — puis mark_failed() condamnait la
-  // session entière. La datasheet (§22.1) demande de recalibrer EN BOUCLE jusqu'au verrouillage et
-  // l'errata SWRZ020E rappelle que le détecteur de verrouillage n'est pas fiable : on réessaie donc,
-  // avec une petite pause et un délai d'attente plus large.
+  // MODIFICATION LOCALE — do not give up on a timeout. Measured: RX entry failed four times running
+  // while all writes passed and calibration was valid (FSCAL1 = 0x18, MARCSTATE = 0x0D) — only the
+  // 100 ms wait was at fault. §22.1: recalibrate until lock; SWRZ020E: lock detector unreliable.
   for (uint8_t retries = PLL_LOCK_RETRIES; retries > 0; retries--) {
     this->strobe_(cmd);
     if (!this->wait_for_state_(target_state, 250)) {
@@ -594,8 +548,8 @@ void CC1101Component::write_(Register reg, const uint8_t *buffer, size_t length)
   this->disable();
 }
 
-// MODIFICATION LOCALE : lecture du status byte (bit 7 = CHIP_RDYn, actif à 0) sans modifier la puce.
-// C'est le seul moyen documenté de savoir si l'alimentation et le quartz sont stabilisés (§10.1).
+// MODIFICATION LOCALE — read the status byte (bit 7 = CHIP_RDYn, active low) without touching the
+// chip. The only documented way to know whether power and crystal are stable (§10.1).
 uint8_t CC1101Component::read_status_() {
   this->enable();
   const uint8_t status = this->transfer_byte(0);

@@ -19,6 +19,8 @@ class VevorBouton : public button::Button, public Parented<Vevor7in1> {
   void press_action() override {
     if (this->type_ == 1) {
       this->parent_->reapply_radio();
+    } else if (this->type_ == 2) {
+      this->parent_->reapprendre_station_id();
     } else {
       this->parent_->request_raw_dump();
     }

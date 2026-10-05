@@ -217,6 +217,27 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   this->last_frame_ms_ = millis();
   this->has_last_frame_ = true;
 
+  this->decoded_++;
+  // Station identity, THE filter. 0 = learn: the first valid frame is adopted and logged. Any other
+  // value PINS a station: every other ID is dropped, which is how a neighbour's station stays out.
+  // A dropped frame is warned about ONCE per pin: a wrong ID must never look like a radio fault
+  // (the watchdog watches decoded_, not frames_, precisely so this filter cannot trigger it).
+  const uint16_t id_trame = (uint16_t) (((uint16_t) raw[2] << 8) | raw[3]);
+  if (this->station_id_ == 0) {
+    this->station_id_ = id_trame;
+    ESP_LOGI(TAG, "station : ID appris %u (0x%04x) — il change à chaque changement de pile",
+             (unsigned) id_trame, (unsigned) id_trame);
+  } else if (id_trame != this->station_id_) {
+    this->id_etrangere_++;
+    if (!this->id_etrangere_signalee_) {
+      this->id_etrangere_signalee_ = true;
+      ESP_LOGW(TAG, "station : trame d'une AUTRE station (ID %u attendu, %u reçu) — ignorée ; "
+                    "mets l'ID à 0 ou appuie sur « Re-learn station ID » pour la réapprendre",
+               (unsigned) this->station_id_, (unsigned) id_trame);
+    }
+    return false;
+  }
+
   this->frames_++;
   // The period is in TENTHS of a microsecond (measured on the burst): we log the value actually
   // kept, not a misleading integer.
@@ -247,16 +268,31 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
 // Setting identifiers; the entities live in number/.
 static const uint8_t PARAM_CRENEAUX_AVANT_REARMEMENT = 0;
 static const uint8_t PARAM_DUREE_MAX_AVANT_REDEMARRAGE = 1;
+static const uint8_t PARAM_STATION_ID = 2;
 // Watchdog slot duration: the station's transmission period (see setup() in the .h).
 static const uint32_t VEILLE_CRENEAU_MS = 20000;
 
 float Vevor7in1::get_parametre(uint8_t p) const {
-  return p == PARAM_DUREE_MAX_AVANT_REDEMARRAGE
-             ? static_cast<float>(this->duree_max_avant_redemarrage_s_)
-             : static_cast<float>(this->creneaux_avant_rearmement_);
+  if (p == PARAM_DUREE_MAX_AVANT_REDEMARRAGE) {
+    return static_cast<float>(this->duree_max_avant_redemarrage_s_);
+  }
+  if (p == PARAM_STATION_ID) {
+    return static_cast<float>(this->station_id_);
+  }
+  return static_cast<float>(this->creneaux_avant_rearmement_);
 }
 
 void Vevor7in1::set_parametre(uint8_t p, float valeur) {
+  if (p == PARAM_STATION_ID) {
+    // 0 is legal here and means "learn": the minimum of 1 used for the duration settings does not
+    // apply to an identity. A pinned ID is a filter, not a delay.
+    const float arrondi = valeur < 0.0f ? 0.0f : valeur + 0.5f;
+    const uint32_t id = arrondi > 65535.0f ? 65535u : static_cast<uint32_t>(arrondi);
+    this->station_id_ = static_cast<uint16_t>(id);
+    this->id_etrangere_signalee_ = false;  // a new pin deserves its own warning
+    ESP_LOGI(TAG, "station : ID %s", id == 0 ? "remis en apprentissage" : "forcé");
+    return;
+  }
   const uint32_t v = valeur < 1.0f ? 1u : static_cast<uint32_t>(valeur + 0.5f);
   if (p == PARAM_DUREE_MAX_AVANT_REDEMARRAGE) {
     this->duree_max_avant_redemarrage_s_ = v;
@@ -266,10 +302,18 @@ void Vevor7in1::set_parametre(uint8_t p, float valeur) {
   ESP_LOGI(TAG, "veille : paramètre %u = %u", (unsigned) p, (unsigned) v);
 }
 
+void Vevor7in1::reapprendre_station_id() {
+  this->station_id_ = 0;
+  this->id_etrangere_signalee_ = false;
+  ESP_LOGI(TAG, "station : ID oublié, la prochaine trame valide fera foi");
+}
+
 void Vevor7in1::surveiller_radio_() {
-  // The criterion is the PUBLISHED FRAME, never a capture: a capture can be pure noise.
-  if (this->frames_ != this->trames_veille_) {
-    this->trames_veille_ = this->frames_;
+  // The criterion is the DECODED frame, never a capture: a capture can be pure noise. It is
+  // deliberately NOT the published frame: a frame dropped by the station filter still proves the
+  // RECEPTION works, and a wrong pin must never send the watchdog hunting a radio fault.
+  if (this->decoded_ != this->trames_veille_) {
+    this->trames_veille_ = this->decoded_;
     this->creneaux_muets_ = 0;
     this->rearmements_ = 0;
     if (this->reboots_veille_ != 0) {

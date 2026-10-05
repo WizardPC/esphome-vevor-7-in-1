@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Retrouve l'IP de l'ESP32 (API native ESPHome sur 6053) — utilisé par la boucle autonome.
+"""Find the ESP32's IP (ESPHome native API on 6053) — used by the autonomous loop.
 
-Usage: find_esp32.py --subnets <préfixes>  (ou VEVOR_SUBNETS dans l'environnement)
+Usage: find_esp32.py --subnets <prefixes>  (or VEVOR_SUBNETS in the environment)
 
-Stratégie : si state/DEVICE_IP existe et répond encore, on le renvoie (rapide) ; sinon on
-scanne le /24 sur le port 6053, on mémorise le premier résultat dans state/DEVICE_IP.
-Sortie volontairement déterministe : une IP, ou "none" — c'est ce qui permet au planificateur
-de la boucle de détecter un changement d'état sans réveiller l'agent inutilement.
+Strategy: if state/DEVICE_IP exists and still answers, return it (fast); otherwise scan the /24
+on port 6053 and remember the first hit in state/DEVICE_IP. Deterministic output: one IP, or
+"none" — which lets the loop scheduler detect a state change without waking the agent.
 """
 from __future__ import annotations
 
@@ -19,7 +18,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 DEV = pathlib.Path(__file__).resolve().parent.parent   # dev/
-ROOT = DEV.parent                                      # racine du dépôt
+ROOT = DEV.parent                                      # repo root
 CACHE = DEV / "state" / "DEVICE_IP"
 
 
@@ -33,13 +32,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--subnets", default=os.environ.get("VEVOR_SUBNETS"),
                     required="VEVOR_SUBNETS" not in os.environ,
-                    help="préfixes de sous-réseaux à balayer, séparés par des virgules (ex. "
-                         "« 192.168.1,192.168.2 »). Balayez TOUS les sous-réseaux que le trafic "
-                         "de la carte peut traverser : un scan limité à un seul conclut à tort "
-                         "que la carte est absente.")
+                    help="subnet prefixes to scan, comma-separated (e.g. "
+                         "\"192.168.1,192.168.2\"). Scan EVERY subnet the board traffic may cross: "
+                         "a single-subnet scan wrongly concludes the board is absent.")
     ap.add_argument("--port", type=int, default=6053)
     ap.add_argument("--timeout", type=float, default=1.0)
-    ap.add_argument("--refresh", action="store_true", help="ignorer le cache et rescanner")
+    ap.add_argument("--refresh", action="store_true", help="ignore the cache and rescan")
     args = ap.parse_args()
 
     if not args.refresh and CACHE.exists():
@@ -61,9 +59,8 @@ def main() -> int:
     if not found:
         if CACHE.exists():
             CACHE.unlink()
-        # Sortie "none" et code 0 : ce script est un contrôle d'état, pas une action qui
-        # échoue. Un code non nul ferait déclencher les filets `|| echo none` des appelants
-        # (avec pipefail) et dupliquerait la sortie.
+        # "none" output and code 0: this is a state check, not a failing action. A non-zero code
+        # would trip callers' `|| echo none` fallbacks (with pipefail) and duplicate the output.
         print("none")
         return 0
 

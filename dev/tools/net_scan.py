@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Scanner réseau minimal pour ce projet : localise Home Assistant et les ESP32 ESPHome.
+"""Minimal network scanner: locates Home Assistant and the ESP32 ESPHome boards.
 
 Usage:
-    net_scan.py --subnet <préfixe> [--ports 8123,6052,6053] [--timeout 0.4]
+    net_scan.py --subnet <prefix> [--ports 8123,6052,6053] [--timeout 0.4]
 
-Aucune dépendance externe. Utile pour retrouver l'IP de l'ESP32 avant/après le premier flash
-(6053 = API native ESPHome, 6052 = dashboard ESPHome, 8123 = Home Assistant).
+No external dependency. Useful to rediscover the ESP32 IP before/after the first flash
+(6053 = ESPHome native API, 6052 = ESPHome dashboard, 8123 = Home Assistant).
 """
 from __future__ import annotations
 
@@ -36,11 +36,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--subnet", default=os.environ.get("VEVOR_SUBNETS"),
                     required="VEVOR_SUBNETS" not in os.environ,
-                    help="préfixe de sous-réseau à explorer (variable VEVOR_SUBNETS)")
+                    help="subnet prefix to scan (VEVOR_SUBNETS variable)")
     ap.add_argument("--ports", default="8123,6052,6053")
     ap.add_argument("--timeout", type=float, default=1.0,
-                    help="1.0s par défaut : un timeout trop court produit des FAUX NÉGATIFS "
-                         "(déjà constaté à 0,4s sur ce réseau)")
+                    help="1.0s default: too short a timeout yields FALSE NEGATIVES")
     args = ap.parse_args()
 
     ports = [int(p) for p in args.ports.split(",")]

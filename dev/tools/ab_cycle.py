@@ -1,24 +1,13 @@
 #!/usr/bin/env python3
-"""Compare, dans des fenêtres INTERLEAVÉES, le firmware témoin et nos variantes.
+"""Compare the witness firmware and our variants in INTERLEAVED windows.
 
-Pourquoi : la station n'émet que par fenêtres (mesuré le 01/10 : émission 08:04-08:09 UTC,
-silence le reste de la matinée). Comparer deux firmwares dans deux fenêtres éloignées ne veut
-donc rien dire — il faut les mesurer l'un après l'autre, dans la même période.
+Each round flashes each variant over OTA, waits for boot, captures logs via the native API for N
+seconds, then appends a JSON line to logs/ab_cycle.jsonl. Variants come from `_common.VARIANTS`.
 
-Chaque tour : pour chaque variante -> flash OTA du binaire déjà compilé, courte attente de
-démarrage, capture des logs par l'API native (port 6053) pendant N secondes, puis une ligne
-JSON ajoutée dans logs/ab_cycle.jsonl. Sortie = un récapitulatif lisible.
-
-La table des variantes est celle de `_common.VARIANTS` (source de vérité unique, partagée avec
-`boot_probe.py`) ; un nom inconnu échoue lisiblement au lieu de lever un KeyError.
-
-Usage :
+Usage:
  dev/tools/ab_cycle.py --rounds 2 --seconds 100 [--variants temoin,prod,origine]
 
-Code retour :
-    0  toutes les mesures sont exploitables (« aucune trame » est un RÉSULTAT négatif) ;
-    3  MESURE NULLE : au moins une variante a une mesure inexploitable (flash raté, capture en
-       échec, ou capture réussie mais vide) — rien n'a été mesuré pour cette variante.
+Return codes: 0 all usable ("no frame" is a negative result); 3 empty measurement.
 """
 from __future__ import annotations
 
@@ -34,7 +23,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from _common import (DEFAULT_HOST, ESPHOME, ROOT, RC_MESURE_NULLE, RC_OK,  # noqa: E402
                      atomic_write_text, variant_of)
 
-# Certaines captures passent par `press_button.py`, qui renvoie 3 quand la capture est vide.
+# press_button.py returns 3 for an empty capture.
 RC_CAPTURE_VIDE = 3
 
 
@@ -67,8 +56,7 @@ def main() -> int:
     args = ap.parse_args()
 
     names = [v.strip() for v in args.variants.split(",") if v.strip()]
-    # Valider TOUS les noms AVANT de flasher quoi que ce soit : un nom inconnu doit échouer
-    # tout de suite, lisiblement, pas au milieu d'un cycle.
+    # Validate ALL names before flashing: an unknown name must fail now, not mid-cycle.
     for name in names:
         variant_of(name)
     out_jsonl = DEV / "logs" / "ab_cycle.jsonl"
@@ -87,14 +75,12 @@ def main() -> int:
                 [str(ESPHOME), "upload", yaml, "--device", DEFAULT_HOST, "--file", str(binary)],
                 cwd=workdir, capture_output=True, text=True, timeout=300)
             atomic_write_text(flash_log, proc.stdout + proc.stderr)
-            # ESPHome journalise sur STDERR : tester stdout seul fait passer un flash réussi
-            # pour un échec (mesuré le 01/10, premier passage du cycle).
+            # ESPHome logs to STDERR: testing stdout alone reads a successful flash as a failure.
             flash_ok = proc.returncode == 0 and "OTA successful" in (proc.stdout + proc.stderr)
-            # démarrage : Wi-Fi + API avant de capture
+            # boot: Wi-Fi + API must be up before capture
             subprocess.run(["sleep", "12"], check=False)
-            # Pour NOS variantes, on arme en plus le dump des durées brutes de la prochaine
-            # capture (bouton « Dump impulsions ») : c'est la seule façon de voir CE QUE notre
-            # RMT a réellement reçu pendant une fenêtre d'émission.
+            # Our variants also arm the raw-duration dump (button "Dump impulsions"); it is the
+            # only way to see what our RMT actually received during an emission window.
             if name == "temoin":
                 capture_cmd = [str(ROOT / ".venv" / "bin" / "python"),
                                str(DEV / "tools" / "capture_logs.py"),
@@ -107,15 +93,14 @@ def main() -> int:
                                "--seconds", str(args.seconds), "--out", str(log)]
             cap = subprocess.run(capture_cmd, capture_output=True, text=True,
                                  timeout=args.seconds + 120)
-            # Un échec de capture (API injoignable, port occupé) ne doit JAMAIS se lire comme
-            # « aucune trame reçue » ; une capture VIDE (code 3) non plus. Les deux sont des
-            # mesures nulles, pas des résultats négatifs.
+            # A failed capture (API unreachable, busy port) or an EMPTY one (code 3) is a null
+            # measurement, never "no frame received".
             capture_ok = cap.returncode in (0, RC_CAPTURE_VIDE)
             if not capture_ok:
                 print(f"  !! capture en échec (code {cap.returncode}) : mesure à JETER — "
                       f"{(cap.stderr or cap.stdout)[-200:]}", flush=True)
             summary = summarize(name, log)
-            # Mesure inexploitable : flash raté, capture en échec, ou capture vide (< 2 lignes).
+            # Unusable: failed flash, failed capture, or near-empty capture (< 2 lines).
             mesure_nulle = (not flash_ok) or (not capture_ok) or (summary["lignes"] < 2)
             row = {
                 "round": r, "variante": name, "debut_utc": started.isoformat(timespec="seconds"),

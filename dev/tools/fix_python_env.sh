@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Répare le problème d'ensurepip : ESPHome doit créer un venv pour ESP-IDF, mais le
-# Python de Debian 13 livré dans ce conteneur est sans ensurepip (paquet python3-venv,
-# non installable sans sudo). On installe donc un Python autonome (python-build-standalone
-# via uv) qui embarque ensurepip, et on reconstruit le venv du projet dessus.
+# Fixes the ensurepip problem: ESPHome must create a venv for ESP-IDF, but the Debian 13 Python
+# in this container lacks ensurepip (python3-venv, not installable without sudo). Installs a
+# standalone Python (python-build-standalone via uv) with ensurepip, and rebuilds the project venv.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DEV="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,7 +13,7 @@ if [ ! -x .venv/bin/uv ]; then .venv/bin/pip install -q uv; fi
 
 echo "== 2. Python autonome =="
 UVP="$(.venv/bin/uv python dir)"
-# On cible explicitement le Python géré par uv (et non le python du venv courant).
+# Target the uv-managed Python explicitly (not the python of the current venv).
 SYS_PY="$(ls -d "$UVP"/cpython-3.13.*/bin/python3.13 2>/dev/null | head -1)"
 if [ -z "$SYS_PY" ]; then
   .venv/bin/uv python install 3.13

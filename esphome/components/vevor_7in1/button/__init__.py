@@ -22,6 +22,7 @@ VevorBouton = vevor_7in1_ns.class_(
 BOUTONS = {
     "dump_pulses": 0,
     "reapply_radio": 1,
+    "relearn_station_id": 2,
 }
 
 CONFIG_SCHEMA = button.button_schema(VevorBouton).extend(

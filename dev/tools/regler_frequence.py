@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
-"""Réécrit explicitement la fréquence du CC1101 depuis l'API, puis ramène les logs de la fenêtre.
+"""Explicitly rewrites the CC1101 frequency through the API, then returns the window logs.
 
-Pourquoi : dans l'état « puce présente et prête mais aucune trame décodée » (CHIP_RDYn bas,
-Chip ID 0x0014 lu du premier coup), le suspect restant est que la configuration radio ne soit pas
-appliquée correctement — registres de fréquence écrits de travers, puce en RX mais pas sur 868,35 MHz.
-Cette commande passe par un chemin INDÉPENDANT du démarrage : elle force une écriture fraîche de la
-fréquence (action `set_frequency` du composant), sans reflasher et sans redémarrer.
+Uses a startup-INDEPENDENT path: it forces a fresh frequency write (component action
+`set_frequency`) without reflashing or rebooting, to test whether the radio config is applied
+correctly (frequency registers written wrong, chip in RX but not on 868.35 MHz).
 
 Usage: tools/regler_frequence.py [--mhz 868.35] [--seconds 150]
 
-Code retour :
-    0  écriture prise (relue) et fenêtre mesurée ;
-    2  échec technique : entité absente, connexion, ou ÉCRITURE NON PRISE (relue ≠ demandée) ;
-    3  MESURE NULLE : aucun log reçu — rien n'a été mesuré.
+Return codes:
+    0  write accepted (read back) and window measured;
+    2  technical failure: missing entity, connection, or write NOT accepted (read back != requested);
+    3  NULL MEASUREMENT: no log received — nothing was measured.
 """
 from __future__ import annotations
 
@@ -34,7 +32,7 @@ async def run(host: str, port: int, key: str, mhz: float, seconds: float) -> int
     cli = APIClient(host, port, None, noise_psk=key)
     await cli.connect(login=True)
     entities, _ = await cli.list_entities_services()
-    # Entité ANCRÉE : ne pas confondre avec « Offset fréquence » (capteur).
+    # ANCHORED entity: do not confuse with "Offset fréquence" (a sensor).
     cible = None
     for e in entities:
         if FREQ_RE.search(getattr(e, "name", "") or ""):
@@ -91,7 +89,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
                     required="VEVOR_HOST" not in os.environ,
-                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
+                    help="board IP address. Fallback: VEVOR_HOST environment variable, or dev/tools/find_esp32.py to discover it")
     ap.add_argument("--port", type=int, default=6053)
     ap.add_argument("--yaml", default="esphome/vevor-7in1.yaml")
     ap.add_argument("--mhz", type=float, default=868.35)

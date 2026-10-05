@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Balaye la fréquence du CC1101 en direct via l'API native ESPHome et mesure le signal.
+"""Sweeps the CC1101 frequency live through the ESPHome native API and measures the signal.
 
-C'est l'outil d'autonomie principal : il n'y a PAS besoin de recompiler/reflasher pour
-chercher la station. On pilote l'entité `number` « Fréquence CC1101 » du firmware, et on
-lit le nombre de trames reçues (valides + rejetées) et le RSSI pendant chaque palier.
+Main autonomy tool: no need to rebuild/reflash to search for the station. It drives the
+firmware's `number` entity "Fréquence CC1101" and reads the received frame count (valid +
+rejected) and the RSSI at each step.
 
 Usage:
-    scan_freq.py --host <ip-de-la-carte> [--key CLE] [--start 867.8 --stop 868.6 --step 0.05]
+    scan_freq.py --host <board-ip> [--key KEY] [--start 867.8 --stop 868.6 --step 0.05]
                  [--dwell 25] [--out scan.json]
-    scan_freq.py --host <ip-de-la-carte> --list          # liste les entités exposées
-    scan_freq.py --host <ip-de-la-carte> --set 868.30    # règle juste la fréquence
+    scan_freq.py --host <board-ip> --list          # lists the exposed entities
+    scan_freq.py --host <board-ip> --set 868.30    # just sets the frequency
 
-Un palier doit durer au moins ~25 s : la station n'émet qu'une rafale toutes les 20 s.
+A step must last at least ~25 s: the station only emits one burst every 20 s.
 
-Code retour :
-    0  balayage mesuré ; un total de 0 trame est un RÉSULTAT (« aucune trame »), pas un échec ;
-    2  échec technique : connexion, exception, ou ÉCRITURE DE FRÉQUENCE NON PRISE (relue ≠ demandée) ;
-    3  MESURE NULLE : l'entité « Trames valides » n'existe pas / aucun état reçu — rien n'a été mesuré.
+Return codes:
+    0  sweep measured; a total of 0 frames is a RESULT ("no frame"), not a failure;
+    2  technical failure: connection, exception, or frequency write NOT accepted (read back != requested);
+    3  NULL MEASUREMENT: the "Trames valides" entity is missing / no state received — nothing was measured.
 """
 from __future__ import annotations
 
@@ -40,9 +40,9 @@ async def do_list(dev: Device) -> None:
 
 
 async def do_set(dev: Device, mhz: float) -> int:
-    """Règle la fréquence ET LA RELIT. Sans relecture, une commande perdue (mauvaise clé
-    d'entité) était annoncée comme réussie. L'entité est `optimistic: true` : si elle ne
-    relit pas la valeur demandée, la commande n'est pas arrivée."""
+    """Sets the frequency AND READS IT BACK. A read-back catches a lost command (wrong entity
+    key). The entity is `optimistic: true`: if it does not read back the requested value,
+    the command did not arrive."""
     dev.set_freq(mhz)
     await asyncio.sleep(1.5)
     got = dev.get("Fréquence CC1101")
@@ -60,9 +60,9 @@ async def do_set(dev: Device, mhz: float) -> int:
 
 async def scan(dev: Device, start: float, stop: float, step: float,
                dwell: float, settle: float) -> list[dict] | None:
-    """Renvoie les paliers mesurés, ou None si RIEN n'a pu être mesuré (entité absente)."""
-    # Sans l'entité « Trames valides », aucun compteur n'est lisible : mesurer serait un
-    # mensonge. On refuse de conclure (RC_MESURE_NULLE côté main).
+    """Returns the measured steps, or None if NOTHING could be measured (missing entity)."""
+    # Without the "Trames valides" entity no counter is readable: refuse to conclude
+    # (RC_MESURE_NULLE in main).
     if not dev.has(VALID_RE):
         print("# MESURE NULLE : entité « Trames valides » absente — aucun compteur à lire",
               file=sys.stderr)
@@ -116,9 +116,9 @@ def main() -> int:
     ap.add_argument("--start", type=float, default=867.8)
     ap.add_argument("--stop", type=float, default=868.6)
     ap.add_argument("--step", type=float, default=0.05)
-    ap.add_argument("--dwell", type=float, default=25.0, help="secondes par palier (>=25 recommandé)")
+    ap.add_argument("--dwell", type=float, default=25.0, help="seconds per step (>=25 recommended)")
     ap.add_argument("--settle", type=float, default=1.0)
-    ap.add_argument("--out", default=None, help="rapport JSON (relatif = racine du projet)")
+    ap.add_argument("--out", default=None, help="JSON report (relative = project root)")
     args = ap.parse_args()
 
     key = resolve_key(args.key)

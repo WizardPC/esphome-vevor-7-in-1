@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Balayage de fréquence sur la voie ASYNCHRONE, jugé sur les compteurs de la carte.
+"""Frequency sweep on the ASYNCHRONOUS path, judged by the board counters.
 
-Contrairement à scan_freq.py (écrit pour le mode packet et son RSSI), ce balayage-ci n'utilise
-que ce que la voie asynchrone publie réellement : les compteurs « Trames valides / Trames
-rejetées » et les battements de cœur du composant (« captures=…, trames=…, plus longue=… »), lus
-par l'API native. La cadence de captures et les durées d'impulsions ne sont PAS des critères de
-présence de signal (le bruit en produit autant) : seul le décodage d'une trame compte.
+Unlike scan_freq.py (written for packet mode and its RSSI), this sweep uses only what the
+asynchronous path actually publishes: the "Trames valides / Trames rejetées" counters and the
+component heartbeats ("captures=…, trames=…, plus longue=…"), read through the native API.
+Capture rate and pulse durations are NOT signal criteria (noise produces just as many): only
+decoding a frame counts.
 
-Usage :
+Usage:
  dev/tools/scan_async.py --freqs 868.15,868.20,868.25,868.30,868.35 --dwell 25 \
-        [--host <ip-de-la-carte>] [--out logs/scan_async.json]
+        [--host <board-ip>] [--out logs/scan_async.json]
 """
 from __future__ import annotations
 
@@ -31,9 +31,9 @@ async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
                     required="VEVOR_HOST" not in os.environ,
-                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
-    ap.add_argument("--freqs", required=True, help="liste séparée par des virgules, en MHz")
-    ap.add_argument("--dwell", type=float, default=25.0, help="secondes par palier")
+                    help="board IP address. Fallback: VEVOR_HOST environment variable, or dev/tools/find_esp32.py to discover it")
+    ap.add_argument("--freqs", required=True, help="comma-separated list, in MHz")
+    ap.add_argument("--dwell", type=float, default=25.0, help="seconds per step")
     ap.add_argument("--out", default="logs/scan_async.json")
     args = ap.parse_args()
 
@@ -61,7 +61,7 @@ async def main() -> int:
         try:
             return int(val)
         except (TypeError, ValueError):
-            return 0  # jamais publié (nan) = 0
+            return 0  # never published (nan) = 0
 
     results = []
     for freq in [float(f) for f in args.freqs.split(",")]:

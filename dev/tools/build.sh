@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# Compile le firmware. Usage: tools/build.sh [nom_yaml_sans_extension]
+# Compiles the firmware. Usage: tools/build.sh [yaml_name_without_extension]
 #
-# Le code retour est TOUJOURS celui d'ESPHome (jamais celui de tee/tail) et un marqueur
-# explicite est écrit dans build/last_status.txt : la boucle autonome ne peut donc pas
-# confondre un échec avec un succès quand la sortie passe par un pipe.
+# The return code is ALWAYS ESPHome's (never tee/tail's) and an explicit marker is written to
+# build/last_status.txt, so the autonomous loop cannot mistake a failure for a success when
+# the output goes through a pipe.
 set -uo pipefail
-DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/ : outils, tests, docs, journaux
-ROOT="$(cd "$DEV/.." && pwd)"            # racine du dépôt : esphome/ y vit, et rien d'autre
+DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/: tools, tests, docs, logs
+ROOT="$(cd "$DEV/.." && pwd)"            # repo root: esphome/ lives here, and nothing else
 YAML="${1:-vevor-7in1}"
 mkdir -p "$DEV/build" "$DEV/logs"
-# Verrou partagé avec flash.sh : la boucle autonome et une session interactive peuvent lancer
-# un build/flash en même temps sur le même dossier de build. Ça s'est produit le 30/09 et ça a
-# fait réécrire le YAML sous les pieds de l'autre exécution. Le verrou rend la collision
-# impossible : le second attend, puis abandonne proprement avec un statut explicite.
+# Lock shared with flash.sh: the autonomous loop and an interactive session can start a
+# build/flash at the same time on the same build dir. The lock makes the collision impossible:
+# the second waits, then gives up cleanly with an explicit status.
 exec 9>"$DEV/build/.build_flash.lock"
 flock -w 1500 9 || {
   printf 'BUILD ABANDONNE code=3 verrou occupe (un autre build/flash tourne)\n' | tee "$DEV/build/last_status.txt"
@@ -21,7 +20,7 @@ flock -w 1500 9 || {
 cd "$ROOT/esphome"
 echo "[build] $YAML"
 
-# Le YAML pointe par défaut sur le dépôt public (github://) : ici on compile l'arbre LOCAL.
+# The YAML defaults to the public repo (github://): here we compile the LOCAL tree.
 "$ROOT/.venv/bin/esphome" -s vevor_components components compile "$YAML.yaml" > "$DEV/build/last_compile.log" 2>&1
 CODE=$?
 tail -20 "$DEV/build/last_compile.log"

@@ -19,10 +19,9 @@ class CC1101Listener {
 class CC1101Component final : public Component,
                               public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARITY_LOW,
                                                     spi::CLOCK_PHASE_LEADING, spi::DATA_RATE_1MHZ> {
-  // BISSECT 02/10 (après-midi) : la cadence était abaissée à 200 kHz (contre les écritures perdues
-  // de la veille, depuis réglées par le pull-up de 10 kΩ sur CS). Mesure : avec le pilote d'origine
-  // à 1 MHz le flux reçu est PROPRE (rafales 166-182 impulsions, rythme 2:1) ; avec mon pilote à
-  // 200 kHz c'est un continuum de bruit. La cadence de 1 MHz est donc rétablie ici pour l'isoler.
+  // Measured: at 1 MHz the received flow is clean (bursts of 166-182 pulses, a 2:1 rhythm) while at
+  // 200 kHz the same driver outputs a continuum of noise. The 1 MHz rate is restored to isolate it
+  // (firmware-design-notes.md).
  public:
   CC1101Component();
 
@@ -100,11 +99,11 @@ class CC1101Component final : public Component,
  protected:
   uint16_t chip_id_{0};
   bool initialized_{false};
-  // MODIFICATION LOCALE : relectures non bloquantes de l'identité de la puce (voir cc1101.cpp).
+  // MODIFICATION LOCALE — non-blocking chip identity re-reads (see cc1101.cpp).
   uint8_t retry_budget_{0};
   uint32_t next_retry_ms_{0};
   void retry_radio_init_();
-  // Attache l'interruption GDO0 (réveille loop()) — voir le correctif du 03/10 dans setup().
+  // Attaches the GDO0 interrupt (wakes loop()) — see setup() in cc1101.cpp.
   void attacher_interruption_gdo0_();
 
   float output_power_requested_{10.0f};
@@ -129,7 +128,7 @@ class CC1101Component final : public Component,
   void write_(Register reg, uint8_t value);
   void write_(Register reg, const uint8_t *buffer, size_t length);
   void read_(Register reg);
-  uint8_t read_status_();  // MODIFICATION LOCALE : CHIP_RDYn (bit 7 du status byte)
+  uint8_t read_status_();  // MODIFICATION LOCALE — CHIP_RDYn (status byte bit 7)
   void read_(Register reg, uint8_t *buffer, size_t length);
 
   // State Management

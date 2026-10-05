@@ -1,28 +1,25 @@
 #!/usr/bin/env python3
-"""Décode hors de la carte les durées brutes ramenées par le bouton « Dump impulsions ».
+"""Decode off-board the raw durations returned by the "Dump impulsions" button.
 
-Pourquoi : quand la carte reçoit des impulsions (compteur de captures qui monte) mais ne publie
-aucune trame, il faut savoir si le flux BRUT contient une trame valide — donc si le défaut est dans
-l'assembleur du firmware, ou dans la réception elle-même.
+When the board receives pulses (capture counter rises) but publishes no frame, the question is
+whether the RAW stream holds a valid frame — i.e. whether the fault is in the firmware assembler
+or in reception itself.
 
-Ce script rejoue exactement la quantification du firmware (voir `timings_to_bits` dans
-`esphome/components/vevor_7in1/vevor_protocol.h`) :
+It replays the firmware quantization (`timings_to_bits`, in
+`esphome/components/vevor_7in1/vevor_protocol.h`):
 
-    niveau   = 1 si la durée est positive, 0 sinon      (la polarité GDO0 n'est pas présumée)
-    nb ticks = arrondi(durée / période)                  (au moins 1, au plus MAX_RUN_BITS)
-    chaque tick produit un bit de ce niveau
+    level   = 1 if the duration is positive, 0 otherwise   (GDO0 polarity is not assumed)
+    n ticks = round(duration / period)                      (at least 1, at most MAX_RUN_BITS)
+    each tick emits one bit of that level
 
-puis cherche, dans le flux de bits, une trame de 21 octets conforme : en-tête AA 00, somme de
-contrôle rtl_433 et compteur cohérent — en essayant les 4 périodes candidates, les deux polarités
-et les 8 décalages de bit.
+then looks for a conformant 21-byte frame (header AA 00, rtl_433 checksum, coherent counter)
+across the 4 candidate periods, both polarities and the 8 bit shifts.
 
-Usage :
+Usage:
  dev/tools/decoder_dump.py logs/dump_brut.log [--json logs/dump_decode.json]
 
-Code retour :
-    0  au moins une capture lue ; « 0 trame valide » est un RÉSULTAT négatif ;
-    2  échec technique (fichier illisible) ;
-    3  MESURE NULLE : aucune capture (aucune ligne « capture # »/« impulsions ») — rien n'a été mesuré.
+Return codes: 0 at least one capture read ("0 valid frame" is a negative result); 2 technical
+error (unreadable file); 3 empty measurement: no capture (no "capture #"/"impulsions" line).
 """
 
 from __future__ import annotations
@@ -37,7 +34,7 @@ from _common import (ANSI, RC_ERREUR, RC_MESURE_NULLE, RC_OK,  # noqa: E402
 
 import re
 
-PERIODS = (90, 88, 89, 87)          # mêmes candidats que le firmware
+PERIODS = (90, 88, 89, 87)          # same candidates as the firmware
 MAX_RUN_BITS = 64
 FRAME_BYTES = 21
 
@@ -46,7 +43,7 @@ CAPTURE_RE = re.compile(r"capture #(\d+) : (\d+) impulsions, de (-?\d+) us à (-
 
 
 def lit_dumps(chemin: pathlib.Path) -> list[list[int]]:
-    """Ramène la liste des captures, chacune étant la liste de ses durées signées (en µs)."""
+    """Return the list of captures, each a list of signed durations (µs)."""
     captures: list[list[int]] = []
     courant: list[int] = []
     total_attendu = None
@@ -87,22 +84,20 @@ def bits_depuis_durees(durees: list[int], periode: int, inverser: bool) -> str:
         ticks = (duree + demi) // periode
         ticks = max(1, ticks)
         if ticks > MAX_RUN_BITS:
-            continue                      # trou entre deux rafales, comme le firmware
+            continue                      # gap between bursts, like the firmware
         bits.append(("1" if (1 - niveau) else "0") * ticks if inverser else ("1" if niveau else "0") * ticks)
     return "".join(bits)
 
 
 def porte_de_plausibilite(b: bytes):
-    """Mêmes contrôles PHYSIQUES que le firmware (includes/vevor_protocol.h).
+    """Same PHYSICAL checks as the firmware (includes/vevor_protocol.h).
 
-    Renvoie None si la trame est plausible, sinon le nom du refus. Sans cette porte, cet outil
-    annonçait une trame « valide » pour des candidats que le firmware refuse : mesuré le 03/10,
-    une trame satisfaisant en-tête + checksum + compteur donnait une direction de 3841° et une
-    température de 3636 °C. Un tel candidat est un FAUX POSITIF, pas une réception — c'est
-    exactement le piège documenté dans vevor_protocol.h.
+    Return None if the frame is plausible, else the name of the refusal. Without this gate the
+    tool called a frame "valid" for candidates the firmware refuses: header + checksum + counter
+    could still give a direction of 3841 deg and a temperature of 3636 degC — a FALSE POSITIVE.
     """
     x = bytearray(b)
-    for i in (8, 9, 11, 12, 13, 14, 16, 17):   # décalage de 1 documenté sur ces octets
+    for i in (8, 9, 11, 12, 13, 14, 16, 17):   # documented -1 offset on these bytes
         x[i] = (x[i] - 1) & 0xFF
     if (((x[11] & 0x0F) << 8) | x[12]) > 359:
         return "direction"
@@ -115,10 +110,10 @@ def porte_de_plausibilite(b: bytes):
 
 
 def trame_dans_bits(bits: str):
-    """Cherche une trame conforme à tout décalage de bit.
+    """Search for a conformant frame at any bit shift.
 
-    Renvoie (octets, décalage, position, refus) : `refus` vaut None si la trame passe aussi la
-    porte de plausibilité, sinon la raison du refus — l'appelant ne doit PAS l'annoncer valide.
+    Return (bytes, shift, position, refusal): `refusal` is None if the frame also passes the
+    plausibility gate, else the refusal reason — the caller must NOT report it as valid.
     """
     for decalage in range(min(8, len(bits))):
         utilisable = (len(bits) - decalage) // 8 * 8
@@ -136,7 +131,7 @@ def trame_dans_bits(bits: str):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("dump", type=pathlib.Path)
-    ap.add_argument("--json", default=None, help="rapport JSON (relatif = racine du projet)")
+    ap.add_argument("--json", default=None, help="JSON report (relative = project root)")
     args = ap.parse_args()
 
     if not args.dump.exists():
@@ -182,7 +177,7 @@ def main() -> int:
             if trouve:
                 break
         if not trouve:
-            # Rien de valide : on montre ce que donnerait la meilleure période, pour juger de visu.
+            # Nothing valid: show the best period's bytes for visual judgement.
             for periode in PERIODS[:2]:
                 bits = bits_depuis_durees(durees, periode, False)
                 octets = bytes(int(bits[i:i + 8], 2) for i in range(0, len(bits) // 8 * 8, 8))[:12]

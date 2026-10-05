@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Vérifie SANS MATÉRIEL ce que le CC1101 recevra réellement comme registres.
+"""Verifies WITHOUT HARDWARE what registers the CC1101 will actually receive.
 
-Pourquoi : la spec radio (868,30 MHz / ±37 kHz / 11 494 bauds / 200 kHz) est une
-hypothèse. Le CC1101 n'accepte que des valeurs quantifiées (CHANBW_E/M, DEVIATION_E/M,
-DRATE_E/M) : ce script rejoue *exactement* les calculs du composant ESPHome
-(esphome/components/cc1101/cc1101.cpp : split_float + set_frequency/set_filter_bandwidth/
-set_fsk_deviation/set_symbol_rate) sur les substitutions du YAML, puis recalcule les
-grandeurs physiques obtenues avec les formules du datasheet utilisées par dump_config().
+The radio spec (868.30 MHz / ±37 kHz / 11 494 baud / 200 kHz) is a hypothesis. The CC1101 only
+accepts quantized values (CHANBW_E/M, DEVIATION_E/M, DRATE_E/M): this script replays *exactly*
+the ESPHome component math (esphome/components/cc1101/cc1101.cpp: split_float +
+set_frequency/set_filter_bandwidth/set_fsk_deviation/set_symbol_rate) on the YAML substitutions,
+then recomputes the physical quantities with the datasheet formulas used by dump_config().
 
-Écrit logs/radio_config_check.json. Code retour 0 si tout est dans la tolérance, 1 sinon.
+Writes logs/radio_config_check.json. Return code 0 if all within tolerance, 1 otherwise.
 """
 from __future__ import annotations
 
@@ -23,13 +22,13 @@ from _common import atomic_write_json  # noqa: E402
 
 XTAL = 26000000.0
 DEV = pathlib.Path(__file__).resolve().parent.parent   # dev/
-ROOT = DEV.parent                                      # racine du dépôt
+ROOT = DEV.parent                                      # repo root
 DEFAULT_YAML = ROOT / "esphome" / "vevor-7in1.yaml"
 OUT = DEV / "logs" / "radio_config_check.json"
 
 
 def split_float(value: float, mbits: int):
-    """Portage ligne à ligne de split_float() de cc1101.cpp (frexp + arrondi au bin)."""
+    """Line-by-line port of cc1101.cpp split_float() (frexp + rounding to the bin)."""
     m_tmp, e_tmp = math.frexp(value)
     if e_tmp <= mbits:
         return 0, 0
@@ -49,7 +48,7 @@ def read_subs(path: pathlib.Path) -> dict:
         if not m:
             raise SystemExit(f"substitution absente du YAML : {name}")
         subs[name] = float(m.group(1))
-    # autres réglages radio à contrôler
+    # other radio settings to check
     for key, default in (("num_preamble", "4"), ("packet_length", "21"),
                          ("sync_mode", "16/16"), ("crc_enable", "false"),
                          ("whitening", "false"), ("manchester", "false")):
@@ -69,13 +68,13 @@ def read_subs(path: pathlib.Path) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--yaml", default=str(DEFAULT_YAML))
-    ap.add_argument("--tol-hz", type=float, default=2000.0, help="tolérance fréquence")
+    ap.add_argument("--tol-hz", type=float, default=2000.0, help="frequency tolerance")
     args = ap.parse_args()
 
     y = read_subs(pathlib.Path(args.yaml))
     res: dict = {"yaml": {}, "registers": {}, "verdict": []}
 
-    # --- fréquence : set_frequency() ---
+    # --- frequency: set_frequency() ---
     f_hz = y["freq_mhz"] * 1e6
     word = int(f_hz * (1 << 16) / XTAL)
     FREQ2, FREQ1, FREQ0 = (word >> 16) & 0xFF, (word >> 8) & 0xFF, word & 0xFF
@@ -87,7 +86,7 @@ def main() -> int:
     res["freq_actual_hz"] = f_actual
     res["freq_err_hz"] = f_actual - f_hz
 
-    # --- bande passante : set_filter_bandwidth() -> CHANBW_E/M de MDMCFG4 ---
+    # --- bandwidth: set_filter_bandwidth() -> CHANBW_E/M of MDMCFG4 ---
     e, m = split_float(XTAL / (y["bw_khz"] * 1000.0 * 8), 2)
     CHANBW_E, CHANBW_M = e, m
     bw_actual = XTAL / (8.0 * (4 + CHANBW_M) * (1 << CHANBW_E))
@@ -97,7 +96,7 @@ def main() -> int:
     res["bw_actual_hz"] = bw_actual
     res["bw_err_hz"] = bw_actual - y["bw_khz"] * 1000.0
 
-    # --- déviation : set_fsk_deviation() -> DEVIATION_E/M de DEVIATN (0x15) ---
+    # --- deviation: set_fsk_deviation() -> DEVIATION_E/M of DEVIATN (0x15) ---
     e, m = split_float(y["deviation_khz"] * 1000.0 * (1 << 17) / XTAL, 3)
     DEVIATION_E, DEVIATION_M = e, m
     dev_actual = (8 + DEVIATION_M) * (1 << DEVIATION_E) * XTAL / (1 << 17)
@@ -109,7 +108,7 @@ def main() -> int:
     res["dev_actual_hz"] = dev_actual
     res["dev_err_hz"] = dev_actual - y["deviation_khz"] * 1000.0
 
-    # --- débit : set_symbol_rate() -> DRATE_E (MDMCFG4) / DRATE_M (MDMCFG3) ---
+    # --- rate: set_symbol_rate() -> DRATE_E (MDMCFG4) / DRATE_M (MDMCFG3) ---
     e, m = split_float(y["symbol_rate"] * (1 << 28) / XTAL, 8)
     DRATE_E, DRATE_M = e, m
     sr_actual = ((256.0 + DRATE_M) * (1 << DRATE_E) / (1 << 28)) * XTAL
@@ -122,10 +121,10 @@ def main() -> int:
     res["symbol_rate_actual"] = sr_actual
     res["symbol_rate_err"] = sr_actual - y["symbol_rate"]
 
-    # --- cohérence : la déviation tient-elle dans la bande passante ? ---
+    # --- coherence: does the deviation fit in the bandwidth? ---
     res["dev_plus_rate_over_bw2"] = (dev_actual + sr_actual / 2) / (bw_actual / 2)
 
-    # --- divers ---
+    # --- misc ---
     res["yaml"]["packet_length"] = y["packet_length"]
     res["yaml"]["sync_mode"] = y["sync_mode"]
     res["yaml"]["sync_word"] = f"{y['sync1']} {y['sync0']}"
@@ -156,7 +155,7 @@ def main() -> int:
           f"demandé {y['bw_khz']:.0f} kHz -> réel {bw_actual/1000:.1f} kHz")
     check("debit_vs_spec", abs(res["symbol_rate_err"]) <= 0.02 * y["symbol_rate"],
           f"demandé {y['symbol_rate']:.0f} -> réel {sr_actual:.0f} bauds")
-    # règle CC1101 : déviation + débit/2 doit tenir dans BW/2 (sinon repliement)
+    # CC1101 rule: deviation + rate/2 must fit in BW/2 (otherwise aliasing)
     check("dev_plus_demi_debit_dans_bw",
           res["dev_plus_rate_over_bw2"] < 1.0,
           f"(dev + débit/2) / (BW/2) = {res['dev_plus_rate_over_bw2']:.2f} "

@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""Sonde les compteurs du firmware par l'API, SANS dépendre du flux de logs.
+"""Probe the firmware counters over the API, WITHOUT depending on the log stream.
 
-Raison d'être : une capture de logs peut n'afficher aucune ligne `V7IN1 RAW` soit parce que
-le récepteur ne démodule rien, soit parce que la souscription de logs a décroché. Les
-compteurs « Trames valides » / « Trames rejetées » sont des entités d'état : elles avancent
-dès qu'un paquet est reçu, indépendamment du flux de logs. Comparer les deux lève le doute.
+A log capture can show no `V7IN1 RAW` line either because the receiver demodulates nothing or
+because the log subscription dropped. The "Trames valides" / "Trames rejetées" counters are state
+entities that advance on any packet, independent of the log stream; comparing the two resolves
+the doubt.
 
 Usage:
- dev/tools/count_probe.py --host <ip-de-la-carte> [--seconds 30] [--json logs/count_probe.json]
+ dev/tools/count_probe.py --host <board-ip> [--seconds 30] [--json logs/count_probe.json]
 
-Code retour :
-    0  mesure faite ; un delta de 0 paquet est le RÉSULTAT « aucune trame » ;
-    2  échec technique (connexion, exception) ;
-    3  MESURE NULLE : aucun état d'entité reçu — rien n'a été mesuré (0 reçu ≠ 0 paquet).
+Return codes: 0 measurement done (a delta of 0 packets is the result "no frame"); 2 technical
+error (connection, exception); 3 empty measurement: no entity state received
+(0 received != 0 packets).
 """
 from __future__ import annotations
 
@@ -30,9 +29,8 @@ from _common import (Device, RC_ERREUR, RC_MESURE_NULLE, RC_OK,  # noqa: E402
 
 async def run(host: str, port: int, key: str | None, seconds: float) -> tuple[int, dict]:
     async with Device(host, port, key) as dev:
-        # Piège : à la souscription, `subscribe_states` n'a pas encore livré l'état des entités.
-        # Lire les compteurs tout de suite renvoie 0 → le « delta » vaudrait le compteur absolu.
-        # On attend d'avoir reçu un état, sinon on refuse de conclure.
+        # subscribe_states has not delivered entity states yet: reading counters now returns 0 and
+        # the "delta" would equal the absolute counter. Wait for a state, else refuse to conclude.
         for _ in range(40):
             if dev.state:
                 break
@@ -46,8 +44,8 @@ async def run(host: str, port: int, key: str | None, seconds: float) -> tuple[in
         t1 = time.time()
         delta = (v1 - v0) + (r1 - r0)
 
-        # 0 entité reçue == RIEN n'a été mesuré. Ce n'est PAS « aucun paquet » : il faut le
-        # distinguer explicitement, sinon un « compteur figé » se lit à tort comme un silence radio.
+        # 0 entities received means NOTHING was measured, NOT "no packet": without this distinct
+        # verdict a "frozen counter" reads as radio silence by mistake.
         if n_states0 == 0 or len(dev.state) == 0:
             verdict = "MESURE NULLE (aucun état d'entité reçu — rien n'a été mesuré)"
             rc = RC_MESURE_NULLE
@@ -59,8 +57,8 @@ async def run(host: str, port: int, key: str | None, seconds: float) -> tuple[in
             rc = RC_OK
         return rc, {
             "fenetre_s": round(t1 - t0, 1),
-            # Nombre d'états d'entités reçus : 0 = l'appareil n'a rien livré, donc un
-            # « compteur figé » ne veut PAS dire « aucun paquet » — la mesure est nulle.
+            # Number of entity states received: 0 means the device delivered nothing, so a
+            # "frozen counter" does NOT mean "no packet" — the measurement is null.
             "entites_recues": {"t0": n_states0, "t1": len(dev.state)},
             "valides": {"t0": v0, "t1": v1},
             "rejetees": {"t0": r0, "t1": r1},
@@ -77,7 +75,7 @@ def main() -> int:
     ap.add_argument("--port", type=int, default=6053)
     ap.add_argument("--key", default=None)
     ap.add_argument("--seconds", type=float, default=30.0)
-    ap.add_argument("--json", default=None, help="rapport JSON (relatif = racine du projet)")
+    ap.add_argument("--json", default=None, help="JSON report (relative = project root)")
     a = ap.parse_args()
     try:
         key = resolve_key(a.key)

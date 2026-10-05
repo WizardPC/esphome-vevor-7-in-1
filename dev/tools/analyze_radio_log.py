@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Résume les lignes « RADIO … » (lecture SPI des registres du CC1101) d'une capture de logs.
+"""Summarize the "RADIO ..." lines (SPI read of CC1101 registers) of a log capture.
 
-Ces lignes sont produites par le composant vevor_7in1 (itération 9) : à chaque battement de cœur
-(5 s) il lit par SPI le RSSI, MARCSTATE, PKTSTATUS et FREQ2/1/0, sans rien écrire dans la puce.
-Ce script en tire la distribution (plancher de bruit, état de la puce, porteuse détectée) et
-recoupe avec les captures RMT et les trames décodées.
+The vevor_7in1 component emits one per 5 s heartbeat: it SPI-reads RSSI, MARCSTATE, PKTSTATUS and
+FREQ2/1/0 without writing to the chip. This script derives the noise floor, chip state and carrier
+detection, then cross-checks RMT captures and decoded frames. Board reference (packet mode): noise
+floor -106.2 dBm, max RSSI -95.5 dBm.
 
-Références sur cette même carte (mode packet, 30/09) : plancher −106,2 dBm, RSSI max −95,5 dBm.
-
-Usage : tools/analyze_radio_log.py logs/iter9_rssi_300s_20260930.log
+Usage: tools/analyze_radio_log.py logs/iter9_rssi_300s_20260930.log
 """
 
 from __future__ import annotations

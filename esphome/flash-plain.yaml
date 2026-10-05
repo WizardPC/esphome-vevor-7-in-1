@@ -1,19 +1,16 @@
-# Fichier d'appoint — UN SEUL usage : téléverser un binaire par OTA vers une carte dont l'OTA
-# n'exige aucune clé (cas d'une carte flashée avec un firmware tiers, comme le témoin).
-#
-# Pourquoi il existe : ESPHome définit le chiffrement OTA à partir du bloc `ota:` de la
-# configuration UTILISÉE pour le téléversement (esphome/components/esphome/ota/__init__.py :
-# `USE_OTA_ENCRYPTION` n'est défini que si `encryption:` est présent dans le `ota:`). Notre
-# `vevor-7in1.yaml` déclare `encryption: {}` (il hérite donc de la clé API) : utilisé pour
-# téléverser, il PROPOSE le chiffrement et la carte sans clé refuse la poignée de main.
-# Ce fichier décrit le même appareil SANS `encryption:` dans `ota:` → le téléversement part en
-# clair, comme l'attend la carte.
-#
-# On ne construit rien depuis ce fichier (il ne contient pas le composant radio) : on passe
-# `--file` avec le binaire déjà construit par vevor-7in1.yaml.
-#
-# Usage :
-#   .venv/bin/esphome upload esphome/flash-plain.yaml --device <ip-de-la-carte> \
+# Auxiliary file — ONE purpose only: OTA-upload a binary to a board whose OTA requires no key
+# (e.g. a board flashed with third-party firmware). It describes the same device WITHOUT
+# `encryption:` in `ota:`, so the upload goes in clear, as that board expects.
+
+# ESPHome sets OTA encryption from the `ota:` block of the config USED for the upload
+# (`USE_OTA_ENCRYPTION` is defined only if `ota:` has `encryption:`): `vevor-7in1.yaml` declares
+# `encryption: {}` and would propose it, which a keyless board refuses.
+
+# Nothing is built from this file (it has no radio component): pass `--file` with the binary
+# already built by vevor-7in1.yaml.
+
+# Usage:
+#   .venv/bin/esphome upload esphome/flash-plain.yaml --device <board-ip> \
 #       --file esphome/.esphome/build/vevor-7in1/build/firmware.ota.bin
 
 esphome:

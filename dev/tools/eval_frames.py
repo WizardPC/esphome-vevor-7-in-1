@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
-"""Évalue indépendamment les trames Vevor 7-en-1 trouvées dans un log ESPHome.
+"""Independently evaluate the Vevor 7-in-1 frames found in an ESPHome log.
 
-Le décodeur Python ici est une **seconde implémentation** de la spec
-(references/PROTOCOL.md, elle-même issue de rtl_433/src/devices/vevor_7in1.c).
-Il ne réutilise pas le code C++ du firmware : c'est ce qui rend la comparaison
-significative pour l'auto-évaluation.
+The Python decoder here is a SECOND implementation of the spec (references/PROTOCOL.md, itself
+from rtl_433/src/devices/vevor_7in1.c). It does not reuse the firmware's C++ code, which is what
+makes the comparison meaningful for self-assessment.
 
 Usage:
-    eval_frames.py logs/capture_20260101.log [--json rapport.json] [--ref-temp 12.5]
+    eval_frames.py logs/capture_20260101.log [--json report.json] [--ref-temp 12.5]
 
-Détecte les lignes de la forme `... RAW aa 00 f8 ...` (21 octets hex) et, si présente,
-la ligne `... OK {...}` produite par le firmware, pour comparaison Trame par trame.
+Detects lines `... RAW aa 00 f8 ...` (21 hex bytes) and, when present, the `... OK {...}` line the
+firmware produces, for frame-by-frame comparison.
 
-Le VERDICT n'est plus un simple comptage : `PASS` exige À LA FOIS assez de trames valides,
-des valeurs plausibles (plages physiques + cohérence lux/UV), une séquence de compteur TX
-cohérente, une cadence ~20 s et un ACCORD trame par trame avec les valeurs publiées par le
-firmware C++. Un rapport qui contient des constats ne peut plus conclure `PASS`.
+The verdict is no longer a simple count: PASS requires enough valid frames, plausible values
+(physical ranges + lux/UV consistency), a coherent TX counter sequence, a ~20 s cadence, and a
+frame-by-frame AGREEMENT with the C++ firmware. A report with findings can no longer PASS.
 
-Code retour : 0 si verdict PASS, 1 sinon.
+Return code: 0 if verdict PASS, 1 otherwise.
 """
 from __future__ import annotations
 
@@ -28,26 +26,24 @@ import sys
 from collections import defaultdict
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _common import OK_RE, RAW_RE, TS_RE, atomic_write_json  # noqa: E402  (motifs partagés)
+from _common import OK_RE, RAW_RE, TS_RE, atomic_write_json  # noqa: E402  (shared patterns)
 
-# Pas du compteur TX de la station : MESURÉ, environ +1,95 par seconde (+39 sur une rafale de
-# 20 s) — c'est un compteur interne qui avance avec le TEMPS, pas un compteur de rafales. Le pas
-# varie donc avec l'intervalle réel entre deux rafales (38 sur 19,5 s, 40 sur 20,5 s…) : une
-# comparaison « écart = 1 » ou « écart = 39 » strict est FAUSSE (elle signalait 59 ruptures de
-# séquence sur une fenêtre saine). On compare donc l'écart au temps écoulé.
+# Station TX counter steps: MEASURED at ~+1.95/s (+39 over a 20 s burst) — an internal counter
+# that advances with TIME, not with bursts, so the step varies with the real inter-burst interval.
+# Comparing it to elapsed time is correct where a strict "gap = 1" or "= 39" was FALSE.
 TX_TICKS_PER_S = 1.95
-TX_TOLERANCE = 5      # ticks : marge sur l'arrondi et la gigue d'horodatage
-TX_MAX_STEPS = 5      # au-delà, on ne suppose plus des rafales manquées mais une incohérence
+TX_TOLERANCE = 5      # ticks: margin for rounding and timestamp jitter
+TX_MAX_STEPS = 5      # beyond this, assume an inconsistency, not missed bursts
 
-# Cohérence lux/UV : l'index UV suit à peu près 1 point par 2 500 lx. On ne prétend pas à une
-# conversion exacte — on écarte l'ABSURDE, avec une marge volontairement large (facteur 20) :
-# lux nul avec un UV non nul, ou lux dépassant 20 × ce que l'UV annoncé laisse attendre.
+# Lux/UV consistency: the UV index follows about 1 point per 2 500 lx. This rejects the ABSURD,
+# with a deliberately wide factor-20 margin: zero lux with non-zero UV, or lux beyond 20x the
+# range the announced UV allows.
 LUX_PER_UV = 2500
 LUX_SLACK = 20
 
 
 def decode(b: list[int]) -> dict:
-    """Décode 21 octets bruts. Ne lève pas : renvoie aussi les drapeaux de validité."""
+    """Decode 21 raw bytes. Never raises: also returns validity flags."""
     out: dict = {"raw": " ".join(f"{x:02x}" for x in b)}
     out["checksum_ok"] = (sum(b[0:19]) & 0xFF) == b[19]
     out["counter_ok"] = b[20] == ((b[18] + 1) & 0xFF)
@@ -94,7 +90,7 @@ def plausibility(f: dict) -> list[str]:
         problems.append(f"lux négatif: {f['lux']}")
     if f["rain_mm"] < 0:
         problems.append("pluie négative")
-    # Cohérence lux / UV (le firmware de référence écarte les mêmes cas).
+    # Lux / UV consistency (the reference firmware rejects the same cases).
     if f["uv_index"] > 0 and f["lux"] == 0:
         problems.append(f"lux nul alors que l'UV vaut {f['uv_index']}")
     elif f["uv_index"] == 0 and f["lux"] > LUX_PER_UV * LUX_SLACK:
@@ -104,15 +100,15 @@ def plausibility(f: dict) -> list[str]:
     return problems
 
 
-# Champs comparés trame par trame entre le C++ du firmware et le décodeur Python.
+# Fields compared frame by frame between the firmware C++ and the Python decoder.
 COMPARE_FIELDS = ("id", "channel", "battery_low", "temp_c", "humidity", "wind_kmh", "gust_kmh",
                   "wind_dir_deg", "rain_mm", "uv_index", "lux", "tx_counter")
 
 
 def compare_with_firmware(ours: list[dict], theirs: list[dict]) -> list[str]:
-    """Compare, DANS L'ORDRE, les trames du décodeur Python et celles publiées par le firmware.
+    """Compare, IN ORDER, the Python decoder frames and those published by the firmware.
 
-    Les deux listes proviennent du même log : chaque `RAW` du firmware est suivi de son `OK`.
+    Both lists come from the same log: each firmware `RAW` is followed by its `OK`.
     """
     mismatches = []
     if len(ours) != len(theirs):
@@ -136,8 +132,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("logfile")
     ap.add_argument("--json", dest="json_out", default=None)
-    ap.add_argument("--ref-temp", type=float, default=None, help="température de référence (°C) pour recoupement")
-    ap.add_argument("--ref-hum", type=float, default=None, help="humidité de référence (%%)")
+    ap.add_argument("--ref-temp", type=float, default=None,
+                    help="reference temperature (degC) for cross-checking")
+    ap.add_argument("--ref-hum", type=float, default=None, help="reference humidity (%%)")
     ap.add_argument("--min-valid", type=int, default=10)
     args = ap.parse_args()
 
@@ -192,7 +189,7 @@ def main() -> int:
         for a, b in zip(fr, fr[1:]):
             dc = (b["tx_counter"] - a["tx_counter"]) & 0xFF
             if dc == 0:
-                duplicates += 1                      # même rafale livrée deux fois par le RMT
+                duplicates += 1                      # same burst delivered twice by the RMT
                 continue
             ts_a, ts_b = a.get("ts"), b.get("ts")
             if ts_a and ts_b:
@@ -202,16 +199,14 @@ def main() -> int:
                 dt = dt if dt >= 0 else dt + 86400
                 expected = dt * TX_TICKS_PER_S
                 if abs(dc - expected) <= TX_TOLERANCE:
-                    continue                          # avance conforme au temps écoulé
-                for k in range(2, TX_MAX_STEPS + 2):  # k-1 rafales manquées ?
+                    continue                          # advance consistent with elapsed time
+                for k in range(2, TX_MAX_STEPS + 2):  # k-1 missed bursts?
                     if abs(dc - k * expected) <= TX_TOLERANCE:
                         missed += k - 1
                         break
                 else:
-                    # dt très court avec un écart de compteur : signature d'une DOUBLE publication
-                    # (deux trames différentes publiées dans la même seconde, ce que la station ne
-                    # peut pas faire à 20 s de cadence) — c'est l'artefact de recollage abusif
-                    # mesuré le 01/10 sur la version précédente du firmware.
+                    # Very short dt with a counter gap: signature of a DOUBLE publication (the
+                    # station cannot emit two frames in the same second at 20 s cadence).
                     quoi = ("double publication dans la même seconde"
                             if dt <= 1 else f"pour {dt} s, soit {expected:.0f} attendus")
                     gaps.append(f"compteur TX {a['tx_counter']} → {b['tx_counter']} "
@@ -244,7 +239,7 @@ def main() -> int:
             report["findings"].append(f"ID {sid}: toutes les valeurs sont dans les plages physiques "
                                       "et la cohérence lux/UV est respectée")
 
-    # Cadence : au mieux, on compare les horodatages quand ils existent.
+    # Cadence: compare timestamps when they exist.
     cadence_ok = None
     stamps = [f["ts"] for f in valid if f.get("ts")]
     if len(stamps) >= 2:
@@ -255,8 +250,8 @@ def main() -> int:
         deltas = [d if d >= 0 else d + 86400 for d in deltas]
         near20 = sum(1 for d in deltas if 15 <= d <= 25)
         report["ts_deltas_s"] = deltas
-        # Les doublons de livraison RMT donnent des intervalles de 0 s : ils ne comptent pas
-        # comme des émissions distinctes, on les retire du dénominateur.
+        # RMT delivery duplicates give 0 s intervals: not distinct emissions, so removed from the
+        # denominator.
         significant = [d for d in deltas if d > 1]
         cadence_ok = bool(significant) and near20 >= max(1, int(0.6 * len(significant)))
         report["findings"].append(
@@ -279,7 +274,7 @@ def main() -> int:
                 f"recoupement humidité: station {f0['humidity']} % vs référence {args.ref_hum} % (écart {d:.1f})"
             )
 
-    # Comparaison TRAME PAR TRAME avec les valeurs publiées par le firmware C++.
+    # Frame-by-frame comparison with the values published by the firmware C++.
     mismatches: list[str] = []
     if firmware_frames and valid:
         mismatches = compare_with_firmware(valid, firmware_frames)
@@ -300,7 +295,7 @@ def main() -> int:
             "comparaison impossible")
         report["reasons_fail"].append("aucune trame RAW exploitable pour recouper le firmware")
 
-    # VERDICT : tout doit concorder, un constat de la liste « reasons_fail » suffit à refuser.
+    # VERDICT: everything must agree; one entry in reasons_fail is enough to refuse.
     if len(valid) < args.min_valid:
         report["reasons_fail"].append(f"moins de {args.min_valid} trames valides ({len(valid)})")
     if sequence_breaks:

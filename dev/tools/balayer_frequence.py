@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
-"""Balayage de fréquence du CC1101 : la puce est-elle décalée (quartz marginal) ou dans un état faux ?
+"""Frequency sweep of the CC1101: is the chip offset (marginal crystal) or in a wrong state?
 
-Pourquoi cet outil : dans l'état « puce présente, prête, configurée, mais aucune trame décodée », il
-faut départager deux causes qui se ressemblent :
-  - un DÉCALAGE DE FRÉQUENCE (quartz imprécis ou qui dérive) → une des valeurs balayées doit faire
-    revenir les trames, et le décalage gagnant est alors corrigeable en code ;
-  - un ÉTAT DE PUCE FAUX (configuration non appliquée) → aucune valeur ne donne de trame.
-Il programme tour à tour chaque fréquence (action `set_frequency`, donc écriture fraîche des
-registres FREQ2/1/0), VÉRIFIE que la carte a pris la valeur (relecture de l'entité), et compte,
-pour chacune, les trames publiées par le firmware pendant la fenêtre.
+In the state "chip present, ready, configured, but no frame decoded", two causes must be told
+apart: a FREQUENCY OFFSET (a swept value brings frames back, and the winning offset is fixable in
+code) or a WRONG CHIP STATE (no value yields a frame). Each frequency is set in turn
+(`set_frequency`, a fresh write of FREQ2/1/0), read back from the entity, and the frames the
+firmware publishes during the window are counted.
 
 Usage: tools/balayer_frequence.py [--mhz 868.35,868.30,868.40,868.25,868.45] [--seconds 60]
 
-Code retour :
-    0  mesure faite ; « aucune trame » est un RÉSULTAT négatif ;
-    2  échec technique (connexion, entité absente, écriture de fréquence non prise) ;
-    3  MESURE NULLE : aucun log reçu — rien n'a été mesuré.
+Return codes: 0 measurement done ("no frame" is a negative result); 2 technical error
+(connection, missing entity, frequency write not taken); 3 empty measurement (no log received).
 """
 from __future__ import annotations
 
@@ -42,7 +37,7 @@ async def run(host: str, port: int, key: str, frequences: list[float], seconds: 
     await cli.connect(login=True)
     entities, _ = await cli.list_entities_services()
 
-    # Entité ANCRÉE (FREQ_RE) : « Offset fréquence » (capteur) ne doit PAS matcher.
+    # Anchored entity (FREQ_RE): the "Offset fréquence" sensor must NOT match.
     cible = None
     for e in entities:
         if FREQ_RE.search(getattr(e, "name", "") or ""):
@@ -54,7 +49,7 @@ async def run(host: str, port: int, key: str, frequences: list[float], seconds: 
         return RC_ERREUR
     etats = {e.key: getattr(e, "state", None) for e in entities if hasattr(e, "state")}
 
-    # Le compteur est remis à zéro à chaque changement de fréquence : c'est le log qui fait foi.
+    # Counter resets on each frequency change: the log is authoritative.
     compteur = {"trames": 0, "logs": 0}
 
     def sur_log(message) -> None:
@@ -76,10 +71,9 @@ async def run(host: str, port: int, key: str, frequences: list[float], seconds: 
     for mhz in frequences:
         compteur["trames"] = 0
         print(f"{horodate()} fréquence {mhz} MHz — fenêtre {seconds:.0f} s", flush=True)
-        cli.number_command(cible.key, mhz)   # commande SYNCHRONE (pas de await)
+        cli.number_command(cible.key, mhz)   # synchronous command (no await)
         await asyncio.sleep(1.5)
-        # Contrôle de relecture : une commande perdue ne doit pas être comptée comme un palier
-        # valide (l'ancien code ne relisait jamais et pouvait annoncer un réglage fantôme).
+        # Read-back check: a lost command must not count as a valid step.
         got = etats.get(cible.key)
         try:
             pris = got is not None and abs(float(got) - mhz) <= 0.001
@@ -120,7 +114,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
                     required="VEVOR_HOST" not in os.environ,
-                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
+                    help="board IP address. Otherwise: VEVOR_HOST env var, or "
+                         "dev/tools/find_esp32.py to discover it")
     ap.add_argument("--port", type=int, default=6053)
     ap.add_argument("--yaml", default="esphome/vevor-7in1.yaml")
     ap.add_argument("--mhz", default="868.35,868.30,868.40,868.25,868.45")

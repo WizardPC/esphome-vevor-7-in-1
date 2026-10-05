@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# Tests hors matériel du décodeur Vevor 7-en-1.
+# Off-hardware tests of the Vevor 7-in-1 decoder.
 #
 #   tools/run_tests.sh
 #
-# Étapes : selfcheck de l'encodeur Python (doit reproduire la trame de rtl_433 octet pour octet)
-#          → génération des trames de test → compilation du test C++ → exécution.
-# Aucun accès à la carte n'est nécessaire : c'est ce qui permet à n'importe qui de vérifier le
-# décodeur, et à la boucle de ne pas casser une logique déjà validée.
+# Steps: Python encoder selfcheck (must reproduce the rtl_433 frame byte for byte)
+#        -> generate test frames -> compile the C++ test -> run.
+#
+# No board access needed, so anyone can verify the decoder and the loop cannot break
+# already-validated logic.
 set -uo pipefail
-DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/ : outils, tests, docs, journaux
-ROOT="$(cd "$DEV/.." && pwd)"            # racine du dépôt : esphome/ y vit, et rien d'autre
+DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/: tools, tests, docs, logs
+ROOT="$(cd "$DEV/.." && pwd)"            # repo root: esphome/ lives here, and nothing else
 DEV_PY="$ROOT/.venv-dev/bin/python"
 
 if [ ! -x "$DEV_PY" ]; then
@@ -43,9 +44,9 @@ echo "=== 4. exécution ==="
 "$DEV/build/test_decoder" || exit 4
 
 echo "=== 5. cohérence firmware / carte Home Assistant / relevé d'entités ==="
-# Cette vérification vivait hors de la suite : un renommage d'entité ou un déplacement de fichiers
-# pouvait la casser sans que rien ne le signale. Elle est désormais une étape, et son échec est un
-# échec de la suite. Elle exige PyYAML et jinja2, présents dans l'environnement ESPHome.
+# This check used to live outside the suite: an entity rename or a file move could break it
+# silently. It is now a step, and its failure fails the suite. It needs PyYAML and jinja2,
+# present in the ESPHome environment.
 if [ -x "$ROOT/.venv/bin/python" ]; then
   "$ROOT/.venv/bin/python" "$DEV/tools/check_ha_card.py" || exit 5
 else

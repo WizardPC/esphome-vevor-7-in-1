@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Résume un relevé du serveur web du témoin (logs/witness_probe_*.log).
+"""Summarizes a witness web server survey (logs/witness_probe_*.log).
 
-Sort : nombre de rafales, distribution des longueurs d'impulsions, trous internes, trames
-décodées et intervalles entre décodages. C'est la mesure de contrôle « le témoin entend-il la
-station, et dans quel état est le signal ? », utilisable quand la carte tourne le firmware témoin.
+Outputs: burst count, pulse-length distribution, internal gaps, decoded frames and intervals
+between decodes. It is the control measurement "does the witness hear the station, and in what
+state is the signal?", usable when the board runs the witness firmware.
 
-Usage : tools/witness_summary.py logs/witness_probe_20260930_2032.log
+Usage: tools/witness_summary.py logs/witness_probe_20260930_2032.log
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def main() -> int:
     print(f"trames décodées    : {len(decodes)}")
     for d in decodes[-8:]:
         print(f"  {d}")
-    # Les lignes de log du témoin portent une longueur d'impulsion interne au format (x[0]=..).
+    # Witness log lines carry an internal pulse length in the form (x[0]=..).
     gaps = [m.group(1) for m in re.finditer(r"x\[0\]=(-?\d+)", text)]
     if gaps:
         g = sorted(int(v) for v in gaps)

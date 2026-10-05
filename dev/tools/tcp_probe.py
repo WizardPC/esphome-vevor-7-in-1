@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Sonde de stabilité du lien TCP vers l'ESP32 (API native ESPHome, port 6053).
+"""TCP link stability probe towards the ESP32 (ESPHome native API, port 6053).
 
-Usage: tools/tcp_probe.py [--host <ip-de-la-carte>] [--port 6053] [--seconds 60] [--interval 3]
+Usage: tools/tcp_probe.py [--host <board-ip>] [--port 6053] [--seconds 60] [--interval 3]
 
-Sert à trancher entre « la carte est absente » et « le lien Wi-Fi est instable » (le
-`output_power` bas ou un DHCP qui bouge provoquent des EHOSTUNREACH intermittents).
-Affiche une ligne par tentative et un bilan (réussites/échecs, série la plus longue).
+Distinguishes "the board is absent" from "the Wi-Fi link is unstable" (low `output_power` or a
+moving DHCP cause intermittent EHOSTUNREACH). Prints one line per attempt and a summary
+(successes/failures, longest streak).
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
                     required="VEVOR_HOST" not in os.environ,
-                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
+                    help="board IP address. Fallback: VEVOR_HOST environment variable, or dev/tools/find_esp32.py to discover it")
     ap.add_argument("--port", type=int, default=6053)
     ap.add_argument("--seconds", type=float, default=60.0)
     ap.add_argument("--interval", type=float, default=3.0)

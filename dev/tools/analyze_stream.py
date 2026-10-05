@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""Analyse d'une capture « flux démodulé » (mode diagnostic CC1101 sans syncword).
+"""Analyse a "demodulated stream" capture (CC1101 diagnostic mode without syncword).
 
-Contexte : avec `sync_mode: None` + `carrier_sense_above_threshold: true`, le CC1101
-démarre un paquet sur simple seuil d'énergie et remplit la FIFO de 21 octets. Le firmware
-journalise alors le flux de bits démodulé *sans exiger de syncword*. Ce script cherche
-donc dans ce flux, **indépendamment de la polarité et de l'alignement bit à bit** :
+With `sync_mode: None` + `carrier_sense_above_threshold: true`, the CC1101 starts a packet on an
+energy threshold and fills the 21-byte FIFO, logging the demodulated bit stream without requiring
+a syncword. This script searches it independently of polarity and bit alignment for:
 
-  1. le motif de préambule `AA AA CA CA 54` (et son complément binaire `55 55 35 35 AB`) ;
-  2. toute trame candidate `b[0]==0xAA && b[1]==0x00` dont le checksum rtl_433 est valide
-     (`sum(b[0..18]) & 0xFF == b[19]` et `b[20] == (b[18]+1) & 0xFF`).
+  1. the preamble `AA AA CA CA 54` (and its bitwise complement `55 55 35 35 AB`);
+  2. any candidate frame `b[0]==0xAA && b[1]==0x00` with a valid rtl_433 checksum
+     (`sum(b[0..18]) & 0xFF == b[19]` and `b[20] == (b[18]+1) & 0xFF`).
 
-Usage :
+Usage:
  dev/tools/analyze_stream.py logs/stream1.log [--json logs/stream_analysis.json]
 """
 
@@ -34,7 +33,7 @@ def ts_seconds(ts: str) -> int:
 
 
 def parse(path: pathlib.Path):
-    """Retourne (paquets, horodatages) : liste d'octets et liste de secondes."""
+    """Return (packets, timestamps): list of byte payloads and list of seconds."""
     packets, stamps = [], []
     last_ts = None
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -51,8 +50,10 @@ def parse(path: pathlib.Path):
 
 
 def shifted_views(bits: str, width: int = 8):
-    """8 vues du flux, décalées de 0 à 7 bits (l'alignement octet du moteur paquet est
-    arbitraire en mode « carrier sense »)."""
+    """8 views of the stream, shifted by 0..7 bits.
+
+    Byte alignment is arbitrary under carrier sense.
+    """
     views = []
     for s in range(width):
         usable = (len(bits) - s) // 8 * 8
@@ -69,7 +70,7 @@ def find_all(hay: bytes, needle: bytes):
 
 
 def decode_frame(b: bytes):
-    """Contrôles de la spec rtl_433 sur 21 octets."""
+    """rtl_433 spec checks on 21 bytes."""
     if len(b) != 21:
         return None
     csum = sum(b[0:19]) & 0xFF
@@ -106,7 +107,7 @@ def main() -> int:
     bits = "".join(f"{b:08b}" for b in b"".join(p for p, _ in packets))
     views = shifted_views(bits)
 
-    # 1. recherche du préambule (et de son complément binaire) à tous les alignements
+    # 1. search the preamble (and its complement) at every alignment
     pre_hits, inv_hits = [], []
     for s, view in enumerate(views):
         for pos in find_all(view, PREAMBLE):
@@ -114,7 +115,7 @@ def main() -> int:
         for pos in find_all(view, bytes(x ^ 0xFF for x in PREAMBLE)):
             inv_hits.append({"shift": s, "offset": pos})
 
-    # 2. recherche des trames candidates AA 00 à tous les alignements + checksum
+    # 2. search candidate AA 00 frames at every alignment + checksum
     candidates, valid = [], []
     for s, view in enumerate(views):
         for pos in find_all(view, bytes([0xAA, 0x00])):

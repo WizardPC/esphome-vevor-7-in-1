@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
-"""Lit et affiche l'état de TOUTES les entités de la carte, par l'API native.
+"""Reads and prints the state of ALL board entities through the native API.
 
-Pourquoi : `scan_freq.py --list` ne donne que le nom des entités, pas leur valeur. Or plusieurs
-diagnostics dépendent de valeurs d'état et non du flux de logs — en premier lieu « Fréquence
-CC1101 » (l'entité `number` a `restore_value: true` : sa valeur restaurée au boot entre en
-concurrence avec la fréquence du YAML) et les compteurs « Captures RMT », « Trames valides »,
-« Doublons ignorés ».
+Unlike `scan_freq.py --list`, which only gives entity names, several diagnostics need state
+values: "Fréquence CC1101" (the `number` entity has `restore_value: true`, so its restored boot
+value competes with the YAML frequency) and the "Captures RMT" / "Trames valides" / "Doublons
+ignorés" counters.
 
-Piège déjà rencontré ailleurs : `subscribe_states` ne livre pas les états immédiatement. On
-attend donc d'avoir reçu quelque chose, sinon on lirait des vides et on conclurait à tort.
+Note: `subscribe_states` does not deliver states immediately, so wait for the first one
+before concluding.
 
 Usage:
- dev/tools/read_state.py [--host <ip-de-la-carte>] [--json logs/state.json]
+ dev/tools/read_state.py [--host <board-ip>] [--json logs/state.json]
 
-Code retour :
-    0  au moins un état d'entité reçu ;
-    2  échec technique (connexion, exception) ;
-    3  MESURE NULLE : aucun état reçu — rien n'a été mesuré.
+Return codes:
+    0  at least one entity state received;
+    2  technical failure (connection, exception);
+    3  NULL MEASUREMENT: no state received — nothing was measured.
 """
 from __future__ import annotations
 
@@ -41,7 +40,7 @@ async def run(host: str, port: int, key: str | None) -> dict:
         values = {}
         for name, k in sorted(dev.keys.items()):
             v = dev.state.get(k)
-            if isinstance(v, float) and v != v:  # NaN = jamais publié
+            if isinstance(v, float) and v != v:  # NaN = never published
                 v = None
             values[name] = v
         return {"entites": len(dev.keys), "recues": len(dev.state), "valeurs": values}
@@ -51,10 +50,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
                     required="VEVOR_HOST" not in os.environ,
-                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
+                    help="board IP address. Fallback: VEVOR_HOST environment variable, or dev/tools/find_esp32.py to discover it")
     ap.add_argument("--port", type=int, default=6053)
     ap.add_argument("--key", default=None)
-    ap.add_argument("--json", default=None, help="fichier JSON (relatif = racine du projet)")
+    ap.add_argument("--json", default=None, help="JSON file (relative = project root)")
     a = ap.parse_args()
     try:
         rep = asyncio.run(run(a.host, a.port, resolve_key(a.key)))

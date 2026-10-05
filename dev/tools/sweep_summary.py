@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Résume un ensemble de captures de balayage (un fichier par palier de fréquence).
+"""Summarizes a set of sweep captures (one file per frequency step).
 
-Chaque palier est jugé sur ce qui compte vraiment : le nombre de trames RÉELLEMENT extraites
-du flux démodulé (ligne « trame extraite » du composant), et non le nombre de captures RMT —
-le bruit en fabrique aussi. Les compteurs « captures » et « plus longue » sont reportés pour
-diagnostiquer l'instrument, pas pour conclure sur le signal.
+Each step is judged on what matters: the number of frames REALLY extracted from the demodulated
+stream (component "trame extraite" line), not the RMT capture count — noise produces those too.
+The "captures" and "plus longue" counters are reported to diagnose the instrument, not to
+conclude about the signal.
 
 Usage:
  dev/tools/sweep_summary.py "logs/sweep1_frozen/*.log" --out logs/sweep1_summary.json

@@ -1,28 +1,26 @@
 #!/usr/bin/env python3
-"""Résumé compact d'une fenêtre de capture : trames, cadence, trous, cohérence, VERDICT.
+"""Compact summary of a capture window: frames, cadence, gaps, coherence, VERDICT.
 
-Complément de `eval_frames.py` (qui valide trame par trame) : ce résumé répond aux questions
-d'une fenêtre longue — la station a-t-elle émis en continu, à quelle cadence, quels trous, les
-valeurs sont-elles restées cohérentes, y a-t-il eu des rejets.
+Complement of `eval_frames.py` (which validates frame by frame): this answers window-level
+questions — did the station emit continuously, at what cadence, what gaps, were values
+coherent, were there rejects.
 
-UN RÉSUMÉ NE DOIT JAMAIS CONTREDIRE SON RAPPORT. D'où deux changements de fond :
-  * `--rapport <rapport.json>` (sortie d'`eval_frames.py`) REPREND le `verdict` et les
-    `reasons_fail` du rapport indépendant : le résumé porte le MÊME verdict, et quand le
-    rapport dit FAIL, le résumé cite les mêmes motifs et sort en code 1 ;
-  * le champ « rejets » du firmware est renommé `rejets_firmware` (et
-    `raisons_rejet_firmware`) : c'est un comptage des lignes `V7IN1 REJ` DU FIRMWARE, ce
-    n'est PAS le verdict du décodeur indépendant. Les deux mesurent des choses différentes.
-En complément, le résumé ajoute `wind_dir_deg` (plage des directions) et `valeurs_hors_plage`,
-deux anomalies structurellement invisibles dans l'ancien format.
+A SUMMARY MUST NEVER CONTRADICT ITS REPORT:
+  * `--rapport <rapport.json>` (output of `eval_frames.py`) reuses its `verdict` and
+    `reasons_fail`: the summary carries the SAME verdict, and on FAIL cites the same reasons
+    and exits with code 1;
+  * the firmware "rejets" field is renamed `rejets_firmware` (and `raisons_rejet_firmware`):
+    it counts the firmware `V7IN1 REJ` LINES, NOT the independent decoder verdict.
+It also adds `wind_dir_deg` (direction range) and `valeurs_hors_plage`.
 
-Usage :
+Usage:
  dev/tools/summarize_window.py logs/capture.log [--rapport evidence/rapport.json]
                                  [--json evidence/resume.json] [--txt evidence/resume.txt]
 
-Code retour :
-    0  résumé écrit, verdict PASS (ou « aucune trame » sans rapport : résultat négatif) ;
-    1  verdict FAIL (le rapport — ou les contrôles internes — dit FAIL) ;
-    3  MESURE NULLE : fichier de log absent ou vide — rien n'a été mesuré.
+Return codes:
+    0  summary written, verdict PASS (or "no frame" without a report: negative result);
+    1  verdict FAIL (the report — or the internal checks — says FAIL);
+    3  NULL MEASUREMENT: log file missing or empty — nothing was measured.
 """
 from __future__ import annotations
 
@@ -39,24 +37,24 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from _common import (ANSI, ROOT, RC_MESURE_NULLE, RC_OK, TS_RE,  # noqa: E402
                      atomic_write_json, atomic_write_text)
 
-# Motifs spécifiques au FLUX V7IN1 (ancrés en fin de ligne après nettoyage ANSI).
+# Patterns specific to the V7IN1 STREAM (anchored at end of line after ANSI stripping).
 OK = re.compile(r"V7IN1 OK (\{.*\})$")
 RAW = re.compile(r"V7IN1 RAW ([0-9a-f ]+)$")
 REJ = re.compile(r"V7IN1 REJ ([^$]*)$")
 
-# Vocabulaire IDENTIQUE à eval_frames.py (les deux doivent motiver pareil).
+# Vocabulary IDENTICAL to eval_frames.py (both must justify the same way).
 MOTIF_PLUIE = "pluie décroissante"
 MOTIF_IMPLAUSIBLE = "valeurs implausibles (ou incohérence lux/UV)"
 
 
 def plausibility_of(frame: dict) -> list[str]:
-    """Réutilise la porte de plausibilité d'`eval_frames.py` (import tardif : évite toute
-    dépendance circulaire) sur une trame publiée par le firmware."""
+    """Reuses eval_frames.py's plausibility gate (late import: avoids any circular
+    dependency) on a firmware-published frame."""
     try:
         from eval_frames import plausibility
         return plausibility(frame)
     except Exception:
-        # Repli minimal : ne jamais laisser une exception masquer une anomalie évidente.
+        # Minimal fallback: never let an exception hide an obvious anomaly.
         probs = []
         d = frame.get("wind_dir_deg")
         if isinstance(d, (int, float)) and not 0 <= d <= 359:
@@ -75,9 +73,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("logfile")
     ap.add_argument("--rapport", default=None,
-                    help="rapport eval_frames.py apparié : son verdict et ses motifs sont repris")
-    ap.add_argument("--json", default=None, help="résumé JSON (relatif = racine du projet)")
-    ap.add_argument("--txt", default=None, help="résumé texte lisible (relatif = racine du projet)")
+                    help="paired eval_frames.py report: its verdict and reasons are reused")
+    ap.add_argument("--json", default=None, help="JSON summary (relative = project root)")
+    ap.add_argument("--txt", default=None, help="human-readable text summary (relative = project root)")
     args = ap.parse_args()
 
     path = pathlib.Path(args.logfile)
@@ -116,7 +114,7 @@ def main() -> int:
         print(text)
         out_lines.append(text)
 
-    # --- Rapport apparié (source du verdict) --------------------------------
+    # --- Paired report (verdict source) --------------------------------------
     rapport = None
     if args.rapport:
         rp = pathlib.Path(args.rapport)
@@ -155,17 +153,17 @@ def main() -> int:
         print("# AUCUNE TRAME : mesure faite, résultat négatif (code 0)", file=sys.stderr)
         return RC_OK
 
-    times = sorted({f["_t"] for f in frames})           # émissions distinctes (dédoublonnées)
+    times = sorted({f["_t"] for f in frames})           # distinct emissions (deduplicated)
     span = times[-1] - times[0]
     deltas = [b - a for a, b in zip(times, times[1:]) if b - a > 1]
     gaps = [d for d in deltas if d > 30]
-    buckets = Counter(t // 600 for t in times)          # par tranche de 10 min
+    buckets = Counter(t // 600 for t in times)          # per 10-minute bucket
 
     def span_of(key):
         vals = [f[key] for f in frames if isinstance(f.get(key), (int, float))]
         return (min(vals), max(vals)) if vals else None
 
-    # Anomalies propres au résumé (indépendantes du rapport) — vocabulaire d'eval_frames.
+    # Summary-only anomalies (independent of the report) — eval_frames vocabulary.
     rain = [f.get("rain_mm") for f in frames if isinstance(f.get("rain_mm"), (int, float))]
     pluie_decroissante = any(y < x for x, y in zip(rain, rain[1:]))
     hors: set[str] = set()
@@ -179,7 +177,7 @@ def main() -> int:
     if hors:
         propres_fail.append(MOTIF_IMPLAUSIBLE)
 
-    # Verdict : le rapport apparié prime ; sinon les anomalies internes décident.
+    # Verdict: the paired report wins; otherwise internal anomalies decide.
     if rapport is not None:
         verdict = rapport.get("verdict", "FAIL")
         motifs = list(rapport.get("reasons_fail") or [])
@@ -199,8 +197,8 @@ def main() -> int:
         "cadence_min_s": min(deltas) if deltas else None,
         "cadence_max_s": max(deltas) if deltas else None,
         "trous_sup_30s": sorted(gaps, reverse=True)[:10],
-        # Renommé : comptage des rejets DU FIRMWARE. Ce n'est PAS le verdict du décodeur
-        # indépendant (reasons_fail d'eval_frames) — ne pas confondre les deux mesures.
+        # Renamed: counts FIRMWARE rejects. Not the independent decoder verdict
+        # (eval_frames reasons_fail) — do not confuse the two measurements.
         "rejets_firmware": len(rejects),
         "raisons_rejet_firmware": Counter(r["raison"] for r in rejects).most_common(5),
         "ids": sorted({f.get("id") for f in frames}),
@@ -222,7 +220,7 @@ def main() -> int:
         res["rapport"] = args.rapport
         res["rapport_logfile"] = rapport.get("logfile")
         res["rapport_verdict"] = rapport.get("verdict")
-        # Un rapport d'une AUTRE fenêtre ne doit pas valider/condamner celle-ci.
+        # A report from ANOTHER window must not validate/condemn this one.
         rl = rapport.get("logfile")
         if rl and pathlib.Path(str(rl)).name != path.name:
             print(f"# AVERTISSEMENT : le rapport porte sur {rl!r}, pas sur {path.name!r} — "
@@ -256,7 +254,7 @@ def main() -> int:
         atomic_write_text(args.txt, "\n".join(out_lines) + "\n")
 
     if verdict == "FAIL":
-        # Garde-fou : jamais de résumé rassurant quand le rapport dit FAIL.
+        # Safety: never a reassuring summary when the report says FAIL.
         print(f"# VERDICT : FAIL — {len(motifs)} motif(s) : " + "; ".join(motifs), file=sys.stderr)
         print("# Ce résumé NE PEUT PAS afficher « 0 rejet » sans qualification : "
               "`rejets_firmware` compte les lignes V7IN1 REJ du firmware, PAS le verdict "

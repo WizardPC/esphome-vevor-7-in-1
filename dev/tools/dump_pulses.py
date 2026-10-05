@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Appuie sur le bouton « Dump impulsions » de la carte et ramène les durées brutes.
+"""Press the board's "Dump impulsions" button and return the raw durations.
 
-Pourquoi un bouton : l'API native ne livre pas l'historique des logs, et les captures des
-premières secondes sont déjà passées quand l'API devient joignable. Le composant garde donc une
-demande en attente (`request_raw_dump()`) et journalise, pour la PROCHAINE capture, ses 64
-premières durées en clair — seule façon d'analyser le flux réel depuis l'extérieur.
+The native API does not replay log history, and the first seconds' captures are already past by
+the time the API is reachable. The component keeps a pending request (`request_raw_dump()`) and
+logs, for the NEXT capture, its first 64 durations — the only way to analyse the real stream from
+outside.
 
-Usage :
- dev/tools/dump_pulses.py [--host <ip-de-la-carte>] [--seconds 45] [--out logs/dump_pulses.log]
+Usage:
+ dev/tools/dump_pulses.py [--host <board-ip>] [--seconds 45] [--out logs/dump_pulses.log]
 """
 from __future__ import annotations
 
@@ -28,7 +28,8 @@ async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
                     required="VEVOR_HOST" not in os.environ,
-                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
+                   help="board IP address. Otherwise: VEVOR_HOST env var, or "
+                        "dev/tools/find_esp32.py to discover it")
     ap.add_argument("--seconds", type=float, default=45.0)
     ap.add_argument("--out", default="logs/dump_pulses.log")
     args = ap.parse_args()

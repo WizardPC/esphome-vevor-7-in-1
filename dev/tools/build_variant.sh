@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# Construit un binaire de comparaison depuis les sources ACTUELLES du dépôt.
+# Builds a comparison binary from the repo's CURRENT sources.
 #
-#   tools/build_variant.sh prod      -> notre pilote (esphome/components/cc1101)
-#   tools/build_variant.sh origine   -> pilote d'origine ESPHome, YAML identique
+#   tools/build_variant.sh prod      -> our driver (esphome/components/cc1101)
+#   tools/build_variant.sh origine   -> original ESPHome driver, identical YAML
 #
-# Pourquoi un script : le binaire figé dans build/variants/ doit correspondre aux sources
-# du moment, sinon l'A/B compare autre chose que ce qu'on croit. La seule différence entre
-# les deux binaires est le CONTENU du pilote : le YAML, le composant de décodage, le
-# garde-fou et les réglages radio sont identiques.
+# Only the driver CONTENT differs between the two binaries: the YAML, decode component,
+# guard and radio settings are identical, so the frozen binary in build/variants/ must
+# match the sources of the moment or the A/B compares something else.
 #
-# Usage : tools/build_variant.sh <prod|origine> [sortie.ota.bin]
+# Usage: tools/build_variant.sh <prod|origine> [output.ota.bin]
 set -euo pipefail
 
 RACINE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,7 +38,7 @@ if [ "$VARIANTE" = origine ]; then
   [ -d "$OFFICIEL" ] || { echo "pilote officiel introuvable : $OFFICIEL" >&2; exit 2; }
   rm -rf "$SAUVEGARDE"
   cp -r "$PILOTE" "$SAUVEGARDE"
-  # Copie du pilote officiel SANS le dossier __pycache__ (sinon l'ancien bytecode traîne).
+  # Copies the official driver WITHOUT __pycache__ (otherwise stale bytecode lingers).
   rm -rf "$PILOTE"
   mkdir -p "$PILOTE"
   cp -r "$OFFICIEL"/. "$PILOTE"/

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Relève l'état et les logs du firmware TÉMOIN (projet de référence) par son serveur web.
+"""Reads the state and logs of the WITNESS firmware (reference project) through its web server.
 
-Le firmware témoin expose un serveur web NON authentifié sur le port 80 avec deux flux :
-  - /        : page d'état (HTML)
-  - /events  : flux SSE de l'état (uptime + toutes les entités) ET, en clair, les lignes de log
-               de l'appareil — dont « Salve RF recue : N impulsions » et les trames décodées.
+The witness firmware exposes an unauthenticated web server on port 80 with two streams:
+  - /        : state page (HTML)
+  - /events  : SSE state stream (uptime + all entities) AND, in clear, the device log lines
+               — including "Salve RF recue : N impulsions" and the decoded frames.
 
-Pourquoi cet outil : c'est la seule façon de savoir, SANS toucher à la carte, si le firmware
-témoin décode la station à cet instant et à cet endroit. Il sert de mesure de contrôle quand la
-carte tourne le témoin (l'API native, elle, est chiffrée avec une autre clé : inaccessible).
+It is the only way to know, WITHOUT touching the board, whether the witness firmware decodes the
+station at this instant and place. It is a control measurement when the board runs the witness
+(the native API is encrypted with another key: unreachable).
 
-Usage :
-dev/tools/witness_probe.py --host <ip-de-la-carte> --seconds 90
-Sortie : logs/witness_probe_<AAAAMMJJ_HHMM>.log + résumé sur la sortie standard.
+Usage:
+dev/tools/witness_probe.py --host <board-ip> --seconds 90
+Output: logs/witness_probe_<YYYYMMDD_HHMM>.log + a summary on standard output.
 """
 
 from __future__ import annotations
@@ -29,14 +29,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import atomic_write_text  # noqa: E402
 
 DEV = Path(__file__).resolve().parent.parent   # dev/
-ROOT = DEV.parent                               # racine du dépôt
+ROOT = DEV.parent                               # repo root
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default=os.environ.get("VEVOR_HOST"),
                     required="VEVOR_HOST" not in os.environ,
-                    help="adresse IP de la carte. À défaut : variable d'environnement VEVOR_HOST, ou dev/tools/find_esp32.py pour la découvrir")
+                    help="board IP address. Fallback: VEVOR_HOST environment variable, or dev/tools/find_esp32.py to discover it")
     ap.add_argument("--seconds", type=float, default=90.0)
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
@@ -54,7 +54,7 @@ def main() -> int:
         f"# /events, {args.seconds:.0f} s, {dt.datetime.now(dt.timezone.utc):%Y-%m-%dT%H:%M:%SZ}",
     ]
 
-    # Page d'état : elle porte le titre, l'uptime et la liste des entités.
+    # State page: carries the title, uptime and entity list.
     try:
         with urllib.request.urlopen(base + "/", timeout=10) as resp:
             page = resp.read().decode("utf-8", "replace")
@@ -64,10 +64,10 @@ def main() -> int:
             found = __import__("re").search(pat, page, __import__("re").IGNORECASE)
             if found:
                 lines.append(f"# {pat} -> {found.group(1)}")
-    except Exception as exc:  # noqa: BLE001 - on journalise l'échec, il est un résultat
+    except Exception as exc:  # noqa: BLE001 - a failure is logged, it is a result
         lines.append(f"# / -> ÉCHEC {type(exc).__name__}: {exc}")
 
-    # Flux SSE : état des entités + lignes de log.
+    # SSE stream: entity state + log lines.
     lines.append("### /events (SSE) ###")
     decoded: list[str] = []
     bursts: list[str] = []

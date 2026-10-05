@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-"""Quantifie l'activité de la sortie GDO0 du CC1101 par palier de fréquence.
+"""Quantify CC1101 GDO0 activity per frequency step.
 
-Pourquoi : en mode série asynchrone, ce qui reste mesurable est le débit de transitions de
-GDO0 (le slicer sort du bruit démodulé). Avant de conclure « aucun signal », il faut savoir si
-cette activité dépend de la fréquence : si elle est identique à 867,000 MHz (hors bande, aucun
-émetteur attendu), à 868,050 (brouilleur identifié le 30/09) et à 868,300 (fréquence nominale),
-alors l'activité observée est du bruit interne à la puce et ne peut PAS servir de détecteur.
+In async serial mode the only measurable thing is the GDO0 transition rate (the slicer outputs
+demodulated noise). Before concluding "no signal", check whether this activity depends on
+frequency: if it is identical at 867.000 MHz (out of band), 868.050 (jammer) and 868.300
+(nominal), the activity is internal chip noise and cannot serve as a detector.
 
 Usage:
  dev/tools/gdo0_rate_vs_freq.py logs/gdo0_freq_*.log [--out logs/gdo0_rate_vs_freq.json]
 
-Chaque fichier doit contenir des lignes « sonde GDO0 : N transition(s) en U us » et des lignes
-« captures=N (+d), trames=T, dernières impulsions=P, plus longue=L ».
+Each file needs "sonde GDO0 : N transition(s) en U us" and "captures=N (+d), ..." lines.
 """
 from __future__ import annotations
 
@@ -32,7 +30,7 @@ FREQ_RE = re.compile(r"gdo0_freq_([0-9.]+)\.log$")
 def analyse(path: pathlib.Path) -> dict:
     txt = path.read_text(encoding="utf-8", errors="replace")
     trans = [(int(n), int(u)) for n, u in TRANS_RE.findall(txt)]
-    rates = [n * 1e6 / u for n, u in trans if u]  # transitions par seconde
+    rates = [n * 1e6 / u for n, u in trans if u]  # transitions per second
     caps = CAP_RE.findall(txt)
     m = FREQ_RE.search(path.name)
     return {
