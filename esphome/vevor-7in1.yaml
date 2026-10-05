@@ -117,7 +117,6 @@ vevor_7in1:
   id: vevor_rx
   receiver_id: rf_receiver
   radio_id: radio          # le garde-fou du composant ré-arme la radio lui-même (cc1101.reset)
-  bit_period: 90us         # 90, 88, 89 and 87 µs are all tried on each capture
   # Identité de la station : en décimal, comme le capteur « Station ID » (33995 = 0x84cb).
   # 0 = apprendre la première station vue ; toute autre valeur ÉPINGLE cette station et fait ignorer
   # les autres ID — c'est ce qui tient dehors la station d'un voisin sur le même protocole.

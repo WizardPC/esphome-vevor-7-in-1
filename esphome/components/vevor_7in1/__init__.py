@@ -10,6 +10,11 @@ from esphome.const import CONF_ID
 # (`on_frame` trigger). Protocol logic (header, checksum, counter, value ranges) lives in
 # `includes/vevor_protocol.h`, pure C++ testable without hardware (`tools/run_tests.sh`).
 #
+# NO BIT-PERIOD SETTING, on purpose. The bit period is MEASURED on every burst
+# (estimer_periode_x10) and several nearby values are tried on each capture: the station's crystal
+# and the demodulator decide it, not the configuration. A `bit_period:` knob used to be declared
+# here and was read by nobody — removed rather than left as a lie that looks like a setting.
+#
 # NO SPI ACCESS. A second SPI device on the CC1101 bus makes the chip mute: 0 captures and 0 frames
 # with it, 5 frames/60 s without it. Removed, not disabled; the chip must stay the only device on
 # its bus (see dev/docs/firmware-design-notes.md §4).
@@ -19,7 +24,6 @@ DEPENDENCIES = ["remote_receiver", "cc1101"]
 
 CONF_RECEIVER_ID = "receiver_id"
 CONF_RADIO_ID = "radio_id"
-CONF_BIT_PERIOD = "bit_period"
 CONF_ON_FRAME = "on_frame"
 # Station identity pin. 0 (default) = learn the first station seen; any other value pins that
 # station and drops every other ID (a neighbour's station on the same protocol). Decimal, like the
@@ -43,10 +47,6 @@ CONFIG_SCHEMA = (
             cv.Required(CONF_RECEIVER_ID): cv.use_id(
                 remote_receiver.RemoteReceiverComponent
             ),
-            # Nominal bit period: 90 µs (published protocol value, and the witness build that
-            # decodes) — the component tries several nearby periods on every capture anyway, so
-            # this parameter is only a starting point for the logs.
-            cv.Optional(CONF_BIT_PERIOD, default="90us"): cv.positive_time_period_microseconds,
             # La radio, pour que le garde-fou puisse la ré-armer (cc1101.reset) : la politique est
             # dans le composant, le YAML ne fait que désigner la radio.
             cv.Optional(CONF_RADIO_ID): cv.use_id(cc1101.CC1101Component),
@@ -64,7 +64,6 @@ async def to_code(config):
 
     receiver = await cg.get_variable(config[CONF_RECEIVER_ID])
     cg.add(var.set_receiver(receiver))
-    cg.add(var.set_bit_period(int(config[CONF_BIT_PERIOD].total_microseconds)))
 
     if CONF_RADIO_ID in config:
         radio = await cg.get_variable(config[CONF_RADIO_ID])

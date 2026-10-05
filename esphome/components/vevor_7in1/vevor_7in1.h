@@ -62,7 +62,6 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // The radio, so the watchdog can re-arm it (a full reset, see design notes §8). Declared here,
   // never driven from the YAML: the policy is code.
   void set_radio(cc1101::CC1101Component *r) { this->radio_ = r; }
-  void set_bit_period(uint32_t us) { this->bit_period_us_ = us; }
 
   // Reception watchdog settings, changeable from Home Assistant (the `number` entities of the
   // number/ sub-platform). The component owns them; the YAML only names and bounds them.
@@ -174,7 +173,9 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
 
   remote_receiver::RemoteReceiverComponent *receiver_{nullptr};
   Trigger<std::vector<uint8_t>> frame_trigger_;
-  uint32_t bit_period_us_{90};
+  // No bit-period setting here on purpose: the period is MEASURED on every burst
+  // (estimer_periode_x10 in vevor_protocol.h), so a configured constant would be a knob nothing
+  // reads — and the value actually used is already logged for every frame.
   uint32_t frames_{0};
   uint32_t captures_{0};
   uint32_t rejected_{0};
