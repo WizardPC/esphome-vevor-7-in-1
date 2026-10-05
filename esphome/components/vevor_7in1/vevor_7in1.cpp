@@ -325,21 +325,55 @@ void Vevor7in1::reapprendre_station_id() {
 }
 
 void Vevor7in1::surveiller_radio_() {
-  // FAST criterion, first: a chip that has gone deaf delivers a handful of pulses where a burst has
-  // 176. Waiting for a whole silent slot (60 s) costs three emissions that can NEVER be recovered —
-  // the station transmits every 20 s whatever the receiver does. Two consecutive silent captures
-  // (~40 s, the RMT cuts a burst in two) are enough. Placed BEFORE the early return below: a frame
-  // that decoded means a healthy capture happened, which already zeroed captures_creuses_.
+  // --- Re-arm policy, measured 05/10/2026 (dev/state/CAMPAGNE_20261005.md) --------------------
+  // A re-arm is a COMPLETE, register-verified re-initialisation whose ANALOG outcome (VCO/PLL
+  // calibration) is a coin flip: over five presses, three cured the chip, one left it deaf for two
+  // minutes and one degraded a partially working chip — with every key register read back
+  // conforming, so the registers are not the problem. Two consequences, both implemented here:
+  //   (1) only a chip that delivers NOTHING deserves a re-arm (a chip still producing 70-182 pulses
+  //       per fragment can be broken by one, never helped);
+  //   (2) after a re-arm, CHECK IT TOOK: only a capture carrying a full burst proves it, otherwise
+  //       try again — bounded, since a dead chip loses nothing by it.
+  const bool capture_saine = this->last_pulse_count_ >= this->seuil_impulsions_;
+
+  if (this->essais_rearmement_ > 0) {
+    if (capture_saine) {
+      ESP_LOGI(TAG, "ré-armement VÉRIFIÉ après %u essai(s) : capture saine (%u impulsions)",
+               (unsigned) this->essais_rearmement_, (unsigned) this->last_pulse_count_);
+      this->essais_rearmement_ = 0;
+      this->creneaux_depuis_rearmement_ = 0;
+    } else if (++this->creneaux_depuis_rearmement_ >= 2) {
+      this->creneaux_depuis_rearmement_ = 0;
+      if (this->essais_rearmement_ < 3) {
+        this->essais_rearmement_++;
+        this->rearmements_surdite_++;
+        ESP_LOGW(TAG, "ré-armement sans effet (captures creuses) : essai %u sur 3",
+                 (unsigned) this->essais_rearmement_);
+        if (this->radio_ != nullptr) {
+          this->radio_->reset();
+        }
+      } else {
+        ESP_LOGW(TAG, "ré-armement : 3 essais sans capture saine, on rend la main au critère lent");
+        this->essais_rearmement_ = 0;
+      }
+    }
+    return;   // one outstanding attempt at a time: no doubling with the slow criterion
+  }
+
   if (this->captures_creuses_ >= 2) {
     this->captures_creuses_ = 0;
+    this->essais_rearmement_ = 1;
+    this->creneaux_depuis_rearmement_ = 0;
     this->rearmements_surdite_++;
-    ESP_LOGW(TAG, "captures creuses (%u impulsions < seuil %u) : ré-armement radio immédiat n°%u",
+    ESP_LOGW(TAG, "captures creuses (%u impulsions < seuil %u) : ré-armement radio n°%u",
              (unsigned) this->last_pulse_count_, (unsigned) this->seuil_impulsions_,
              (unsigned) this->rearmements_surdite_);
     if (this->radio_ != nullptr) {
       this->radio_->reset();
     }
+    return;
   }
+
   // The criterion is the DECODED frame, never a capture: a capture can be pure noise. It is
   // deliberately NOT the published frame: a frame dropped by the station filter still proves the
   // RECEPTION works, and a wrong pin must never send the watchdog hunting a radio fault.
@@ -376,6 +410,16 @@ void Vevor7in1::surveiller_radio_() {
 
   const uint32_t pas = this->creneaux_avant_rearmement_ > 0 ? this->creneaux_avant_rearmement_ : 1u;
   if (this->creneaux_muets_ >= pas && (this->creneaux_muets_ % pas) == 0u) {
+    // GATED (05/10/2026): no decoded frame for a whole slot while the chip still delivers 70-182
+    // pulses is the DECODER's problem (duty asymmetry against the period estimate), not the radio's.
+    // Re-arming there re-initialises a working chip and can cost two minutes of reception, measured.
+    // When the chip is deaf, the fast criterion above has already taken the case.
+    if (capture_saine) {
+      ESP_LOGD(TAG, "aucune trame depuis %u s mais la puce délivre (%u impulsions) : pas de "
+                    "ré-armement (problème de décodage, pas de radio)",
+               (unsigned) muettes_s, (unsigned) this->last_pulse_count_);
+      return;
+    }
     this->rearmements_++;
     ESP_LOGW(TAG, "aucune trame depuis %u s — ré-armement radio %u (un tous les %u créneaux)",
              (unsigned) muettes_s, (unsigned) this->rearmements_, (unsigned) pas);

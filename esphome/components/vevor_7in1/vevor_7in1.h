@@ -199,6 +199,13 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   uint32_t captures_creuses_{0};
   uint32_t seuil_impulsions_{40};
   uint32_t rearmements_surdite_{0};
+  // A re-arm is a coin flip on the chip's ANALOG state (VCO/PLL calibration): measured 05/10/2026,
+  // five presses gave three cures, one two-minute deafness and one persistent degradation — with
+  // every register read back conforming. So every re-arm is VERIFIED: `essais_rearmement_` counts
+  // the outstanding attempt (0 = none), and it is cleared only by a capture carrying a full burst.
+  // Bounded at three tries, then the slow criterion and the restart take over.
+  uint8_t essais_rearmement_{0};
+  uint32_t creneaux_depuis_rearmement_{0};
   // Tracking for the heartbeat (see loop()).
   uint32_t last_report_ms_{0};
   uint32_t reported_captures_{0};
