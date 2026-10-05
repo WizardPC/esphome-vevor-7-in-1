@@ -12,15 +12,17 @@
 # dev/docs/ha-entities.txt.
 # Autre nom d'appareil chez vous ? Remplacez le préfixe d'un coup :
 #     sed -i 's/jardin_vevor_7_in_1_weather_station/vevor_7in1/g' ha-card.yaml
-# Une seule entité échappe au préfixe : Illuminance, dont HA a gardé l'entity_id du nœud
-# ESPHome précédent (`sensor.esp32_weather_illuminance`). Mesure, pas coquille — voir
-# dev/docs/ha-entities.txt. Si l'ancienne entrée d'appareil est nettoyée dans HA, cet
-# entity_id peut disparaître : il faudra alors lui remettre le préfixe.
+# Aucune exception depuis le 05/10/2026 — Illuminance est elle aussi revenue sous le préfixe
+# d'appareil : l'ancienne entrée de nœud ESPHome a été nettoyée dans HA et
+# `sensor.esp32_weather_illuminance` n'existe plus (absent de /api/states le 05/10/2026).
+# La carte pointait encore dessus : l'encart de luminosité et le bandeau lisaient 0 lx en
+# silence. L'entity_id est `sensor.jardin_vevor_7_in_1_weather_station_illuminance` —
+# relevé, pas déduit (dev/docs/ha-entities.txt).
 #
 # Correspondance avec l'ancienne carte :
 #   sensor.esp32_weather_outside_temperature  → sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature
 #   sensor.esp32_weather_outside_humidity     → sensor.jardin_vevor_7_in_1_weather_station_outdoor_humidity
-#   sensor.esp32_weather_illuminance          → inchangé : `sensor.esp32_weather_illuminance` (lx, jusqu'à 327 670) — voir ci-dessus
+#   sensor.esp32_weather_illuminance          → sensor.jardin_vevor_7_in_1_weather_station_illuminance (lx, jusqu'à 327 670) — voir ci-dessus
 #   sensor.esp32_weather_uv_index             → sensor.jardin_vevor_7_in_1_weather_station_uv_index     (0…16, sans unité)
 #   sensor.esp32_weather_wind_speed           → sensor.jardin_vevor_7_in_1_weather_station_wind_speed
 #   sensor.esp32_weather_wind_gust            → sensor.jardin_vevor_7_in_1_weather_station_wind_gust
@@ -38,6 +40,41 @@
 #      de seuils fixes. La branche nocturne basée sur l'humidité est supprimée :
 #      l'humidité ne mesure pas la couverture nuageuse, donc la nuit la carte
 #      répond « Nuit » plutôt qu'un état plausible et faux.
+#
+# Troisième section, ajoutée le 05/10/2026 — « Réception ». Elle n'invente rien, elle ne lit
+# que des compteurs que le firmware publie déjà.
+#   1) Fraîcheur de la dernière trame. Référence retenue, `TX counter` — son `last_changed`
+#      est déplacé à CHAQUE trame décodée (publié dans le gestionnaire de trame du YAML).
+#      Mesuré le 05/10/2026 sur la carte en service, déplacement toutes les 20 s, en phase
+#      avec `Last raw frame`. Trois autres entités bougent aussi, mais moins bien —
+#      `Valid frames`, `RMT captures` et `Duplicates ignored` sont republiés par un
+#      `interval: 10s`, donc leur `last_changed` est quantifié à 10 s (retard mesuré de 1 à
+#      10 s selon la phase) et l'âge affiché peut lire jusqu'à ~30 s alors que la trame vient
+#      d'arriver. `Last verdict` est figé (toujours « ok ») et `Rain total` ne bouge qu'à la
+#      pluie — aucun des deux ne dit la fraîcheur. Seuils de couleur, 35 s (cadence de 20 s
+#      plus une tolérance de gigue), 60 s (le garde-fou ré-arme la radio après 3 créneaux
+#      muets) et 180 s (il redémarre la carte). Ces deux dernières valeurs sont les réglages
+#      compilés par défaut, modifiables dans HA (« Watchdog ... ») — si vous les changez,
+#      reportez-les ici.
+#   2) Taux de trames valides, `Valid frames` contre `Rejected frames`, cumulés depuis le
+#      démarrage de la carte. C'est le rapport que le README documente (« Rejected frames —
+#      the real noise counter »). Attention à ce qu'il compte — des CANDIDATS portant un mot
+#      de synchronisation qui ont échoué au décodage, pas les émissions de la station, une
+#      seule rafale pouvant en fournir plusieurs. Les doublons sont affichés à part et
+#      exclus du taux, c'est la même rafale livrée deux fois par le RMT, ni un succès ni un
+#      échec.
+# Limites assumées, écrites ici parce qu'elles ne se voient pas à l'écran.
+#   a) Les deux compteurs sont en RAM et repartent de 0 à chaque redémarrage de la carte
+#      (garde-fou, flashage, coupure), donc le taux est TOUJOURS « depuis le démarrage ».
+#      Mesuré sur les 24 h complètes des 04-05/10/2026, 24,8 % (2 111 valides / 6 394
+#      rejetés), compteurs remis à zéro 17 fois. Les seuils de couleur de la carte (30 % et
+#      15 %) sont choisis d'après ce relevé — ce n'est pas une cible du projet, c'est une
+#      ligne à ajuster chez vous.
+#   b) Une trame d'une AUTRE station est écartée par le filtre d'ID sans entrer dans ces deux
+#      compteurs (seul le journal de la carte la nomme) — elle n'apparaît dans aucun
+#      pourcentage.
+#   c) « Quelle part des trames émises ai-je reçue ? » demande une fenêtre de temps, donc un
+#      helper — voir l'option F en fin de fichier.
 # =============================================================================
 
 type: vertical-stack
@@ -65,7 +102,7 @@ cards:
     secondary: >-
       {% set t = states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature') | float(none) %}
       {% set rafale = states('sensor.jardin_vevor_7_in_1_weather_station_wind_gust') | float(0) %}
-      {% set lux = states('sensor.esp32_weather_illuminance') | float(0) %}
+      {% set lux = states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(0) %}
       {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
       {% set pluie_mm = states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') | float(none) %}
       {% set compteur = states.sensor.jardin_vevor_7_in_1_weather_station_rain_total %}
@@ -91,7 +128,7 @@ cards:
     icon: >-
       {% set t = states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature') | float(none) %}
       {% set rafale = states('sensor.jardin_vevor_7_in_1_weather_station_wind_gust') | float(0) %}
-      {% set lux = states('sensor.esp32_weather_illuminance') | float(0) %}
+      {% set lux = states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(0) %}
       {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
       {% set pluie_mm = states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') | float(none) %}
       {% set compteur = states.sensor.jardin_vevor_7_in_1_weather_station_rain_total %}
@@ -111,7 +148,7 @@ cards:
     icon_color: >-
       {% set t = states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature') | float(none) %}
       {% set rafale = states('sensor.jardin_vevor_7_in_1_weather_station_wind_gust') | float(0) %}
-      {% set lux = states('sensor.esp32_weather_illuminance') | float(0) %}
+      {% set lux = states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(0) %}
       {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
       {% set pluie_mm = states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') | float(none) %}
       {% set compteur = states.sensor.jardin_vevor_7_in_1_weather_station_rain_total %}
@@ -149,14 +186,14 @@ cards:
         entity: sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature
       - type: custom:mushroom-template-card
         primary: >-
-          {{ (states('sensor.esp32_weather_illuminance') | float(0) / 1000) | round(2) }} klx
+          {{ (states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(0) / 1000) | round(2) }} klx
         secondary: >-
           Indice UV : {{ states('sensor.jardin_vevor_7_in_1_weather_station_uv_index') | float(0) | round(0) | int }} (0…16)
         icon: mdi:white-balance-sunny
         icon_color: >-
           {% set uv = states('sensor.jardin_vevor_7_in_1_weather_station_uv_index') | float(0) %}
           {% if uv <= 2 %}green{% elif uv <= 5 %}yellow{% elif uv <= 7 %}orange{% else %}red{% endif %}
-        entity: sensor.esp32_weather_illuminance
+        entity: sensor.jardin_vevor_7_in_1_weather_station_illuminance
 
   # --- 24 h de température et d'humidité ---------------------------------------
   # points_per_hour: la station émet une trame toutes les 20 s (180/h) ; 6 points/h
@@ -298,6 +335,96 @@ cards:
       state: true
       labels: true
 
+  # --- Réception : fraîcheur de la dernière trame et taux de trames valides ---------
+  # Ce que ces deux cartes calculent, pourquoi la fraîcheur se lit sur « TX counter », ce
+  # que les pourcentages comptent exactement et leurs limites : en-tête de ce fichier,
+  # section « Réception ». Aucun helper n'est nécessaire — que des compteurs du firmware.
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      # 1) Dernière trame : âge du `last_changed` de « TX counter ». Il est publié dans le
+      #    gestionnaire de trame (donc déplacé à chaque trame), contrairement aux compteurs
+      #    republiés par l'intervalle de 10 s.
+      #    Seuils : 35 s = normale (20 s de cadence + tolérance de gigue), 60 s = le
+      #    garde-fou ré-arme la radio, 180 s = il redémarre la carte. Les deux derniers sont
+      #    les réglages par défaut du firmware, modifiables dans HA (« Watchdog ... »).
+      - type: custom:mushroom-template-card
+        entity: sensor.jardin_vevor_7_in_1_weather_station_tx_counter
+        primary: >-
+          {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
+          {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
+          {% if age is none %}inconnu
+          {% elif age < 60 %}il y a {{ age | round(0) | int }} s
+          {% elif age < 3600 %}il y a {{ (age / 60) | round(0) | int }} min
+          {% else %}il y a {{ (age / 3600) | round(1) }} h
+          {% endif %}
+        secondary: >-
+          {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
+          {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
+          {% if age is none %}Carte injoignable, ou entité absente
+          {% elif age <= 35 %}Réception normale — 1 trame toutes les 20 s
+          {% elif age <= 60 %}Une trame manquée
+          {% elif age <= 180 %}Silence radio — ré-armement demandé à 60 s
+          {% else %}Silence radio — la carte redémarre à 180 s
+          {% endif %}
+        icon: >-
+          {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
+          {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
+          {% if age is none %}mdi:help-circle-outline
+          {% elif age <= 35 %}mdi:clock-check-outline
+          {% elif age <= 180 %}mdi:clock-alert-outline
+          {% else %}mdi:clock-remove-outline
+          {% endif %}
+        icon_color: >-
+          {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
+          {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
+          {% if age is none %}grey
+          {% elif age <= 35 %}green
+          {% elif age <= 60 %}amber
+          {% elif age <= 180 %}orange
+          {% else %}red
+          {% endif %}
+      # 2) Taux de trames valides : « Valid frames » contre « Rejected frames », depuis le
+      #    démarrage de la carte (les deux compteurs repartent de 0 à chaque redémarrage).
+      #    Sous 20 trames, un pourcentage ne veut rien dire : la carte l'écrit.
+      #    Seuils de couleur 30 % et 15 %, choisis d'après le relevé de 24 h des
+      #    04-05/10/2026 (24,8 % — voir l'en-tête) : à ajuster sur cette seule ligne.
+      - type: custom:mushroom-template-card
+        entity: sensor.jardin_vevor_7_in_1_weather_station_valid_frames
+        primary: >-
+          {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
+          {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
+          {% set total = (ok + ko) if ok is not none and ko is not none else 0 %}
+          {% if total < 20 %}en attente{% else %}{{ (ok / total * 100) | round(1) }} %{% endif %}
+        secondary: >-
+          {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
+          {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
+          {% set dup = states('sensor.jardin_vevor_7_in_1_weather_station_duplicates_ignored') | float(none) %}
+          {% set total = (ok + ko) if ok is not none and ko is not none else 0 %}
+          {% if ok is none or ko is none %}Compteurs indisponibles
+          {% elif total < 20 %}Moins de 20 trames depuis le démarrage — le taux n'a pas encore de sens
+          {% else %}OK {{ ok | int }} · KO {{ ko | int }} ({{ (ko / total * 100) | round(1) }} %) · doublons {{ (dup | int) if dup is not none else '?' }} — depuis le démarrage de la carte
+          {% endif %}
+        icon: >-
+          {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
+          {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
+          {% set total = (ok + ko) if ok is not none and ko is not none else 0 %}
+          {% if total < 20 %}mdi:help-circle-outline
+          {% elif (ok / total * 100) >= 30 %}mdi:check-circle-outline
+          {% elif (ok / total * 100) >= 15 %}mdi:alert-circle-outline
+          {% else %}mdi:close-circle-outline
+          {% endif %}
+        icon_color: >-
+          {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
+          {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
+          {% set total = (ok + ko) if ok is not none and ko is not none else 0 %}
+          {% if total < 20 %}blue-grey
+          {% elif (ok / total * 100) >= 30 %}green
+          {% elif (ok / total * 100) >= 15 %}amber
+          {% else %}red
+          {% endif %}
+
 # =============================================================================
 # OPTIONS — à ajouter seulement si vous les voulez (rien de tout ceci n'est
 # nécessaire pour que la carte ci-dessus fonctionne).
@@ -425,9 +552,11 @@ cards:
 #           device_class: cold
 #           state: "{{ states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature') | float(99) < 1 }}"
 
-# Option D — diagnostic de la réception (utile quand plus rien n'arrive : c'est
-# « Rejected frames » contre « RMT captures » qui distingue un problème de décodage
-# d'une puce muette, voir README §1.6).
+# Option D — la grille des compteurs BRUTS. La fraîcheur et le taux ont leur propre section en
+# haut de la carte (« Réception »), et ce qui reste utile ici, ce sont justement les compteurs que
+# cette section n'affiche pas — « RMT captures » contre « Rejected frames » (le couple qui
+# distingue un problème de décodage d'une puce muette, voir README §1.6), les doublons, le dernier
+# verdict, la trame brute, l'ID de station et les trois commandes du firmware.
 #
 #   - type: grid
 #     columns: 2
@@ -488,3 +617,123 @@ cards:
 #         name: Dump pulses
 #         icon: mdi:waveform
 #         layout: vertical
+
+# =============================================================================
+# Option E — le taux de réception comme ENTITÉ. À créer seulement si vous voulez l'HISTORISER
+# (graphe 24 h, statistiques, automatisation) — la section « Réception » le calcule déjà dans la
+# carte et n'a besoin d'aucun helper.
+#
+# Deux façons de la créer, pour le même résultat.
+#   a) interface — Paramètres → Appareils et services → Entrées → Créer une entrée → « Modèle »
+#      puis « Modèle » (capteur). Nom « Vevor taux de réception », unité « % », classe d'état
+#      « Mesure », modèle d'état recopié de la ligne `state:` ci-dessous ;
+#   b) configuration.yaml — le bloc ci-dessous.
+#
+#   template:
+#     - sensor:
+#         - name: "Vevor taux de réception"
+#           unique_id: vevor_taux_reception
+#           unit_of_measurement: "%"
+#           state_class: measurement
+#           state: >-
+#             {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
+#             {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
+#             {% set total = (ok + ko) if ok is not none and ko is not none else 0 %}
+#             {{ (ok / total * 100) | round(1) if total >= 20 else none }}
+#
+# L'entity_id n'est PAS choisi, il dérive du nom (l'option `object_id` n'existe pas pour un capteur
+# `template`). « Vevor taux de réception » donne `sensor.vevor_taux_de_reception` — à VÉRIFIER dans
+# Outils de développement → États, filtre « vevor_taux », puis à reporter dans la ligne `entity:`
+# du graphe. Un modèle qui rend `none` laisse le capteur à « inconnu » — c'est voulu sous
+# 20 trames, et le graphe laisse alors un trou plutôt qu'un point faux.
+#
+#   - type: custom:mini-graph-card
+#     name: Taux de réception (24 h)
+#     icon: mdi:access-point-check
+#     entities:
+#       - entity: sensor.vevor_taux_de_reception
+#         name: Trames valides
+#         color: '#4caf50'
+#     hours_to_show: 24
+#     points_per_hour: 6
+#     lower_bound: 0
+#     upper_bound: 100
+#     show:
+#       graph: line
+#       name: true
+#       icon: true
+#       state: true
+#       labels: true
+
+# =============================================================================
+# Option F — ce que la section « Réception » ne peut pas dire, « quelle part des trames ÉMISES
+# ai-je reçue ? », et des compteurs qui survivent aux redémarrages de la carte.
+#
+# Pourquoi un helper. Les deux compteurs du firmware vivent en RAM et repartent de 0 à chaque
+# redémarrage de la carte (mesuré 17 fois sur les 24 h des 04-05/10/2026, garde-fou de silence et
+# flashages compris), donc le taux de la carte est TOUJOURS « depuis le démarrage ». Un compteur
+# d'utilité, lui, ignore une BAISSE de sa source — vérifié dans le code de Home Assistant,
+# l'ajustement n'est appliqué que s'il est positif, `net_consumption` étant faux par défaut. La
+# remise à zéro de la carte ne fait donc pas reculer le compteur.
+#
+#   utility_meter:
+#     vevor_trames_ok:
+#       source: sensor.jardin_vevor_7_in_1_weather_station_valid_frames
+#       cycle: daily
+#     vevor_trames_ko:
+#       source: sensor.jardin_vevor_7_in_1_weather_station_rejected_frames
+#       cycle: daily
+#
+# Créés en YAML, les entity_id viennent des clés ci-dessus (`sensor.vevor_trames_ok`) ; créés dans
+# l'interface (Paramètres → Appareils et services → Entrées → Créer une entrée → « Compteur
+# d'utilité »), ils viennent du nom choisi. Dans les deux cas, à vérifier dans Outils de
+# développement → États. Défaut connu et sans conséquence — la source n'ayant pas d'unité, HA
+# journalise une fois « Source sensor ... has no unit of measurement ».
+#
+# La carte. La station émet une trame toutes les 20 s (3 par minute) et la comparaison porte sur le
+# temps DÉJÀ écoulé depuis minuit, sinon le taux serait faux toute la matinée.
+#
+#   - type: custom:mushroom-template-card
+#     entity: sensor.vevor_trames_ok
+#     primary: >-
+#       {% set ok = states('sensor.vevor_trames_ok') | float(none) %}
+#       {% set attendues = ((now() - today_at('00:00')).total_seconds() / 20) | round(0) %}
+#       {% if ok is none or attendues < 20 %}en attente
+#       {% else %}{{ (ok / attendues * 100) | round(0) | int }} % des trames émises aujourd'hui
+#       {% endif %}
+#     secondary: >-
+#       {% set ok = states('sensor.vevor_trames_ok') | float(none) %}
+#       {% set ko = states('sensor.vevor_trames_ko') | float(none) %}
+#       {% set attendues = ((now() - today_at('00:00')).total_seconds() / 20) | round(0) %}
+#       {% if ok is none or ko is none %}Compteurs indisponibles
+#       {% else %}{{ ok | int }} valides · {{ ko | int }} rejetés · {{ attendues | int }} émises depuis minuit
+#       {% endif %}
+#     icon: mdi:radio-tower
+#     icon_color: light-blue
+#
+# Référence mesurée sur cette installation, 24 h des 04-05/10/2026 — 48,9 % (2 111 valides pour
+# 4 320 attendues). Cet encart n'a volontairement pas de seuil de couleur, contrairement à la
+# fraîcheur où la cadence de 20 s donne la réponse — la valeur normale d'un taux de réception vous
+# appartient, à vous de la fixer.
+
+# =============================================================================
+# Option G — être prévenu sans regarder la carte (aucun helper nécessaire).
+#
+#   - alias: "Vevor 7-en-1 — plus aucune trame reçue"
+#     triggers:
+#       - trigger: state
+#         entity_id: sensor.jardin_vevor_7_in_1_weather_station_tx_counter
+#         for: "00:05:00"
+#     actions:
+#       - action: notify.notify
+#         data:
+#           message: >-
+#             Vevor 7-en-1 — aucune trame depuis 5 min. Dernier verdict
+#             {{ states('sensor.jardin_vevor_7_in_1_weather_station_last_verdict') }},
+#             {{ states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') }} valides
+#             contre {{ states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') }} rejetés.
+#
+# Le déclencheur se ré-arme à chaque trame, donc `for: 00:05:00` sur « TX counter » ne part que si
+# le compteur n'a PAS bougé pendant 5 minutes, soit au-delà des 180 s du garde-fou — la carte a
+# alors déjà tenté son réarmement et son redémarrage. Remplacez `notify.notify` par votre service
+# de notification, ou par `persistent_notification.create` qui fonctionne partout.

@@ -10,10 +10,13 @@ Without Home Assistant or hardware, it verifies:
   3. that listing holds exactly the entities `esphome/vevor-7in1.yaml` declares — the
      EXCEPTIONS below included, so a fresh divergence still fails;
   4. no identifier of the old project remains in an active line (`jardin_vevor_weather_station`,
-     or `esp32_weather_*` apart from the documented Illuminance exception);
+     or `esp32_weather_*`);
   5. the three banner templates (state, icon, colour) run on numeric scenarios and match the
      verdict expected by `docs/forecast-rules.md`, including the honest "night", "not enough
-     measurements" and "rain sensor unavailable" cases.
+     measurements" and "rain sensor unavailable" cases;
+  6. the two « Réception » cards (age of the last frame, valid-frame ratio) run on scenarios:
+     fresh frame, missed frame, silent radio, unavailable entity, counters too small for a
+     percentage to mean anything, and duplicates unavailable.
 
 Usage:   .venv/bin/python tools/check_ha_card.py
 Exit:    0 if all conforms, 1 otherwise (each discrepancy is printed).
@@ -83,11 +86,13 @@ if not probe:
 prefix = probe.split(".", 1)[1][: -(len(ANCRAGE) + 1)]
 
 # EXCEPTIONS: entity ids HA did NOT derive from the device name, measured on the listing.
-# "Illuminance" kept the entity_id of the previous ESPHome node that HA reused under this device
-# (see dev/docs/ha-entities.txt). Keyed by the firmware entity name, slugified. An entry here is
-# a measurement, not a workaround: the cross-check below stays an equality check, exception
-# included, so a fresh divergence still fails.
-EXCEPTIONS = {"illuminance": "sensor.esp32_weather_illuminance"}
+# Keyed by the firmware entity name, slugified. An entry here is a measurement, not a workaround:
+# the cross-check below stays an equality check, exception included, so a fresh divergence still
+# fails. EMPTY since 05/10/2026 — the old ESPHome node was cleaned up in HA and Illuminance came
+# back under the device prefix (see dev/docs/ha-entities.txt); the shape is kept so a future
+# exception has a documented home.
+#     EXCEPTIONS = {"illuminance": "sensor.esp32_weather_illuminance"}
+EXCEPTIONS: dict[str, str] = {}
 
 cited = sorted(set(re.findall(
     rf"\b(?:sensor|binary_sensor|text_sensor|number|button)\.{re.escape(prefix)}_[A-Za-z0-9_]+", raw))
@@ -127,10 +132,11 @@ active = "\n".join(
     line for line in raw.splitlines()
     if line.strip() and not line.lstrip().startswith("#")
 )
-# The current prefix itself contains "jardin_vevor", and the Illuminance exception is a
-# documented `esp32_weather_*` id: match the OLD project's patterns, exception excluded.
+# The current prefix itself contains "jardin_vevor": match the OLD project's patterns whole.
+# No `esp32_weather_*` id exists any more — the Illuminance exception went away on 05/10/2026
+# (dev/docs/ha-entities.txt), so the lookahead that used to spare it is gone as well.
 legacy = [line.strip() for line in active.splitlines()
-          if re.search(r"jardin_vevor_weather_station|esp32_weather_(?!illuminance)", line)]
+          if re.search(r"jardin_vevor_weather_station|esp32_weather_", line)]
 check(not legacy, f"aucun identifiant de l'ancien projet dans les lignes actives ({legacy or 'aucun'})")
 
 # Option blocks live in comments and will be uncommented one day, so check they parse as YAML.
@@ -287,6 +293,132 @@ scenario("UNE bascule isolée (0,233 mm) il y a 3 min — classée « Pluvieux �
 scenario("soleil rasant, référence < 1 000 lx — le rapport n'a plus de sens", t=21.0, lux=600,
          elev=0.5, rafale=15, pluie=59.2, il_y_a=3600, attendu="Indéterminé",
          icone="mdi:weather-cloudy-alert", couleur="grey")
+
+# --------------------------------------------------------------------------- 6
+# Les encarts « Réception » sont trouvés par leur ENTITÉ, jamais par leur position : réordonner
+# la carte ne doit pas pouvoir rendre ce contrôle muet. Les modèles testés sont les chaînes
+# exactes extraites du YAML, exécutées avec les mêmes filtres Jinja que HA (section 5).
+print()
+print("6. Encarts « Réception » exécutés sur des scénarios (fraîcheur, taux de trames valides)")
+
+
+def encart(needle: str) -> dict:
+    """Le mushroom-template-card dont `entity` contient `needle` — exactement un attendu."""
+    found: list[dict] = []
+
+    def walk(node) -> None:
+        if isinstance(node, dict):
+            if (isinstance(node.get("entity"), str) and needle in node["entity"]
+                    and "primary" in node and "secondary" in node):
+                found.append(node)
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(card)
+    if len(found) != 1:
+        sys.exit(f"6. {len(found)} encart(s) citant « {needle} » — exactement 1 attendu")
+    return found[0]
+
+
+ENCART_AGE = encart("tx_counter")
+ENCART_TAUX = encart("valid_frames")
+ENTITY_AGE = f"sensor.{prefix}_tx_counter"
+ENTITY_OK = f"sensor.{prefix}_valid_frames"
+ENTITY_KO = f"sensor.{prefix}_rejected_frames"
+ENTITY_DUP = f"sensor.{prefix}_duplicates_ignored"
+CHAMPS = ("primary", "secondary", "icon", "icon_color")
+
+
+def essai(label: str, entete: dict, data: dict, attendu: dict) -> None:
+    got = {champ: render(entete[champ], data) for champ in CHAMPS}
+    ok = all(got[champ] == attendu[champ] for champ in CHAMPS)
+    print(f"   {'OK  ' if ok else 'ÉCHEC'} {label}")
+    print(f"        → {got['primary']} | {got['secondary']}  "
+          f"[{got['icon']} / {got['icon_color']}]")
+    if ok:
+        echos.append(label)
+        return
+    print(f"        écart (obtenu, attendu) : "
+          f"{ {c: (got[c], attendu[c]) for c in CHAMPS if got[c] != attendu[c]} }")
+    failures.append(label)
+
+
+def age_data(secondes, etat: str = "1234.0") -> dict:
+    """Jeu d'états pour l'encart de fraîcheur. `None` = entité absente (states.sensor.x → None)."""
+    if secondes is None:
+        return {ENTITY_AGE: None}
+    return {ENTITY_AGE: State(etat, NOW - timedelta(seconds=secondes))}
+
+
+print("   — âge de la dernière trame (référence « TX counter »)")
+essai("trame il y a 2 s — réception normale", ENCART_AGE, age_data(2),
+      {"primary": "il y a 2 s", "secondary": "Réception normale — 1 trame toutes les 20 s",
+       "icon": "mdi:clock-check-outline", "icon_color": "green"})
+essai("trame il y a 35 s — dernière valeur du vert", ENCART_AGE, age_data(35),
+      {"primary": "il y a 35 s", "secondary": "Réception normale — 1 trame toutes les 20 s",
+       "icon": "mdi:clock-check-outline", "icon_color": "green"})
+essai("trame il y a 45 s — une trame manquée", ENCART_AGE, age_data(45),
+      {"primary": "il y a 45 s", "secondary": "Une trame manquée",
+       "icon": "mdi:clock-alert-outline", "icon_color": "amber"})
+essai("trame il y a 61 s — le garde-fou ré-arme la radio", ENCART_AGE, age_data(61),
+      {"primary": "il y a 1 min", "secondary": "Silence radio — ré-armement demandé à 60 s",
+       "icon": "mdi:clock-alert-outline", "icon_color": "orange"})
+essai("trame il y a 200 s — silence, la carte redémarre", ENCART_AGE, age_data(200),
+      {"primary": "il y a 3 min", "secondary": "Silence radio — la carte redémarre à 180 s",
+       "icon": "mdi:clock-remove-outline", "icon_color": "red"})
+essai("trame il y a 2 h — l'âge passe en heures", ENCART_AGE, age_data(7200),
+      {"primary": "il y a 2.0 h", "secondary": "Silence radio — la carte redémarre à 180 s",
+       "icon": "mdi:clock-remove-outline", "icon_color": "red"})
+essai("entité absente — « inconnu », jamais « il y a 0 s »", ENCART_AGE, age_data(None),
+      {"primary": "inconnu", "secondary": "Carte injoignable, ou entité absente",
+       "icon": "mdi:help-circle-outline", "icon_color": "grey"})
+essai("entité indisponible — pas de fraîcheur affichée", ENCART_AGE,
+      {ENTITY_AGE: State("unavailable", NOW - timedelta(seconds=5))},
+      {"primary": "inconnu", "secondary": "Carte injoignable, ou entité absente",
+       "icon": "mdi:help-circle-outline", "icon_color": "grey"})
+
+
+def taux_data(ok: str, ko: str, doublons: str = "0") -> dict:
+    return {ENTITY_OK: State(ok), ENTITY_KO: State(ko), ENTITY_DUP: State(doublons)}
+
+
+print("   — taux de trames valides (« Valid frames » / « Rejected frames »)")
+essai("37 valides / 21 rejetés — le relevé du 05/10/2026", ENCART_TAUX,
+      taux_data("37", "21", "34"),
+      {"primary": "63.8 %",
+       "secondary": "OK 37 · KO 21 (36.2 %) · doublons 34 — depuis le démarrage de la carte",
+       "icon": "mdi:check-circle-outline", "icon_color": "green"})
+essai("30 % pile — limite basse du vert", ENCART_TAUX, taux_data("30", "70"),
+      {"primary": "30.0 %",
+       "secondary": "OK 30 · KO 70 (70.0 %) · doublons 0 — depuis le démarrage de la carte",
+       "icon": "mdi:check-circle-outline", "icon_color": "green"})
+essai("15 % pile — limite basse de l'ambre", ENCART_TAUX, taux_data("15", "85"),
+      {"primary": "15.0 %",
+       "secondary": "OK 15 · KO 85 (85.0 %) · doublons 0 — depuis le démarrage de la carte",
+       "icon": "mdi:alert-circle-outline", "icon_color": "amber"})
+essai("9,1 % — sous 15 %, le taux passe au rouge", ENCART_TAUX, taux_data("5", "50"),
+      {"primary": "9.1 %",
+       "secondary": "OK 5 · KO 50 (90.9 %) · doublons 0 — depuis le démarrage de la carte",
+       "icon": "mdi:close-circle-outline", "icon_color": "red"})
+essai("4 trames — le taux n'a pas encore de sens", ENCART_TAUX, taux_data("3", "1"),
+      {"primary": "en attente",
+       "secondary": "Moins de 20 trames depuis le démarrage — le taux n'a pas encore de sens",
+       "icon": "mdi:help-circle-outline", "icon_color": "blue-grey"})
+essai("compteurs indisponibles", ENCART_TAUX,
+      taux_data("unavailable", "unavailable", "unavailable"),
+      {"primary": "en attente", "secondary": "Compteurs indisponibles",
+       "icon": "mdi:help-circle-outline", "icon_color": "blue-grey"})
+essai("entités absentes de HA (states() rend « unknown »)", ENCART_TAUX, {},
+      {"primary": "en attente", "secondary": "Compteurs indisponibles",
+       "icon": "mdi:help-circle-outline", "icon_color": "blue-grey"})
+essai("doublons indisponibles — affichés « ? » sans casser le taux", ENCART_TAUX,
+      taux_data("100", "2", "unavailable"),
+      {"primary": "98.0 %",
+       "secondary": "OK 100 · KO 2 (2.0 %) · doublons ? — depuis le démarrage de la carte",
+       "icon": "mdi:check-circle-outline", "icon_color": "green"})
 
 print()
 if failures:

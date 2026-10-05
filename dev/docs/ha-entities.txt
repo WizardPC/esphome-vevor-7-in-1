@@ -1,21 +1,29 @@
 # Entités réellement exposées par Home Assistant — relevé, pas déduction.
 #
-# Provenance : liste fournie par le propriétaire (PanrahkFR) le 03/10/2026 à 18 h (heure de
-# Paris), lue dans Home Assistant → Outils de développement → États, filtre « vevor ».
-# Deuxième relevé du même jour : l'appareil a d'abord été nommé « Jardin Station Vevor 7-en-1 »
-# (préfixe jardin_station_vevor_7_en_1), puis « Jardin Vevor 7 in 1 Weather Station ».
+# Provenance : /api/states du 05/10/2026 (heure de Paris), filtre « vevor », croisé avec la
+# liste que la carte déclare elle-même (API native ESPHome sur 172.16.0.205) — 24 entités
+# déclarées par le firmware, 24 retrouvées dans HA sous ce préfixe. Relevés précédents :
+# l'appareil s'est d'abord appelé « Jardin Station Vevor 7-en-1 » (préfixe
+# jardin_station_vevor_7_en_1), puis « Jardin Vevor 7 in 1 Weather Station ».
 #
 # Pourquoi ce fichier existe : l'entity_id n'est pas déductible du firmware seul. Le nom
 # d'appareil est modifiable dans Home Assistant (le YAML, lui, déclare friendly_name
 # « Vevor 7-in-1 weather station » et son commentaire dit de renommer côté HA, pas ici) : tout
-# renommage d'appareil renomme les 21 entity_id d'un coup. check_ha_card.py vérifie la carte
+# renommage d'appareil renomme les 24 entity_id d'un coup. check_ha_card.py vérifie la carte
 # contre CETTE liste, jamais contre une reconstruction.
 #
-# EXCEPTION MESURÉE — Illuminance : son entity_id ne suit pas le préfixe d'appareil. Il est
-# resté `sensor.esp32_weather_illuminance`, hérité du nœud ESPHome précédent que HA a réutilisé.
-# Voir dev/docs/ha-card.yaml (ligne correspondante) et dev/tools/check_ha_card.py
-# (constante EXCEPTIONS) : c'est une mesure, pas une coquille. À savoir avant de nettoyer
-# l'ancienne entrée d'appareil dans HA, qui peut emporter cet entity_id avec elle.
+# PLUS AUCUNE EXCEPTION depuis le 05/10/2026 : l'ancienne entrée de nœud ESPHome a été
+# nettoyée dans HA, et Illuminance est revenue sous le préfixe d'appareil
+# (sensor.jardin_vevor_7_in_1_weather_station_illuminance, plateforme « esphome »).
+# L'ancien sensor.esp32_weather_illuminance n'existe plus — absent de /api/states — alors que
+# la carte s'y référait encore : l'encart de luminosité et le bandeau lisaient 0 lx.
+#
+# Ne sont PAS listés ici, bien qu'attachés au même appareil : cinq compteurs d'utilité créés
+# par le propriétaire, les entités « Rain Hour / Day / Week / Month / Year » de la carte
+# (rain_hour, rain_day, rain_week, rain_month, rain_year). Plateforme mesurée : utility_meter
+# (registre des entités de HA), source sensor.jardin_vevor_7_in_1_weather_station_rain_total.
+# Ce sont des helpers HA, pas des entités du firmware : les ajouter ferait échouer la
+# comparaison firmware ↔ HA du contrôle, qui doit rester une égalité.
 #
 # Rafraîchir après tout renommage, changement de nom d'appareil ou nouvelle entité :
 #   1. Home Assistant → Outils de développement → États, filtrer « vevor », coller les
@@ -28,7 +36,7 @@
 ## Mesures
 sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature     # Outdoor temperature
 sensor.jardin_vevor_7_in_1_weather_station_outdoor_humidity       # Outdoor humidity
-sensor.esp32_weather_illuminance                                  # Illuminance (lx) — EXCEPTION, hors préfixe
+sensor.jardin_vevor_7_in_1_weather_station_illuminance            # Illuminance (lx)
 sensor.jardin_vevor_7_in_1_weather_station_uv_index               # UV index
 sensor.jardin_vevor_7_in_1_weather_station_wind_speed             # Wind speed
 sensor.jardin_vevor_7_in_1_weather_station_wind_gust              # Wind gust
@@ -46,8 +54,11 @@ sensor.jardin_vevor_7_in_1_weather_station_duplicates_ignored     # Duplicates i
 sensor.jardin_vevor_7_in_1_weather_station_last_raw_frame         # Last raw frame
 sensor.jardin_vevor_7_in_1_weather_station_last_verdict           # Last verdict
 
-## Commandes
-number.jardin_vevor_7_in_1_weather_station_cc1101_frequency       # CC1101 frequency
+## Commandes et réglages
+number.jardin_vevor_7_in_1_weather_station_cc1101_frequency       # CC1101 frequency (MHz)
+number.jardin_vevor_7_in_1_weather_station_station_id_0_learn     # Station ID (0 = learn)
+number.jardin_vevor_7_in_1_weather_station_watchdog_silent_slots_before_re_arm  # Watchdog silent slots before re-arm (x20 s)
+number.jardin_vevor_7_in_1_weather_station_watchdog_max_silence_before_restart  # Watchdog max silence before restart (s)
 button.jardin_vevor_7_in_1_weather_station_dump_pulses            # Dump pulses
 button.jardin_vevor_7_in_1_weather_station_re_apply_radio_config  # Re-apply radio config
 button.jardin_vevor_7_in_1_weather_station_restart_board          # Restart board
