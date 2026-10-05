@@ -20,6 +20,11 @@ Leçons du 05/10/2026 (les trois premières étaient des bugs réels, constatés
     impulsion, donc aucune preuve (constaté : marqueur « ### PANNE » puis zéro ligne `capture #N`).
   - la clé du bouton est relevée par le script (`list_entities_services`), jamais codée en dur :
     une clé figée survit mal à un reflash.
+  - l'appui sur le bouton part dans un THREAD : `button_command` est synchrone et, appelé depuis la
+    boucle asyncio, il la bloquait sans rien lever — veille figée deux fois, dont une après un
+    redémarrage de carte (5e bug constaté en service le 05/10) ;
+  - tout appel réseau est borné par `asyncio.wait_for` : une connexion qui n'aboutit pas bloquait la
+    boucle AVANT d'arriver au canari, qui ne servait alors à rien.
 
 Sortie : dev/state/veille_reception.log (journal brut + marqueurs), et dev/state/panne_*.txt
 (instantané du journal au moment de chaque panne détectée).
@@ -28,6 +33,7 @@ import asyncio
 import datetime
 import os
 import sys
+import threading
 import time
 
 try:
@@ -83,19 +89,28 @@ class Veille:
             self.derniere_capture = time.time()
 
     def _vider(self, raison: str) -> None:
-        """Appuie sur « Dump pulses ». Le faire est le SEUL moyen d'obtenir les impulsions brutes."""
+        """Appuie sur « Dump pulses ». Le faire est le SEUL moyen d'obtenir les impulsions brutes.
+
+        L'appui part dans un thread : `button_command` est synchrone, et l'appeler directement dans
+        la boucle asyncio la gelait (sans rien lever) — c'est la panne de veille constatée deux fois
+        le 05/10. Le thread met aussi à jour le canari pour que la reconnexion soit immédiate.
+        """
         if self.cli is None or self.dump_key is None:
             self.ligne(f"### {raison} — vidage IMPOSSIBLE (bouton inconnu)")
             return
         self.ligne(f"### {raison} — vidage des impulsions demandé")
-        try:
-            self.cli.button_command(self.dump_key)
-            self.dernier_vidage = time.time()   # SEULEMENT si l'appui est passé : un appui raté
-        except Exception as exc:                 # doit être retenté tout de suite, pas dans 5 min
-            # Une socket morte ne prévient pas : on force le canari à se déclencher au prochain
-            # tour, pour que la reconnexion soit immédiate et le vidage rejoué aussitôt après.
-            self.derniere_ligne = 0.0
-            self.ligne(f"### appui sur le bouton impossible ({exc!r}) — reconnexion immédiate")
+
+        def appuyer() -> None:
+            try:
+                self.cli.button_command(self.dump_key)
+                self.dernier_vidage = time.time()   # SEULEMENT si l'appui est passé : un appui raté
+            except Exception as exc:                 # doit être retenté tout de suite, pas dans 5 min
+                # Une socket morte ne prévient pas : on force le canari à se déclencher au prochain
+                # tour, pour que la reconnexion soit immédiate et le vidage rejoué aussitôt après.
+                self.derniere_ligne = 0.0
+                self.ligne(f"### appui sur le bouton impossible ({exc!r}) — reconnexion immédiate")
+
+        threading.Thread(target=appuyer, daemon=True).start()
 
     def _instantane(self) -> None:
         instantane = os.path.join(ETAT, f"panne_{datetime.datetime.now():%Y%m%d_%H%M%S}.txt")
@@ -129,7 +144,7 @@ async def main() -> None:
         try:
             cli = APIClient(HOST, PORT, None)
             await asyncio.wait_for(cli.connect(login=True), 30)
-            ents, _ = await cli.list_entities_services()
+            ents, _ = await asyncio.wait_for(cli.list_entities_services(), 30)
             for e in ents:
                 if getattr(e, "name", "") == NOM_BOUTON_VIDAGE:
                     veille.dump_key = e.key
@@ -154,7 +169,7 @@ async def main() -> None:
             veille.cli = None
             if cli is not None:
                 try:
-                    await cli.disconnect()                       # sinon : abonnements fantômes
+                    await asyncio.wait_for(cli.disconnect(force=True), 10)   # sinon : abonnements fantômes
                 except Exception:                                # pragma: no cover
                     pass
 
