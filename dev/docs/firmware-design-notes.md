@@ -165,4 +165,11 @@ component itself owns (`number/`, `button/`).
 * the diagnostic sensors (`Valid frames`, `Rejected frames`, `RMT captures`, `Duplicates ignored`,
   `Station ID`, `TX counter`, `Last raw frame`, `Last verdict`) and the 10 s publishing interval are
   **the last piece of logic still in the YAML** (flagged TODO in the file): moving it means handing
-  the component the sensor ids.
+  the component the sensor ids;
+* the `wifi:` block carries the two settings the owner requires in every delivered YAML
+  (05/10/2026): the transmission power **commented out** at its lowest value
+  (`# output_power: 8.5dB` — 8.5 dB is the low bound, range 8.5-20.5, and some access points refuse
+  the board at the default power), and **no `ap:` section** — the board broadcasts no fallback SSID.
+  State the consequence with the setting: without a fallback access point, a board that stops
+  joining its Wi-Fi can only be recovered over USB. Removing `ap:` also took the firmware from
+  52.3 % to 47.2 % of flash (about 93 kB).
