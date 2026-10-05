@@ -112,19 +112,28 @@ The station transmits a burst every 20 s, day and night (confirmed by the owner)
 minutes therefore always means the receiver is at fault, which allows the watchdog to act
 unconditionally.
 
+**The policy lives in the component** (`vevor_7in1.cpp`, `surveiller_radio_()`), with its two settings
+exposed as Home Assistant `number` entities declared by the component itself. The YAML declares those
+entities and nothing else — see §10.
+
 * the criterion is **published frames**, never captures: in the deaf state a few parasitic captures
   still arrive (3 to 5 per window) and would keep a capture-based counter alive. Measured on a 9-minute
   window: 7 "radio EN ECHEC" lines and **zero reboots** with a capture-based criterion;
-* **30 attempts, one every 20 s (10 minutes)**, then reboots: ten close together, then one every
-  ~15 minutes — bound the *rate*, not the number. Note the cost: each attempt runs a full
-  reconfiguration, and on a marginal link a lost register write can leave the chip worse off;
+* **re-arms are spaced**, never one per 20 s slot. Measured on 05/10/2026: the old single-slot trigger
+  reset the chip every ~20 s, because the station's period and the slot period are identical — one
+  jittered emission was enough. And each re-arm is a lottery on a marginal SPI link: **2 register writes
+  failed in a 4-minute run** (measured), and a lost write leaves the chip misconfigured (`registre 0x1D
+  NON PRIS`, wanted 0xB1) — the watchdog then *maintains* the fault instead of curing it;
+* defaults: a re-arm after **3 silent slots (60 s)**, then one every 3 slots, and a **reboot at 180 s**
+  (the only remedy measured so far). Both are runtime-tunable entities:
+  `Watchdog crénaux muets avant re-armement` and `Watchdog silence max avant redemarrage`;
+* the reboot rate is bounded (past ten consecutive reboots, one slot in 45) and the counter is
+  persisted, so a genuinely dead board cannot loop forever;
 * the re-arm is **one single `cc1101.reset`**. Never a chain of `cc1101.set_*`: inside the component
   each setter does `if (initialized_) { enter_idle_(); …; enter_rx_(); }`, so a chain of seven means
   seven full reconfiguration cycles — the chip spends its time in IDLE and recalibrating instead of
   listening. Measured: a watchdog replaying that chain every 20 s made the board durably deaf, and it
-  stayed invisible because it only fires when no frame is arriving;
-* the retry counter lives in a `globals` with `restore_value: true`, so a genuinely dead board cannot
-  loop forever.
+  stayed invisible because it only fires when no frame is arriving.
 
 ## 9. Logging
 
@@ -137,14 +146,23 @@ tools (`tools/capture_logs.py`, `tools/eval_frames.py`, the A/B harness) parse i
 
 ## 10. What is kept in the YAML, and why
 
-* `button: Dump pulses` — asks the component to log the raw pulse durations of the next capture.
-  The API does not replay history, so without it the flow can only be analysed blindly from outside;
-* `button: Re-apply radio config` — runs the same `rearmer_radio` script as the watchdog, so
-  button and watchdog can never drift apart;
+**Rule: the YAML carries no business logic — only logs and declarations.** The owner's words:
+« Le YAML ne doit JAMAIS contenir de code métier, seulement des logs. » Anything that *decides* lives
+in the component (`esphome/components/vevor_7in1/`), and every runtime setting is an entity the
+component itself owns (`number/`, `button/`).
+
+* `button: Dump pulses` / `button: Re-apply radio config` — now `platform: vevor_7in1`, declared by
+  the component: the YAML only names them. The re-apply button and the watchdog literally share the
+  same method (`reapply_radio()`), so they can no longer drift apart;
 * `button: Restart board` — a reboot is the only remedy measured against a mute chip, and
-  without this button it takes a reflash, i.e. a new state lottery;
+  without this button it takes a reflash, i.e. a new state lottery. Declarative platform, no logic;
+* `number: Watchdog crénaux muets avant re-armement`, `number: Watchdog silence max avant
+  redemarrage` — the watchdog's two settings, exposed by the component (defaults: 3 slots, 180 s).
+  The policy itself is `surveiller_radio_()`, see §8;
 * `number: CC1101 frequency` — lets a frequency sweep be driven over the API in 25 s steps instead of
   a compile-and-flash per point. `restore_value: false` on purpose: a restored value used to override
   the compiled frequency at boot and made two frequency tests ambiguous;
 * the diagnostic sensors (`Valid frames`, `Rejected frames`, `RMT captures`, `Duplicates ignored`,
-  `Station ID`, `TX counter`, `Last raw frame`, `Last verdict`).
+  `Station ID`, `TX counter`, `Last raw frame`, `Last verdict`) and the 10 s publishing interval are
+  **the last piece of logic still in the YAML** (flagged TODO in the file): moving it means handing
+  the component the sensor ids.

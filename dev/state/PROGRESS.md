@@ -2015,3 +2015,28 @@ contrôle discriminante (borne honnête : le test de la section 15 sur deux tram
 témoin « station ou récepteur » sur le RF reste à faire : il demande le vidage des impulsions brutes
 d'une rafale anormale (bouton « Dump pulses ») — impossible d'ici, la carte refuse la clé d'API de
 `esphome/secrets.yaml` (elle tourne un binaire flashé avec les secrets du propriétaire).
+
+## 05/10/2026 — journal direct, cause du silence du matin, garde-fou dans le code
+
+**Accès.** Le propriétaire a reflashé la carte **sans chiffrement d'API** : l'API ESPHome
+(172.16.0.205:6053) est maintenant lisible d'ici (aioesphomeapi, abonnement au journal **avec un
+niveau explicite** — sans niveau, la carte n'envoie rien). La clé de `esphome/secrets.yaml` n'est
+plus nécessaire, et le bouton de vidage s'appuie depuis l'API. À savoir : Home Assistant a perdu le
+lien (entités `unavailable`) tant que l'intégration ESPHome garde l'ancienne clé de chiffrement.
+
+**Cause du silence du matin (mesurée).** Le vidage de 24 captures (16 rafales réelles, chacune
+livrée **deux fois**) donne : période réelle **88,0-88,5 µs** stable, signal symétrique
+(marque 92 / espace 86), 16/16 décodées. L'hypothèse d'une dérive d'horloge est **réfutée** : la
+période ne bouge pas. En déformant seulement le rapport cyclique des mêmes rafales, période
+inchangée, le décodeur actuel tient jusqu'à **+30 µs (16/16)** puis s'effondre à **+40 µs (0/16)** :
+c'est le déséquilibre marque/espace qui casse la réception, pas la fréquence. Le vidage du 02/10
+était à ~+30 (donc décodé) ; le silence de ce matin était au-delà. Il reste à capturer une rafale
+*en panne* : `dev/tools/veille_reception.py` (lancé le 05/10) archive le journal et vide les
+impulsions automatiquement après 4 min sans trame.
+
+**Garde-fou déplacé.** La politique de veille quitte le YAML pour `vevor_7in1.cpp`
+(`surveiller_radio_()`), avec ses deux réglages exposés en entités `number` possédées par le
+composant (`vevor_7in1/number/`). Règle du propriétaire : **le YAML ne contient que du log, jamais
+de logique métier**. Défauts mesurés : 3 créneaux (60 s) avant un ré-armement, redémarrage à 180 s.
+Reste dans le YAML la publication des quatre compteurs (TODO dans le fichier) : elle demande au
+composant les identifiants des capteurs.

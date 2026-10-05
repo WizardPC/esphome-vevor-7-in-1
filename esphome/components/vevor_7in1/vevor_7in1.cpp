@@ -1,10 +1,8 @@
 #include "vevor_7in1.h"
 
-// Ce fichier ne contient QUE le branchement au récepteur, le recollage des rafales coupées, la
-// déduplication des livraisons en double et le battement de cœur. Toute la logique de protocole
-// (impulsions → bits → octets → valeurs) est dans includes/vevor_protocol.h, testable hors
-// matériel. Voir l'avertissement en tête de vevor_7in1.h : ce composant n'a AUCUN accès SPI, la
-// puce CC1101 doit rester le seul périphérique de son bus.
+// This file holds ONLY the receiver wiring, the stitching of cut bursts, the deduplication of
+// double deliveries and the heartbeat. All protocol logic (pulses -> bits -> bytes -> values) is in
+// includes/vevor_protocol.h (testable off-hardware). No SPI access (see vevor_7in1.h).
 
 namespace esphome {
 namespace vevor_7in1 {
@@ -21,9 +19,9 @@ void Vevor7in1::dump_receiver_config_() {
 }
 
 void Vevor7in1::loop() {
-  // Garde-fou : si setup() n'a pas trouvé de remote_receiver — ou a marqué le composant en échec —
-  // `receiver_` est nul et le battement de cœur (dump_receiver_config_) le déréférencerait. setup()
-  // le teste déjà ; loop() doit le tester aussi (revue round 1, S5 — non corrigé jusqu'ici).
+  // Guard: if setup() found no remote_receiver — or marked the component failed — `receiver_` is
+  // null and the heartbeat (dump_receiver_config_) would dereference it. setup() tests it already;
+  // loop() must test it too (see dev/docs/firmware-design-notes.md).
   if (this->receiver_ == nullptr || this->is_failed()) {
     return;
   }
@@ -34,8 +32,8 @@ void Vevor7in1::loop() {
   this->last_report_ms_ = now;
 
   if (!this->receiver_dumped_ || (this->heartbeats_ % 12u) == 0u) {
-    // Une fois au démarrage, puis toutes les minutes : le premier dump part AVANT que l'API soit
-    // joignable, donc une fois ne suffit pas pour le lire depuis l'extérieur.
+    // Once at boot, then every minute: the first dump runs BEFORE the API is reachable, so once is
+    // not enough to read it from outside.
     this->receiver_dumped_ = true;
     this->dump_receiver_config_();
   }
@@ -59,8 +57,8 @@ void Vevor7in1::loop() {
 }
 
 size_t Vevor7in1::build_stitched_(const std::vector<int32_t> &timings) {
-  // La logique vit dans includes/vevor_protocol.h (stitch_fragments) pour être testable hors
-  // matériel : ici on ne fait que lui donner un tampon réutilisable.
+  // The logic lives in includes/vevor_protocol.h (stitch_fragments), testable off-hardware: here we
+  // only give it a reusable buffer.
   const size_t need = this->prev_fragment_.size() + timings.size();
   if (this->stitched_.size() < need) {
     this->stitched_.resize(need);
@@ -78,9 +76,9 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
     this->longest_capture_ = timings.size();
   }
 
-  // Les premières captures sont détaillées, et toute capture demandée à la main l'est aussi
-  // (bouton « Dump impulsions ») : les durées en clair sont la SEULE façon d'analyser la rafale
-  // réelle hors de la carte, l'API ne livrant que des logs.
+  // The first captures are detailed, and any capture requested by hand too (the "Dump pulses"
+  // button): the plain durations are the ONLY way to analyse the real burst off-board, the API
+  // only delivering logs.
   if (this->captures_ <= 3 || this->dump_requested_ || this->dump_restants_ > 0) {
     int32_t shortest = 1000000;
     int32_t longest = 0;
@@ -96,10 +94,8 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
     ESP_LOGI(TAG, "capture #%u : %u impulsions, de %d us à %d us", (unsigned) this->captures_,
              (unsigned) timings.size(), (int) shortest, (int) longest);
 
-    // MODIFICATION LOCALE (02/10) — 64 durées ne couvrent PAS une rafale Vevor (~176 symboles) :
-    // le dump ne permettait donc pas de juger le flux, il s'arrêtait au premier tiers de la rafale.
-    // On journalise jusqu'à 512 durées, par tranches de 64 — une ligne unique de plusieurs kilo-octets
-    // risquerait d'être tronquée par la couche de journalisation de l'API.
+    // 64 durations do NOT cover a Vevor burst (~176 symbols): logging up to 512 durations, in
+    // chunks of 64, keeps one multi-kilobyte line from being truncated by the API logging layer.
     const size_t a_dumper = timings.size() < 512 ? timings.size() : 512;
     for (size_t debut = 0; debut < a_dumper; debut += 64) {
       std::string tranche;
@@ -119,11 +115,9 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
     this->dump_requested_ = false;
   }
 
-  // Une capture est un MORCEAU de rafale si elle est trop courte pour en porter une entière :
-  // mesuré sur ce montage, une rafale utile fait 176 à 184 impulsions, et le RMT du C3 la coupe
-  // parfois en deux (96 + 82, 94 + 70…). C'est la seule situation où recoller a un sens. Le
-  // prédicat vit dans includes/vevor_protocol.h (testable hors matériel) ; le test l'éprouve aux
-  // bornes dans test_fragment_policy().
+  // A capture is a burst FRAGMENT if too short to carry a whole one: measured, a useful burst is
+  // 176-184 pulses and the C3's RMT sometimes cuts it in two (96 + 82, 94 + 70...). Stitching only
+  // makes sense then; the predicate lives in includes/vevor_protocol.h (test_fragment_policy()).
   const bool fragment = vevor::is_fragment(timings.size());
 
   uint8_t raw[vevor::FRAME_BYTES];
@@ -132,7 +126,7 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   bool repaired = false;
   size_t rejected = 0;
 
-  // 1. DÉCODAGE DIRECT de la capture, sans rien recoller : c'est le cas normal.
+  // 1. DIRECT DECODING of the capture, without stitching: the normal case.
   bool ok = vevor::decode_timings(timings.data(), timings.size(), vevor::PERIOD_CANDIDATES,
                                   vevor::PERIOD_CANDIDATE_COUNT, this->bits_.data(),
                                   this->bits_.size(), raw, &period_used, &inverted, &rejected,
@@ -141,10 +135,9 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
 
   bool from_stitch = false;
   if (!ok && fragment && !this->prev_fragment_.empty()) {
-    // 2. RECOLLAGE, uniquement entre deux morceaux de rafale. Recoler une capture COMPLÈTE devant
-    //    la suivante fait relire la rafale PRÉCÉDENTE : mesuré le 01/10, la version précédente
-    //    publiait ainsi 60 trames pour 31 mesures distinctes (chaque compteur TX exactement deux
-    //    fois, à 20 s d'écart, donc hors de la fenêtre anti-doublon de 5 s).
+    // 2. STITCHING, only between two burst fragments. Stitching a COMPLETE capture in front of the
+    //    next one re-reads the PREVIOUS burst (measured: 60 frames for 31 distinct measurements,
+    //    each TX counter twice, 20 s apart, hence outside the 5 s anti-duplicate window).
     const size_t stitched = this->build_stitched_(timings);
     rejected = 0;
     ok = vevor::decode_timings(this->stitched_.data(), stitched, vevor::PERIOD_CANDIDATES,
@@ -155,19 +148,17 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
     from_stitch = ok;
   }
 
-  // Mémoriser la capture courante comme morceau possible de la suivante — SEULEMENT si c'en est
-  // un : une rafale complète ne doit jamais servir de préfixe à la suivante.
+  // Remember the current capture as a possible fragment for the next one — ONLY if it is one: a
+  // complete burst must never serve as a prefix to the next.
   this->prev_fragment_ = fragment ? timings : std::vector<int32_t>();
 
   if (!ok) {
     return false;
   }
 
-  // CONTINUITÉ DE LA PLUIE — contrôle d'état, appliqué à TOUTES les trames (voir pluie_plausible
-  // dans vevor_protocol.h). Mesuré le 03/10 : deux pics de pluie à 7 634,5 mm sous un ciel dégagé,
-  // qu'aucun contrôle n'arrêtait — la porte de plausibilité du protocole ne regarde pas la pluie.
-  // Une trame refusée ici ne devient PAS la référence de la suivante (last_frame_ n'est mis à jour
-  // qu'après), donc un pic ne peut pas empoisonner la comparaison.
+  // RAIN CONTINUITY — state check on ALL frames (see pluie_plausible in vevor_protocol.h): two
+  // peaks at 7 634.5 mm under a clear sky went unstopped (the protocol plausibility gate ignores
+  // rain). A frame refused here does NOT become the next reference (last_frame_ is updated after).
   {
     vevor::Frame f;
     vevor::Frame precedente;
@@ -181,8 +172,8 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
       }
       if (!vevor::pluie_plausible(f.rain_mm, derniere, connue)) {
         this->rain_rejected_++;
-        // Les octets BRUTS dans le message : sans eux, la trame est bloquée sans qu'on sache
-        // pourquoi, et c'est précisément ce qu'on cherche à comprendre (défaut du 03/10).
+        // The RAW bytes in the message: without them the frame is blocked with no way to know why,
+        // which is exactly what we want to understand.
         const std::string octets = vevor::hex_bytes(raw, vevor::FRAME_BYTES);
         ESP_LOGW(TAG,
                  "pluie refusée : %.1f mm alors que la trame précédente en donnait %.1f mm (hausse "
@@ -193,11 +184,9 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
     }
   }
 
-  // GARDE-FOU DE CONTINUITÉ, pour les trames RÉPARÉES seulement : une trame obtenue par réparation
-  // n'est publiée que si elle est cohérente avec la dernière trame acceptée (même station, mesures
-  // qui ne sautent pas d'une rafale à l'autre). Mesure du 03/10 sur 200 charges utiles aléatoires :
-  // aucune fabrication — c'est donc une précaution à coût nul, gardée pour fermer le risque
-  // résiduel des réparations. Une trame décodée directement n'est pas soumise à ce contrôle.
+  // CONTINUITY GUARD, for REPAIRED frames only: published only if consistent with the last accepted
+  // frame (same station, measurements that do not jump from burst to burst). On 200 random payloads
+  // it fabricated none: a zero-cost precaution; direct frames are exempt.
   if (repaired) {
     vevor::Frame f;
     vevor::Frame precedente;
@@ -214,9 +203,9 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
     this->repairs_++;
   }
 
-  // La même rafale est régulièrement livrée deux fois par le RMT : deux trames identiques octet
-  // pour octet à quelques dizaines de millisecondes d'écart sont les mêmes mesures relues deux
-  // fois. On ne déclenche que la première.
+  // The same burst is regularly delivered twice by the RMT: two frames identical byte for byte a
+  // few tens of milliseconds apart are the same measurements read twice. Only the first is
+  // triggered.
   if (this->has_last_frame_ && (uint32_t) (millis() - this->last_frame_ms_) < DUP_WINDOW_MS &&
       memcmp(this->last_frame_, raw, vevor::FRAME_BYTES) == 0) {
     this->duplicates_++;
@@ -229,18 +218,96 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   this->has_last_frame_ = true;
 
   this->frames_++;
-  // La période est en DIXIÈMES de microseconde (elle est mesurée sur la rafale) : on journalise la
-  // valeur réellement retenue, pas un entier trompeur.
+  // The period is in TENTHS of a microsecond (measured on the burst): we log the value actually
+  // kept, not a misleading integer.
   ESP_LOGD(TAG, "trame extraite (période mesurée %d.%d us, polarité %s, %s%s) → %u octets",
            (int) (period_used / 10), (int) (period_used % 10), inverted ? "inversée" : "normale",
            from_stitch ? "en deux morceaux recollés" : "d'un seul bloc",
            repaired ? ", RÉPARÉE" : "", (unsigned) vevor::FRAME_BYTES);
 
-  // La trame est remise AU YAML, qui publie les capteurs : le composant ne connaît pas les
-  // entités, et la logique de protocole reste testable à froid dans includes/vevor_protocol.h.
+  // The frame is handed back TO the YAML, which publishes the sensors: the component does not know
+  // the entities, and the protocol logic stays testable off-hardware in includes/vevor_protocol.h.
   std::vector<uint8_t> payload(raw, raw + vevor::FRAME_BYTES);
   this->frame_trigger_.trigger(payload);
   return true;
+}
+
+// -------------------------------------------------------------------------------------------
+// Reception watchdog: THE policy, in one single place (it used to live in a YAML lambda).
+//
+// Measurements of 05/10/2026 that forced this move:
+//   - a SINGLE silent slot (20 s) was enough to reset the chip, while the station transmits every
+//     20 s exactly: one jittered emission made the radio re-arm every 20 s;
+//   - on a marginal SPI link, every re-arm is a lottery: 2 register writes lost in 4 minutes of
+//     measurements, and a lost write leaves the chip misconfigured (a "register not taken" line) —
+//     the watchdog then MAINTAINS the fault instead of curing it.
+// Hence: SPACED re-arms (never one per slot), then a restart, the only remedy measured so far.
+// -------------------------------------------------------------------------------------------
+
+// Setting identifiers; the entities live in number/.
+static const uint8_t PARAM_CRENEAUX_AVANT_REARMEMENT = 0;
+static const uint8_t PARAM_DUREE_MAX_AVANT_REDEMARRAGE = 1;
+// Watchdog slot duration: the station's transmission period (see setup() in the .h).
+static const uint32_t VEILLE_CRENEAU_MS = 20000;
+
+float Vevor7in1::get_parametre(uint8_t p) const {
+  return p == PARAM_DUREE_MAX_AVANT_REDEMARRAGE
+             ? static_cast<float>(this->duree_max_avant_redemarrage_s_)
+             : static_cast<float>(this->creneaux_avant_rearmement_);
+}
+
+void Vevor7in1::set_parametre(uint8_t p, float valeur) {
+  const uint32_t v = valeur < 1.0f ? 1u : static_cast<uint32_t>(valeur + 0.5f);
+  if (p == PARAM_DUREE_MAX_AVANT_REDEMARRAGE) {
+    this->duree_max_avant_redemarrage_s_ = v;
+  } else {
+    this->creneaux_avant_rearmement_ = v;
+  }
+  ESP_LOGI(TAG, "veille : paramètre %u = %u", (unsigned) p, (unsigned) v);
+}
+
+void Vevor7in1::surveiller_radio_() {
+  // The criterion is the PUBLISHED FRAME, never a capture: a capture can be pure noise.
+  if (this->frames_ != this->trames_veille_) {
+    this->trames_veille_ = this->frames_;
+    this->creneaux_muets_ = 0;
+    this->rearmements_ = 0;
+    if (this->reboots_veille_ != 0) {
+      this->reboots_veille_ = 0;
+      this->pref_reboots_.save(&this->reboots_veille_);
+    }
+    return;
+  }
+  this->creneaux_muets_++;
+  const uint32_t muettes_s = this->creneaux_muets_ * (VEILLE_CRENEAU_MS / 1000u);
+  const bool radio_en_echec = (this->radio_ != nullptr) && this->radio_->is_failed();
+  ESP_LOGD(TAG, "veille : aucune trame depuis %u s (radio %s, captures %u)", (unsigned) muettes_s,
+           radio_en_echec ? "EN ECHEC" : "ok", (unsigned) this->captures_);
+
+  if (muettes_s >= this->duree_max_avant_redemarrage_s_) {
+    this->reboots_veille_++;
+    this->pref_reboots_.save(&this->reboots_veille_);
+    // Brake: past ten restarts, only one slot in 45 (15 min) is used, so a genuinely mute board
+    // cannot loop forever.
+    if (this->reboots_veille_ > 10 && (this->creneaux_muets_ % 45u) != 0u) {
+      return;
+    }
+    ESP_LOGW(TAG, "aucune trame depuis %u s (radio %s, captures %u) — redémarrage n°%u",
+             (unsigned) muettes_s, radio_en_echec ? "EN ECHEC" : "ok", (unsigned) this->captures_,
+             (unsigned) this->reboots_veille_);
+    App.safe_reboot();
+    return;
+  }
+
+  const uint32_t pas = this->creneaux_avant_rearmement_ > 0 ? this->creneaux_avant_rearmement_ : 1u;
+  if (this->creneaux_muets_ >= pas && (this->creneaux_muets_ % pas) == 0u) {
+    this->rearmements_++;
+    ESP_LOGW(TAG, "aucune trame depuis %u s — ré-armement radio %u (un tous les %u créneaux)",
+             (unsigned) muettes_s, (unsigned) this->rearmements_, (unsigned) pas);
+    if (this->radio_ != nullptr) {
+      this->radio_->reset();
+    }
+  }
 }
 
 }  // namespace vevor_7in1

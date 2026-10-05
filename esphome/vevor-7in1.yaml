@@ -1,23 +1,23 @@
 # Vevor 7-in-1 weather station receiver, 868 MHz — ESP32-C3 SuperMini + CC1101.
-# Wiring, design choices and the measurements behind them: docs/firmware-design-notes.md
-# Frame layout: references/PROTOCOL.md — Decoder: components/vevor_7in1/vevor_protocol.h
+# Wiring, design choices and measurements: dev/docs/firmware-design-notes.md
+# Frame layout: dev/references/PROTOCOL.md — decoder: esphome/components/vevor_7in1/vevor_protocol.h
 
 substitutions:
   freq_mhz: "868.35"
   deviation_khz: "70"
   symbol_rate: "11111"
   bw_khz: "100"
-  # Niveau de journal (voir le bloc logger). INFO en production ; une campagne de mesure le remonte
-  # sans éditer le fichier : esphome -s niveau_journal DEBUG compile …
+  # Log level (see the logger block): INFO in production, DEBUG for a measurement campaign.
+  # Raised without editing the file: esphome -s niveau_journal DEBUG compile
   niveau_journal: "INFO"
-  # Composants récupérés depuis le dépôt public (voir `external_components` plus bas) :
-  # ce YAML est copiable tel quel chez n'importe qui, aucun fichier du dépôt n'est requis à côté.
-  # Dans CE dépôt, on compile les sources locales : `-s vevor_components components`.
+  # Components fetched from the public repo (see `external_components` below): this YAML is
+  # copyable as-is, no repo file needed beside it. In THIS repo, local sources are compiled
+  # with `-s vevor_components components`.
   vevor_components: "github://WizardPC/esphome-vevor-7-in-1@main"
 
 esphome:
   name: vevor-7in1
-  friendly_name: "Vevor 7-in-1 weather station"   # renommez-le dans Home Assistant, pas ici
+  friendly_name: "Vevor 7-in-1 weather station"   # rename it in Home Assistant, not here
   comment: "Récepteur 868 MHz Vevor 7-in-1 (YT60309) — ESP32-C3 + CC1101"
   on_boot:
     priority: -100          # after every setup(), including the radio and the RMT
@@ -38,14 +38,9 @@ esp32:
     type: esp-idf
 
 logger:
-  # Niveau de journal SUBSTITUABLE : INFO en production, DEBUG pour une campagne de mesure.
-  #   esphome -s niveau_journal DEBUG compile esphome/vevor-7in1.yaml
-  # C'est le niveau GLOBAL qu'il faut lever, et non un niveau par tag : ESPHome refuse un tag plus
-  # verbeux que le niveau global (« must not be less severe » — mesuré le 03/10, un `logs: {v7in1:
-  # DEBUG}` avec `level: INFO` fait échouer la validation). L'enjeu : la ligne « V7IN1 RAW » (les 21
-  # octets bruts) et les motifs de rejet sont en DEBUG, donc ABSENTS d'un build de production — or
-  # c'est exactement ce que `dev/tools/eval_frames.py` recoupe, et ce qui a manqué pour diagnostiquer les
-  # pics de pluie du 03/10. Un build de campagne se fait donc ainsi, sans toucher ce fichier.
+  # Substitutable log level: INFO in production, DEBUG for a measurement campaign.
+  # Raise the GLOBAL level (a more verbose per-tag level is rejected): the RAW line and the
+  # rejection reasons are DEBUG, hence absent from a production build. See design notes §9.
   level: ${niveau_journal}
 
 api:
@@ -67,12 +62,9 @@ ota:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  # Ces deux réglages dépendent du RÉSEAU de l'utilisateur, pas du projet : ils vivent dans
-  # secrets.yaml (fichier non publié). Voir secrets.yaml.example.
-  #   use_address : à renseigner UNIQUEMENT si mDNS ne traverse pas votre réseau (VLAN, autre
-  #                 sous-réseau, carte derrière une passerelle) — sinon ESPHome ne trouve pas
-  #                 la carte pour la mise à jour par le réseau.
-  #   output_power : à baisser si votre point d'accès refuse la puissance d'émission par défaut.
+  # These two settings depend on the user's NETWORK, not the project: they live in secrets.yaml
+  # (unpublished). use_address: only if mDNS does not cross your network (VLAN, other subnet),
+  # else OTA cannot find the board. output_power: lower it if your AP refuses the default.
   use_address: !secret use_address
   output_power: !secret wifi_output_power
   ap:
@@ -82,12 +74,9 @@ wifi:
 captive_portal:
 
 external_components:
-  # Les deux composants viennent du dépôt public : ce bloc est copiable tel quel, rien du dépôt
-  # n'est requis à côté du YAML. Voir README §1.5 (versions figées : remplacer @main par un tag).
-  # Construire depuis l'arbre local (itération dans ce dépôt) exige la surcharge :
-  #   tools/build.sh                                             (déjà le cas)
-  #   esphome compile vevor-7in1.yaml -s vevor_components components
-  # Sans elle, la compilation irait chercher la version PUBLIÉE et ignorerait vos modifications.
+  # Both components come from the public repo: this block is copyable as-is (pin versions by
+  # replacing @main with a tag — README §1.5). Building from the local tree requires the override
+  # `-s vevor_components components` (tools/build.sh already sets it), else your edits are ignored.
   - source: ${vevor_components}
     refresh: 0s
     # esphome/components/cc1101: local copy of ESPHome's driver — identity re-reads, verified
@@ -128,6 +117,7 @@ remote_receiver:
 vevor_7in1:
   id: vevor_rx
   receiver_id: rf_receiver
+  radio_id: radio          # le garde-fou du composant ré-arme la radio lui-même (cc1101.reset)
   bit_period: 90us         # 90, 88, 89 and 87 µs are all tried on each capture
   on_frame:
     then:
@@ -159,22 +149,11 @@ vevor_7in1:
           // One line per frame (one every 20 s). Deliberately at INFO: the host tools read it.
           ESP_LOGI("v7in1", "V7IN1 OK %s", vevor::to_json(f).c_str());
 
-globals:
-  # Counts reboots while the radio was silent. Persistent so a really dead board cannot loop.
-  - id: g_reboots_radio
-    type: int
-    restore_value: true
-    initial_value: "0"
-
-script:
-  # The single re-arm implementation, called by the button AND by the watchdog: one cc1101.reset
-  # (strobe + full configure). Never a chain of setters — see design notes §8.
-  - id: rearmer_radio
-    then:
-      - cc1101.reset: radio
-
 interval:
   # Internal counters, published as entities.
+  # TODO: these four publications are still logic in the YAML; they belong in the component (which
+  # then needs the sensor ids). The watchdog itself already lives in the component:
+  # esphome/components/vevor_7in1/vevor_7in1.cpp.
   - interval: 10s
     then:
       - lambda: |-
@@ -182,58 +161,39 @@ interval:
           id(valid_sensor).publish_state(id(vevor_rx).get_frames());
           id(rejected_sensor).publish_state(id(vevor_rx).get_rejected());
           id(duplicates_sensor).publish_state(id(vevor_rx).get_duplicates());
-  # Watchdog. The station transmits one burst every 20 s, day and night, so any silence is a
-  # receiver fault. The criterion is PUBLISHED FRAMES, never captures. 30 × 20 s of gentle
-  # re-arms, then a reboot — the only remedy measured so far. See design notes §8.
-  - interval: 20s
-    then:
-      - lambda: |-
-          static uint32_t dernieres_trames = 0;
-          static int muettes = 0;
-          const uint32_t t = id(vevor_rx).get_frames();
-          if (t != dernieres_trames) {
-            dernieres_trames = t;
-            muettes = 0;
-            id(g_reboots_radio) = 0;
-            return;
-          }
-          muettes++;
-          ESP_LOGD("v7in1", "SANTE radio=%s trames=%u captures=%u (aucune trame depuis %d s)",
-                   id(radio).is_failed() ? "EN ECHEC" : "ok", (unsigned) t,
-                   (unsigned) id(vevor_rx).get_captures(), muettes * 20);
-          if (muettes <= 30) {
-            ESP_LOGD("v7in1", "aucune trame depuis %d s — tentative d'initialisation radio %d/30",
-                     muettes * 20, muettes);
-            id(rearmer_radio).execute();
-            return;
-          }
-          if (id(g_reboots_radio) < 10 || (muettes % 45) == 0) {
-            id(g_reboots_radio) = id(g_reboots_radio) + 1;
-            ESP_LOGW("v7in1", "aucune trame depuis %d min (radio %s, captures=%u) — redemarrage n°%d",
-                     muettes / 3, id(radio).is_failed() ? "EN ECHEC" : "ok",
-                     (unsigned) id(vevor_rx).get_captures(), (int) id(g_reboots_radio));
-            App.safe_reboot();
-          }
 
 button:
-  # Diagnostic instruments, exposed in Home Assistant as configuration entities.
-  - platform: template
+  # Instruments de diagnostic. Le composant les possède (platform: vevor_7in1) : le YAML ne fait
+  # que les nommer. « Re-apply radio config » partage le ré-armement du garde-fou.
+  - platform: vevor_7in1
+    vevor_7in1_id: vevor_rx
+    type: dump_pulses
     name: "Dump pulses"
-    id: dump_button
     entity_category: config
-    on_press:
-      - lambda: id(vevor_rx).request_raw_dump();
-  - platform: template
+  - platform: vevor_7in1
+    vevor_7in1_id: vevor_rx
+    type: reapply_radio
     name: "Re-apply radio config"
-    id: radio_reapply_button
     entity_category: config
-    on_press:
-      then:
-        - script.execute: rearmer_radio
   - platform: restart
     name: "Restart board"
 
 number:
+  # Reception watchdog: its only two settings, exposed here as Home Assistant entities. The policy
+  # lives in the component (esphome/components/vevor_7in1/vevor_7in1.cpp): the YAML only names and
+  # bounds. Compiled defaults: 3 slots (60 s) before a re-arm, 180 s of silence before a restart.
+  - platform: vevor_7in1
+    vevor_7in1_id: vevor_rx
+    type: creneaux_avant_rearmement
+    name: "Watchdog silent slots before re-arm"
+    unit_of_measurement: "x20 s"
+    entity_category: config
+  - platform: vevor_7in1
+    vevor_7in1_id: vevor_rx
+    type: duree_max_avant_redemarrage
+    name: "Watchdog max silence before restart"
+    unit_of_measurement: "s"
+    entity_category: config
   - platform: template
     name: "CC1101 frequency"
     id: freq_number

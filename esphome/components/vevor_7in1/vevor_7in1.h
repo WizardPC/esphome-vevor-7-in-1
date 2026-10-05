@@ -1,27 +1,19 @@
 #pragma once
-// Extracteur de trames Vevor 7-en-1 depuis le flux démodulé du CC1101.
+// Vevor 7-in-1 frame extractor from the CC1101 demodulated stream.
 //
-// Pourquoi ce composant : le mode « packet » du CC1101 n'a jamais produit une seule trame
-// cohérente sur ce montage (voir state/PROGRESS.md). La voie qui fonctionne est la voie
-// ASYNCHRONE : le composant `cc1101` d'ESPHome bascule la puce en mode série asynchrone dès que
-// `packet_mode` est absent (PKT_FORMAT = 3) et sort le signal démodulé sur GDO0 ;
-// `remote_receiver` le transforme en durées d'impulsions, que nous convertissons en bits puis en
-// trames.
+// The packet mode never produced a coherent frame here; the working path is ASYNCHRONOUS. With
+// `packet_mode` absent the `cc1101` component uses async serial mode (PKT_FORMAT = 3), outputs the
+// demodulated signal on GDO0, and `remote_receiver` turns it into pulse durations (bits -> frames).
 //
-// Ce fichier ne contient AUCUNE logique de protocole : la conversion impulsions → octets est
-// dans `includes/vevor_protocol.h` (C++ pur, testable à froid), et la validation (en-tête,
-// checksum, compteur) y est aussi. Ici : brancher le récepteur, recolller les morceaux de
-// rafale, compter, déclencher.
+// This file holds NO protocol logic: pulses -> bytes live in `vevor_protocol.h` (pure C++, testable
+// off-hardware) with validation (header, checksum, counter). Here: wire the receiver, stitch burst
+// fragments, count, trigger.
 //
-// ⚠️ RÈGLE DURE, MESURÉE (01/10/2026) — NE PAS INSTRUMENTER LA PUCE DEPUIS CE FIRMWARE
-// Ce composant a longtemps déclaré un SECOND périphérique SPI sur le bus du `cc1101`, pour lire
-// ses registres de diagnostic (RSSI, MARCSTATE…). Résultat mesuré, en alternance avec un
-// firmware de référence sur la même carte dans les mêmes fenêtres d'émission : **0 capture RMT
-// et 0 trame avec ce second périphérique, 5 trames/60 s sans lui**. Un second périphérique SPI
-// sur le bus suffit donc à rendre la puce muette, même avec une broche CS libre et non câblée.
-// L'instrumentation a été SUPPRIMÉE (pas désactivée) : elle rendait la réception impossible et,
-// comme `SPIDelegate::is_ready()` renvoie `true` sans condition, elle publiait en plus des
-// valeurs fabriquées. La puce doit rester le seul périphérique de son bus.
+// HARD RULE — NEVER INSTRUMENT THE CHIP FROM THIS FIRMWARE
+//
+// A second SPI device on the `cc1101` bus makes the chip mute: 0 RMT captures and 0 frames with it,
+// 5 frames/60 s without it. Removed, not disabled (dev/docs/firmware-design-notes.md §4) — the chip
+// must stay the only device on its bus.
 
 #include <cmath>
 #include <cstdint>
@@ -33,18 +25,21 @@
 #include "esphome/core/component.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
+#include "esphome/core/application.h"
+#include "esphome/core/preferences.h"
+#include "esphome/components/cc1101/cc1101.h"
 #include "esphome/components/remote_base/remote_base.h"
 #include "esphome/components/remote_receiver/remote_receiver.h"
 
-// La chaîne impulsions → trame vit à côté de ce fichier (`vevor_protocol.h`, dans le dossier du
-// composant) : ESPHome copie TOUT le dossier du composant dans le build, et un include entre
-// guillemets cherche d'abord dans le dossier du fichier incluant. Aucun `-I` ni bloc
-// `esphome: includes:` n'est donc nécessaire, et le composant reste autonome — c'est ce qui
-// permet de le récupérer tel quel depuis le dépôt public :
+// The pulses -> frame chain lives next to this file (`vevor_protocol.h`): ESPHome copies the WHOLE
+// component folder into the build and a quoted include first searches the including file's folder,
+// so no `-I` or `esphome: includes:` is needed and the component stays self-contained:
+//
 //   external_components:
 //     - source: github://WizardPC/esphome-vevor-7-in-1@main
 //       components: [vevor_7in1, cc1101]
-// Testable hors matériel : tools/run_tests.sh.
+//
+// Testable off-hardware: tools/run_tests.sh.
 #include "vevor_protocol.h"
 
 namespace esphome {
@@ -52,21 +47,39 @@ namespace vevor_7in1 {
 
 static const char *const TAG = "vevor_7in1";
 
-// Fenêtre de déduplication : la même rafale peut être livrée deux fois par le RMT (le tampon
-// matériel du C3 fait 96 symboles et le pilote redistribue des morceaux). Deux trames
-// identiques OCTET POUR OCTET à moins de 5 s d'écart sont donc un doublon de livraison, pas
-// une nouvelle mesure — au-delà, on republie (une station qui répéterait la même trame plus
-// tard mérite d'être vue).
+// Dedup window: the RMT can deliver the same burst twice (the C3 hardware buffer holds 96 symbols
+// and the driver re-splits chunks). Two frames identical BYTE FOR BYTE within 5 s are a duplicate
+// delivery, not a new measurement; beyond 5 s we republish.
 static const uint32_t DUP_WINDOW_MS = 5000;
 
-// Battement de cœur. Sans lui, « aucune trame » ne dit pas si la puce n'émet rien sur GDO0 ou
-// si c'est nous qui ne comprenons rien — deux diagnostics opposés, et une perte de temps.
+// Heartbeat. Without it, "no frame" cannot say whether the chip emits nothing on GDO0 or whether we
+// fail to understand it — two opposite diagnoses.
 static const uint32_t HEARTBEAT_MS = 5000;
 
 class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase {
  public:
   void set_receiver(remote_receiver::RemoteReceiverComponent *r) { this->receiver_ = r; }
+  // The radio, so the watchdog can re-arm it (a full reset, see design notes §8). Declared here,
+  // never driven from the YAML: the policy is code.
+  void set_radio(cc1101::CC1101Component *r) { this->radio_ = r; }
   void set_bit_period(uint32_t us) { this->bit_period_us_ = us; }
+
+  // Reception watchdog settings, changeable from Home Assistant (the `number` entities of the
+  // number/ sub-platform). The component owns them; the YAML only names and bounds them.
+  float get_parametre(uint8_t p) const;
+  void set_parametre(uint8_t p, float valeur);
+
+  // On-demand re-arm (the "Re-apply radio config" button): EXACTLY the same gesture as the
+  // watchdog, so the two cannot drift apart. It also clears the silence counter: a manual re-arm
+  // gives the radio its full delay back.
+  void reapply_radio() {
+    this->creneaux_muets_ = 0;
+    this->rearmements_ = 0;
+    if (this->radio_ != nullptr) {
+      ESP_LOGW(TAG, "ré-armement radio demandé depuis Home Assistant");
+      this->radio_->reset();
+    }
+  }
 
   void setup() override {
     if (this->receiver_ == nullptr) {
@@ -76,9 +89,14 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
     }
     this->receiver_->register_dumper(this);
     this->bits_.resize(vevor::MAX_BITS);
-    // Depuis le 03/10 la période bit n'est plus supposée : elle est MESURÉE sur chaque rafale
-    // (estimer_periode_x10), ce qui rend le décodeur indépendant de la station et de la carte. La
-    // grille de PERIOD_CANDIDATES ne sert plus que de repli si l'estimation est refusée.
+    // Reception watchdog: the policy lives here (see surveiller_radio_()), never in the YAML.
+    // The 20 s slot is the station's transmission period.
+    this->pref_reboots_ = global_preferences->make_preference<uint32_t>(0x7A1B5747u, true);
+    this->pref_reboots_.load(&this->reboots_veille_);
+    this->set_interval("veille", 20000, [this]() { this->surveiller_radio_(); });
+    // The bit period is no longer assumed: it is MEASURED on each burst (estimer_periode_x10), so
+    // the decoder is independent of station and board. PERIOD_CANDIDATES is only a fallback if the
+    // estimate is refused.
     ESP_LOGI(TAG,
              "enregistré comme dumper PRIMAIRE (période bit MESURÉE sur la rafale ; repli : %u "
              "valeurs de %d à %d us ; deux polarités testées à chaque capture)",
@@ -108,50 +126,44 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
                   (unsigned) this->repairs_, (unsigned) this->repairs_rejetees_);
   }
 
-  // PRIMAIRE volontairement : dans `remote_base`, les dumpers secondaires ne sont appelés que
-  // si AUCUN dumper primaire n'a « réussi » (cf. RemoteReceiverBase::call_dumpers_). En
-  // secondaire, notre extracteur pouvait donc ne jamais tourner selon la configuration ; en
-  // primaire il est appelé à chaque capture, sans condition.
+  // Deliberately PRIMARY: in `remote_base`, secondary dumpers are called only if NO primary dumper
+  // "succeeded" (RemoteReceiverBase::call_dumpers_), so as a secondary our extractor could never
+  // run depending on config; as primary it is called on every capture, unconditionally.
   bool is_secondary() override { return false; }
   bool dump(remote_base::RemoteReceiveData src) override;
 
-  // Déclenche la journalisation des impulsions de la PROCHAINE capture (les 64 premières
-  // durées). Indispensable pour analyser le flux réel depuis l'extérieur : l'API ne livre que
-  // des logs, et les captures #1 à #3 sont déjà passées quand l'API devient joignable.
-  // 02/10 — le dump ne relevait qu'UNE capture, celle qui suivait l'appui : on est tombé sur une
-  // capture vide et on n'a rien pu conclure. On en relève maintenant 24 d'affilée, de quoi voir
-  // ce que la puce reçoit réellement quand son compteur de captures avance.
+  // Triggers logging of the pulses of the NEXT capture (its first 64 durations), 24 captures in a
+  // row. Essential to analyse the real flow from outside: the API only delivers logs, and captures
+  // #1-#3 are already past when the API becomes reachable.
   void request_raw_dump() {
     this->dump_requested_ = true;
     this->dump_restants_ = 24;
   }
-  // Re-journalise la configuration effective du `remote_receiver` (filtre, idle, symboles RMT,
-  // tolérance) et son état, une fois l'API joignable. Sans ça, on ne peut pas vérifier depuis
-  // l'extérieur ce que le RMT a réellement en main : son `dump_config()` part au démarrage,
-  // AVANT que l'API accepte une connexion.
+  // Re-logs the effective `remote_receiver` configuration (filter, idle, RMT symbols, tolerance),
+  // once the API is reachable: we cannot verify from outside what the RMT really holds, since its
+  // `dump_config()` runs at boot, BEFORE the API accepts a connection.
   void dump_receiver_config_();
 
   Trigger<std::vector<uint8_t>> *get_frame_trigger() { return &this->frame_trigger_; }
   uint32_t get_frames() const { return this->frames_; }
   uint32_t get_captures() const { return this->captures_; }
   uint32_t get_duplicates() const { return this->duplicates_; }
-  // Candidats vus dans le flux (mot de synchronisation trouvé) mais REFUSÉS par la validation :
-  // checksum, compteur, en-tête. C'est le vrai compteur de bruit du décodage — distinct de
-  // « aucune capture », qui veut dire que rien n'arrive à la puce.
+  // Candidates seen in the stream (sync word found) but REFUSED by validation: checksum, counter,
+  // header. The real decoding-noise counter — distinct from "no capture", which means nothing
+  // reaches the chip.
   uint32_t get_rejected() const { return this->rejected_; }
-  // Trames sorties après une RÉPARATION bornée (voir vevor_protocol.h). Compteur séparé : une
-  // trame réparée ne vaut pas une trame décodée directement, et ce chiffre doit être visible.
+  // Frames emitted after a bounded REPAIR (see vevor_protocol.h). Separate counter: a repaired
+  // frame is not worth a directly decoded one, and this number must be visible.
   uint32_t get_repairs() const { return this->repairs_; }
   uint32_t get_repairs_rejetees() const { return this->repairs_rejetees_; }
-  // Trames refusées par le contrôle de continuité de la PLUIE (hausse physiquement impossible) :
-  // c'est le compteur à surveiller pour savoir si le défaut constaté le 03/10 se reproduit.
+  // Frames refused by the RAIN continuity check (physically impossible rise): the counter to watch
+  // for recurrence of the reception fault.
   uint32_t get_rain_rejected() const { return this->rain_rejected_; }
 
  protected:
-  // Recolle la fin de la capture précédente au début de la courante, et fusionne les deux
-  // impulsions de même signe à la soudure (une coupure au milieu d'une impulsion donne deux
-  // demi-impulsions de même signe : c'est l'« extra = −180 us » que le firmware de référence
-  // journalise). Renvoie la longueur utilisable.
+  // Stitches the end of the previous capture to the start of the current one, merging the two
+  // same-sign pulses at the seam (a cut in the middle of a pulse gives two half-pulses of the same
+  // sign: the "extra = -180 us" the reference firmware logs). Returns the usable length.
   size_t build_stitched_(const std::vector<int32_t> &timings);
 
   remote_receiver::RemoteReceiverComponent *receiver_{nullptr};
@@ -161,34 +173,48 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   uint32_t captures_{0};
   uint32_t rejected_{0};
   uint32_t duplicates_{0};
-  // Trames sorties après une réparation bornée, et celles que le garde-fou de continuité a
-  // refusées (voir dump()). Séparées volontairement : ce sont des chiffres de qualité différente.
+  // Frames emitted after a bounded repair, and those the continuity guard refused (see dump()).
+  // Deliberately separate: numbers of different quality.
   uint32_t repairs_{0};
   uint32_t repairs_rejetees_{0};
-  // Trames refusées parce que la pluie montait d'un coup physiquement impossible (voir
-  // pluie_plausible). Compteur séparé : c'est un défaut de réception, pas un rejet de protocole.
+  // Frames refused because rain rose by a physically impossible jump (see pluie_plausible).
+  // Separate counter: a reception fault, not a protocol rejection.
   uint32_t rain_rejected_{0};
-  // Suivi pour le battement de cœur (voir loop()).
+  // Tracking for the heartbeat (see loop()).
   uint32_t last_report_ms_{0};
   uint32_t reported_captures_{0};
   size_t last_pulse_count_{0};
   size_t longest_capture_{0};
-  // Déduplication des livraisons en double (voir DUP_WINDOW_MS).
+  // Deduplication of double deliveries (see DUP_WINDOW_MS).
   uint8_t last_frame_[vevor::FRAME_BYTES]{};
   uint32_t last_frame_ms_{0};
   bool has_last_frame_{false};
-  // Vrai = journaliser les impulsions de la prochaine capture (voir request_raw_dump()).
+  // True = log the pulses of the next capture (see request_raw_dump()).
   bool dump_requested_{false};
-  // Nombre de captures restant à journaliser après un appui sur « Dump impulsions ».
+  // Number of captures left to log after the "Dump pulses" button.
   uint16_t dump_restants_{0};
-  // Vrai = la configuration du récepteur a déjà été re-journalisée (voir dump_receiver_config_).
+  // True = the receiver configuration has already been re-logged (see dump_receiver_config_).
   bool receiver_dumped_{false};
   uint32_t heartbeats_{0};
-  // Dernière capture reçue : mémorisée SEULEMENT si c'était un morceau (voir dump()), pour ne
-  // recoller qu'un morceau à un morceau.
+
+  // --- Reception watchdog (policy in code, never in the YAML; design notes §8) ---
+  // One single copy of this logic: if you change it here, that is the change.
+  cc1101::CC1101Component *radio_{nullptr};
+  // Silent slots before a re-arm, and total silence before a restart: the only two settings
+  // exposed (`number` entities, number/ sub-platform).
+  uint32_t creneaux_avant_rearmement_{3};
+  uint32_t duree_max_avant_redemarrage_s_{180};
+  uint32_t creneaux_muets_{0};
+  uint32_t trames_veille_{0};
+  uint32_t rearmements_{0};
+  uint32_t reboots_veille_{0};
+  ESPPreferenceObject pref_reboots_{};
+  void surveiller_radio_();
+  // Last capture received: stored ONLY if it was a fragment (see dump()), so we only stitch a
+  // fragment to a fragment.
   std::vector<int32_t> prev_fragment_;
   std::vector<int32_t> stitched_;
-  // Tampon de travail de la conversion durées → bits (réutilisé à chaque capture).
+  // Working buffer for durations -> bits conversion (reused on every capture).
   std::vector<uint8_t> bits_;
 };
 

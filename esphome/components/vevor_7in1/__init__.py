@@ -1,29 +1,29 @@
 import esphome.automation as automation
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import remote_base, remote_receiver
+from esphome.components import cc1101, remote_base, remote_receiver
 from esphome.const import CONF_ID
 
-# Composant d'extraction de trames Vevor 7-en-1 depuis le flux démodulé du CC1101.
+# Vevor 7-in-1 frame extractor from the CC1101 demodulated stream.
 #
-# Rôle volontairement limité : convertir des impulsions en octets et remettre la trame brute au
-# YAML (trigger `on_frame`). La logique de protocole (en-tête, checksum, compteur, plages de
-# valeurs) vit dans `includes/vevor_protocol.h`, du C++ pur testable sans matériel
-# (`tools/run_tests.sh`). Cette séparation permet de tester le décodage à froid et de ne
-# reflasher que pour la partie radio.
+# Role deliberately limited: turn pulses into bytes and hand the raw frame back to the YAML
+# (`on_frame` trigger). Protocol logic (header, checksum, counter, value ranges) lives in
+# `includes/vevor_protocol.h`, pure C++ testable without hardware (`tools/run_tests.sh`).
 #
-# ⚠️ AUCUN ACCÈS SPI. Ce composant déclarait autrefois un second périphérique sur le bus SPI du
-# CC1101 pour lire ses registres de diagnostic. Mesuré le 01/10/2026, en alternance avec un
-# firmware de référence sur la même carte et dans les mêmes fenêtres d'émission : 0 capture et
-# 0 trame AVEC ce second périphérique, 5 trames/60 s SANS lui. La puce doit rester le seul
-# périphérique de son bus — l'instrumentation a donc été supprimée, pas désactivée.
+# NO SPI ACCESS. A second SPI device on the CC1101 bus makes the chip mute: 0 captures and 0 frames
+# with it, 5 frames/60 s without it. Removed, not disabled; the chip must stay the only device on
+# its bus (see dev/docs/firmware-design-notes.md §4).
 
 CODEOWNERS = ["@projet-vevor-7in1"]
-DEPENDENCIES = ["remote_receiver"]
+DEPENDENCIES = ["remote_receiver", "cc1101"]
 
 CONF_RECEIVER_ID = "receiver_id"
+CONF_RADIO_ID = "radio_id"
 CONF_BIT_PERIOD = "bit_period"
 CONF_ON_FRAME = "on_frame"
+
+# Identifiant du composant parent, réutilisé par les sous-plateformes (number/).
+CONF_VEVOR_7IN1_ID = "vevor_7in1_id"
 
 vevor_7in1_ns = cg.esphome_ns.namespace("vevor_7in1")
 Vevor7in1 = vevor_7in1_ns.class_(
@@ -39,10 +39,13 @@ CONFIG_SCHEMA = (
             cv.Required(CONF_RECEIVER_ID): cv.use_id(
                 remote_receiver.RemoteReceiverComponent
             ),
-            # Période bit nominale : 90 µs (valeur du protocole publiée et du montage témoin qui
-            # décode) — le composant essaie de toute façon plusieurs périodes voisines à chaque
-            # capture, ce paramètre n'est qu'un point de départ pour les logs.
+            # Nominal bit period: 90 µs (published protocol value, and the witness build that
+            # decodes) — the component tries several nearby periods on every capture anyway, so
+            # this parameter is only a starting point for the logs.
             cv.Optional(CONF_BIT_PERIOD, default="90us"): cv.positive_time_period_microseconds,
+            # La radio, pour que le garde-fou puisse la ré-armer (cc1101.reset) : la politique est
+            # dans le composant, le YAML ne fait que désigner la radio.
+            cv.Optional(CONF_RADIO_ID): cv.use_id(cc1101.CC1101Component),
             cv.Optional(CONF_ON_FRAME): automation.validate_automation(single=True),
         }
     )
@@ -57,6 +60,10 @@ async def to_code(config):
     receiver = await cg.get_variable(config[CONF_RECEIVER_ID])
     cg.add(var.set_receiver(receiver))
     cg.add(var.set_bit_period(int(config[CONF_BIT_PERIOD].total_microseconds)))
+
+    if CONF_RADIO_ID in config:
+        radio = await cg.get_variable(config[CONF_RADIO_ID])
+        cg.add(var.set_radio(radio))
 
     if CONF_ON_FRAME in config:
         await automation.build_automation(
