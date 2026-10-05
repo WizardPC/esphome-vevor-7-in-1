@@ -169,7 +169,6 @@ interval:
           id(valid_sensor).publish_state(id(vevor_rx).get_frames());
           id(rejected_sensor).publish_state(id(vevor_rx).get_rejected());
           id(duplicates_sensor).publish_state(id(vevor_rx).get_duplicates());
-          id(rearmements_surdite_sensor).publish_state(id(vevor_rx).get_rearmements_surdite());
 
 button:
   # Instruments de diagnostic. Le composant les possède (platform: vevor_7in1) : le YAML ne fait
@@ -205,12 +204,15 @@ number:
     entity_category: config
   # Fast criterion: a capture below this many pulses cannot hold a burst. 40 sits between a fragment
   # (70-96 pulses, normal after an RMT cut) and silence (2-7 pulses, a chip that stopped delivering).
-  - platform: vevor_7in1
-    vevor_7in1_id: vevor_rx
-    type: seuil_impulsions
-    name: "Silent capture pulse threshold"
-    unit_of_measurement: "pulses"
-    entity_category: config
+  # DELIBERATELY NOT SHIPPED YET (05/10): the paired on-board test showed a periodic re-arm does not
+  # end the deaf episodes (two presses fell inside one and it cleared by itself) while the historical
+  # logs show the same outage durations with and without the watchdog. Re-bench before enabling.
+  # - platform: vevor_7in1
+  #   vevor_7in1_id: vevor_rx
+  #   type: seuil_impulsions
+  #   name: "Silent capture pulse threshold"
+  #   unit_of_measurement: "pulses"
+  #   entity_category: config
   # Station identity: 0 (default) learns the first station seen; any other value PINS that station
   # and drops every other ID (a neighbour's station on the same protocol). See vevor_7in1.cpp.
   - platform: vevor_7in1
@@ -232,6 +234,54 @@ number:
     on_value:
       then:
         - cc1101.set_frequency: !lambda "return x * 1000000.0f;"
+  # Radio settings exposed so they can be SWEPT LIVE: the driver registers cc1101.set_* actions, so
+  # a change takes effect without recompiling. Inert until moved, and no restore_value: a reboot
+  # returns to the compiled values. Why: our RX filter (100 kHz requested, 101.6 kHz actually written
+  # into MDMCFG4) is narrower than a 2-FSK signal at ±70 kHz deviation occupies (~151-163 kHz,
+  # Carson), which distorts the demodulated waveform — the mark/space duty asymmetry measured on our
+  # captures. Initial values are the COMPILED ones, so a boot write is a no-op.
+  - platform: template
+    name: "RX filter bandwidth"
+    id: bw_number
+    unit_of_measurement: kHz
+    min_value: 58
+    max_value: 812
+    step: 1
+    initial_value: 100
+    optimistic: true
+    restore_value: false
+    entity_category: config
+    on_value:
+      then:
+        - cc1101.set_filter_bandwidth: !lambda "return x * 1000.0f;"
+  - platform: template
+    name: "Data rate"
+    id: symbol_rate_number
+    unit_of_measurement: baud
+    min_value: 600
+    max_value: 500000
+    step: 50
+    initial_value: 11111
+    optimistic: true
+    restore_value: false
+    entity_category: config
+    on_value:
+      then:
+        - cc1101.set_symbol_rate: !lambda "return x;"
+  - platform: template
+    name: "FSK deviation"
+    id: deviation_number
+    unit_of_measurement: kHz
+    min_value: 1.5
+    max_value: 381
+    step: 0.5
+    initial_value: 70
+    optimistic: true
+    restore_value: false
+    entity_category: config
+    on_value:
+      then:
+        - cc1101.set_fsk_deviation: !lambda "return x * 1000.0f;"
 
 sensor:
   - platform: template
@@ -317,12 +367,12 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
   # Re-arms triggered by the FAST criterion (a capture too short to hold a burst) — as opposed to the
-  # slow criterion (a whole silent slot). The two are counted separately on purpose.
-  - platform: template
-    name: "Radio re-arms (deaf chip)"
-    id: rearmements_surdite_sensor
-    accuracy_decimals: 0
-    entity_category: diagnostic
+  # slow criterion (a whole silent slot). NOT SHIPPED YET: see the comment on seuil_impulsions above.
+  # - platform: template
+  #   name: "Radio re-arms (deaf chip)"
+  #   id: rearmements_surdite_sensor
+  #   accuracy_decimals: 0
+  #   entity_category: diagnostic
 
 binary_sensor:
   - platform: template
