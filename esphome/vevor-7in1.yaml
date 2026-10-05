@@ -115,7 +115,15 @@ remote_receiver:
   pin:
     number: GPIO3          # the CC1101 GDO0 pin — a single data wire
   filter: 45us             # half a bit period: shorter pulses are noise (design notes §7)
-  idle: 1100us             # closes one burst into one capture
+  # Closes one burst into one capture. RAISED 1100us -> 8000us (05/10/2026): at 1100 the setting cut
+  # the frame in the MIDDLE. Raw pulses after a full burst showed every duration as an exact multiple
+  # of ~88 us (88/176/265/354/442/530/619/706/798 — run lengths in a PCM encoding), so the signal is
+  # clean, but each fragment ended on an impulse of exactly 1100 us: our own threshold, not the real
+  # silence. The frame therefore arrived as TWO fragments of 96 and 74 impulses (170 total, i.e. the
+  # whole burst), neither holding a complete sync word, so nothing was decoded and the rejects piled
+  # up. The reference project uses 9000 us. 8000 is well above any intra-frame silence and far below
+  # the station's 20 s cycle, so captures cannot merge across transmissions.
+  idle: 8000us
   receive_symbols: 512
   tolerance: 25%
 
