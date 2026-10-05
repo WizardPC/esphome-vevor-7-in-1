@@ -289,6 +289,10 @@ number:
     on_value:
       then:
         - cc1101.set_fsk_deviation: !lambda "return x * 1000.0f;"
+  # Marge de compensation de fréquence de la puce : réglée à BW/2 (±81 kHz) dans notre copie locale
+  # du pilote (esphome/components/cc1101/cc1101.cpp, commentaire du 05/10/2026). Le pilote n'expose
+  # pas d'action cc1101.set_foc_limit, donc ce n'est pas balayable à chaud — la valeur vit dans le
+  # code, avec le raisonnement et la mesure. Voir dev/state/CAMPAGNE_20261005.md.
 
 sensor:
   - platform: template

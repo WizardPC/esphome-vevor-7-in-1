@@ -54,7 +54,14 @@ CC1101Component::CC1101Component() {
   this->state_.RX_TIME = 7;
   this->state_.CCA_MODE = 3;
   this->state_.PO_TIMEOUT = 1;
-  this->state_.FOC_LIMIT = 2;
+  // MODIFICATION LOCALE — BW/4 -> BW/2 (05/10/2026). La compensation de fréquence recentre le
+  // tranchant de décision du démodulateur, mais seulement dans cette fenêtre : BW/4 = ±40 kHz avec
+  // un filtre de 162 kHz. Or DEUX quartz dérivent (la station et la nôtre) et leur somme dépasse
+  // cette marge : la puce ne recentre plus, le rapport cyclique se déforme, et le décodeur refuse
+  // des trames dont il a pourtant trouvé le mot de synchronisation — 60 rejets et 0 trame mesurés
+  // à 868,35 le 05/10 au soir, là où le même réglage donnait 7 trames vingt minutes plus tôt.
+  // BW/2 porte la fenêtre à ±81 kHz. Voir dev/state/CAMPAGNE_20261005.md.
+  this->state_.FOC_LIMIT = 3;
   this->state_.FOC_POST_K = 1;
   this->state_.FOC_PRE_K = 2;
   this->state_.FOC_BS_CS_GATE = 1;
