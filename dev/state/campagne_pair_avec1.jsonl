@@ -1,0 +1,348 @@
+{"ev": "phase_debut", "t": 1791203489.909, "h": "12:31:29", "creneaux": 30, "redemarrage_s": 3600, "duree_s": 600, "mode": "clair", "appui_periode_s": 120}
+{"ev": "reglage_envoye", "t": 1791203489.95, "h": "12:31:29", "parametre": "creneaux_avant_rearmement", "valeur": 30}
+{"ev": "reglage_envoye", "t": 1791203489.95, "h": "12:31:29", "parametre": "duree_max_avant_redemarrage", "valeur": 3600}
+{"ev": "abonnement_capteurs", "t": 1791203489.95, "h": "12:31:29", "noms": ["Station ID", "TX counter", "Valid frames", "Rejected frames", "RMT captures", "Duplicates ignored"]}
+{"ev": "abonnement_journal", "t": 1791203489.95, "h": "12:31:29"}
+{"ev": "connecte", "t": 1791203489.95, "h": "12:31:29", "entites": 24}
+{"ev": "appui_reapply", "t": 1791203489.951, "h": "12:31:29"}
+{"ev": "etat", "t": 1791203490.048, "h": "12:31:30", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203490.048, "h": "12:31:30", "nom": "TX counter", "valeur": 17.0}
+{"ev": "etat", "t": 1791203490.048, "h": "12:31:30", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203490.048, "h": "12:31:30", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203490.048, "h": "12:31:30", "nom": "RMT captures", "valeur": 1074.0}
+{"ev": "etat", "t": 1791203490.048, "h": "12:31:30", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "etat", "t": 1791203490.048, "h": "12:31:30", "nom": "Watchdog silent slots before re-arm", "valeur": 30.0}
+{"ev": "etat", "t": 1791203490.048, "h": "12:31:30", "nom": "Watchdog max silence before restart", "valeur": 3600.0}
+{"ev": "compteurs", "t": 1791203490.434, "h": "12:31:30", "captures": 1076, "delta": 2, "trames": 296, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 2, "plus_longue": 188}
+{"ev": "etat", "t": 1791203496.557, "h": "12:31:36", "nom": "RMT captures", "valeur": 1076.0}
+{"ev": "etat", "t": 1791203496.557, "h": "12:31:36", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203496.557, "h": "12:31:36", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203496.557, "h": "12:31:36", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "compteurs", "t": 1791203505.461, "h": "12:31:45", "captures": 1079, "delta": 3, "trames": 296, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 2, "plus_longue": 188}
+{"ev": "etat", "t": 1791203506.568, "h": "12:31:46", "nom": "RMT captures", "valeur": 1079.0}
+{"ev": "etat", "t": 1791203506.568, "h": "12:31:46", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203506.568, "h": "12:31:46", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203506.568, "h": "12:31:46", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "etat", "t": 1791203516.571, "h": "12:31:56", "nom": "RMT captures", "valeur": 1079.0}
+{"ev": "etat", "t": 1791203516.571, "h": "12:31:56", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203516.571, "h": "12:31:56", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203516.571, "h": "12:31:56", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "compteurs", "t": 1791203525.504, "h": "12:32:05", "captures": 1080, "delta": 1, "trames": 296, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 5, "plus_longue": 188}
+{"ev": "etat", "t": 1791203526.561, "h": "12:32:06", "nom": "RMT captures", "valeur": 1080.0}
+{"ev": "etat", "t": 1791203526.562, "h": "12:32:06", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203526.562, "h": "12:32:06", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203526.562, "h": "12:32:06", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "etat", "t": 1791203536.565, "h": "12:32:16", "nom": "RMT captures", "valeur": 1080.0}
+{"ev": "etat", "t": 1791203536.565, "h": "12:32:16", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203536.565, "h": "12:32:16", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203536.565, "h": "12:32:16", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "compteurs", "t": 1791203545.542, "h": "12:32:25", "captures": 1081, "delta": 1, "trames": 296, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 5, "plus_longue": 188}
+{"ev": "etat", "t": 1791203546.555, "h": "12:32:26", "nom": "RMT captures", "valeur": 1081.0}
+{"ev": "etat", "t": 1791203546.555, "h": "12:32:26", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203546.555, "h": "12:32:26", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203546.555, "h": "12:32:26", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "etat", "t": 1791203556.568, "h": "12:32:36", "nom": "RMT captures", "valeur": 1081.0}
+{"ev": "etat", "t": 1791203556.568, "h": "12:32:36", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203556.569, "h": "12:32:36", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203556.569, "h": "12:32:36", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "compteurs", "t": 1791203565.582, "h": "12:32:45", "captures": 1083, "delta": 2, "trames": 296, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 2, "plus_longue": 188}
+{"ev": "etat", "t": 1791203566.563, "h": "12:32:46", "nom": "RMT captures", "valeur": 1083.0}
+{"ev": "etat", "t": 1791203566.564, "h": "12:32:46", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203566.564, "h": "12:32:46", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203566.564, "h": "12:32:46", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "etat", "t": 1791203576.566, "h": "12:32:56", "nom": "RMT captures", "valeur": 1083.0}
+{"ev": "etat", "t": 1791203576.566, "h": "12:32:56", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203576.566, "h": "12:32:56", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203576.566, "h": "12:32:56", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "compteurs", "t": 1791203585.625, "h": "12:33:05", "captures": 1084, "delta": 1, "trames": 296, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 3, "plus_longue": 188}
+{"ev": "etat", "t": 1791203586.558, "h": "12:33:06", "nom": "RMT captures", "valeur": 1084.0}
+{"ev": "etat", "t": 1791203586.558, "h": "12:33:06", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203586.558, "h": "12:33:06", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203586.558, "h": "12:33:06", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "etat", "t": 1791203596.562, "h": "12:33:16", "nom": "RMT captures", "valeur": 1084.0}
+{"ev": "etat", "t": 1791203596.562, "h": "12:33:16", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203596.562, "h": "12:33:16", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203596.562, "h": "12:33:16", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "compteurs", "t": 1791203605.654, "h": "12:33:25", "captures": 1085, "delta": 1, "trames": 296, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 5, "plus_longue": 188}
+{"ev": "etat", "t": 1791203606.555, "h": "12:33:26", "nom": "RMT captures", "valeur": 1085.0}
+{"ev": "etat", "t": 1791203606.555, "h": "12:33:26", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203606.555, "h": "12:33:26", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203606.555, "h": "12:33:26", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "appui_reapply", "t": 1791203610.07, "h": "12:33:30"}
+{"ev": "bilan", "t": 1791203610.07, "h": "12:33:30", "trames": 0, "ecart_s": null}
+{"ev": "compteurs", "t": 1791203610.662, "h": "12:33:30", "captures": 1086, "delta": 1, "trames": 296, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 5, "plus_longue": 188}
+{"ev": "etat", "t": 1791203616.562, "h": "12:33:36", "nom": "RMT captures", "valeur": 1086.0}
+{"ev": "etat", "t": 1791203616.562, "h": "12:33:36", "nom": "Valid frames", "valeur": 296.0}
+{"ev": "etat", "t": 1791203616.562, "h": "12:33:36", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203616.562, "h": "12:33:36", "nom": "Duplicates ignored", "valeur": 285.0}
+{"ev": "trame", "t": 1791203625.212, "h": "12:33:45", "tx": 34, "ecart_s": null}
+{"ev": "etat", "t": 1791203625.313, "h": "12:33:45", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203625.314, "h": "12:33:45", "nom": "TX counter", "valeur": 34.0}
+{"ev": "compteurs", "t": 1791203625.682, "h": "12:33:45", "captures": 1089, "delta": 3, "trames": 297, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 170, "plus_longue": 188}
+{"ev": "etat", "t": 1791203626.566, "h": "12:33:46", "nom": "RMT captures", "valeur": 1089.0}
+{"ev": "etat", "t": 1791203626.566, "h": "12:33:46", "nom": "Valid frames", "valeur": 297.0}
+{"ev": "etat", "t": 1791203626.566, "h": "12:33:46", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203626.566, "h": "12:33:46", "nom": "Duplicates ignored", "valeur": 286.0}
+{"ev": "etat", "t": 1791203636.556, "h": "12:33:56", "nom": "RMT captures", "valeur": 1089.0}
+{"ev": "etat", "t": 1791203636.556, "h": "12:33:56", "nom": "Valid frames", "valeur": 297.0}
+{"ev": "etat", "t": 1791203636.556, "h": "12:33:56", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203636.556, "h": "12:33:56", "nom": "Duplicates ignored", "valeur": 286.0}
+{"ev": "trame", "t": 1791203645.214, "h": "12:34:05", "tx": 73, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203645.316, "h": "12:34:05", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203645.316, "h": "12:34:05", "nom": "TX counter", "valeur": 73.0}
+{"ev": "compteurs", "t": 1791203645.701, "h": "12:34:05", "captures": 1092, "delta": 3, "trames": 298, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 172, "plus_longue": 188}
+{"ev": "etat", "t": 1791203646.554, "h": "12:34:06", "nom": "RMT captures", "valeur": 1092.0}
+{"ev": "etat", "t": 1791203646.555, "h": "12:34:06", "nom": "Valid frames", "valeur": 298.0}
+{"ev": "etat", "t": 1791203646.555, "h": "12:34:06", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203646.555, "h": "12:34:06", "nom": "Duplicates ignored", "valeur": 287.0}
+{"ev": "etat", "t": 1791203656.559, "h": "12:34:16", "nom": "RMT captures", "valeur": 1092.0}
+{"ev": "etat", "t": 1791203656.559, "h": "12:34:16", "nom": "Valid frames", "valeur": 298.0}
+{"ev": "etat", "t": 1791203656.559, "h": "12:34:16", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203656.559, "h": "12:34:16", "nom": "Duplicates ignored", "valeur": 287.0}
+{"ev": "trame", "t": 1791203665.219, "h": "12:34:25", "tx": 112, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203665.321, "h": "12:34:25", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203665.321, "h": "12:34:25", "nom": "TX counter", "valeur": 112.0}
+{"ev": "compteurs", "t": 1791203665.724, "h": "12:34:25", "captures": 1095, "delta": 3, "trames": 299, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 168, "plus_longue": 188}
+{"ev": "etat", "t": 1791203666.562, "h": "12:34:26", "nom": "RMT captures", "valeur": 1095.0}
+{"ev": "etat", "t": 1791203666.562, "h": "12:34:26", "nom": "Valid frames", "valeur": 299.0}
+{"ev": "etat", "t": 1791203666.562, "h": "12:34:26", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203666.562, "h": "12:34:26", "nom": "Duplicates ignored", "valeur": 288.0}
+{"ev": "etat", "t": 1791203676.562, "h": "12:34:36", "nom": "RMT captures", "valeur": 1095.0}
+{"ev": "etat", "t": 1791203676.562, "h": "12:34:36", "nom": "Valid frames", "valeur": 299.0}
+{"ev": "etat", "t": 1791203676.562, "h": "12:34:36", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203676.562, "h": "12:34:36", "nom": "Duplicates ignored", "valeur": 288.0}
+{"ev": "trame", "t": 1791203685.211, "h": "12:34:45", "tx": 151, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203685.313, "h": "12:34:45", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203685.313, "h": "12:34:45", "nom": "TX counter", "valeur": 151.0}
+{"ev": "compteurs", "t": 1791203685.765, "h": "12:34:45", "captures": 1098, "delta": 3, "trames": 300, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 172, "plus_longue": 188}
+{"ev": "etat", "t": 1791203686.555, "h": "12:34:46", "nom": "RMT captures", "valeur": 1098.0}
+{"ev": "etat", "t": 1791203686.555, "h": "12:34:46", "nom": "Valid frames", "valeur": 300.0}
+{"ev": "etat", "t": 1791203686.555, "h": "12:34:46", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203686.555, "h": "12:34:46", "nom": "Duplicates ignored", "valeur": 289.0}
+{"ev": "etat", "t": 1791203696.559, "h": "12:34:56", "nom": "RMT captures", "valeur": 1098.0}
+{"ev": "etat", "t": 1791203696.559, "h": "12:34:56", "nom": "Valid frames", "valeur": 300.0}
+{"ev": "etat", "t": 1791203696.559, "h": "12:34:56", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203696.559, "h": "12:34:56", "nom": "Duplicates ignored", "valeur": 289.0}
+{"ev": "trame", "t": 1791203705.221, "h": "12:35:05", "tx": 190, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203705.32, "h": "12:35:05", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203705.32, "h": "12:35:05", "nom": "TX counter", "valeur": 190.0}
+{"ev": "compteurs", "t": 1791203705.8, "h": "12:35:05", "captures": 1101, "delta": 3, "trames": 301, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 172, "plus_longue": 188}
+{"ev": "etat", "t": 1791203706.558, "h": "12:35:06", "nom": "RMT captures", "valeur": 1101.0}
+{"ev": "etat", "t": 1791203706.558, "h": "12:35:06", "nom": "Valid frames", "valeur": 301.0}
+{"ev": "etat", "t": 1791203706.558, "h": "12:35:06", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203706.558, "h": "12:35:06", "nom": "Duplicates ignored", "valeur": 290.0}
+{"ev": "etat", "t": 1791203716.56, "h": "12:35:16", "nom": "RMT captures", "valeur": 1101.0}
+{"ev": "etat", "t": 1791203716.56, "h": "12:35:16", "nom": "Valid frames", "valeur": 301.0}
+{"ev": "etat", "t": 1791203716.56, "h": "12:35:16", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203716.56, "h": "12:35:16", "nom": "Duplicates ignored", "valeur": 290.0}
+{"ev": "trame", "t": 1791203725.22, "h": "12:35:25", "tx": 229, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203725.322, "h": "12:35:25", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203725.322, "h": "12:35:25", "nom": "TX counter", "valeur": 229.0}
+{"ev": "compteurs", "t": 1791203725.837, "h": "12:35:25", "captures": 1104, "delta": 3, "trames": 302, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 170, "plus_longue": 188}
+{"ev": "etat", "t": 1791203726.547, "h": "12:35:26", "nom": "RMT captures", "valeur": 1104.0}
+{"ev": "etat", "t": 1791203726.547, "h": "12:35:26", "nom": "Valid frames", "valeur": 302.0}
+{"ev": "etat", "t": 1791203726.547, "h": "12:35:26", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203726.547, "h": "12:35:26", "nom": "Duplicates ignored", "valeur": 291.0}
+{"ev": "appui_reapply", "t": 1791203730.191, "h": "12:35:30"}
+{"ev": "bilan", "t": 1791203730.191, "h": "12:35:30", "trames": 6, "ecart_s": 5.0}
+{"ev": "compteurs", "t": 1791203730.851, "h": "12:35:30", "captures": 1106, "delta": 2, "trames": 302, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 2, "plus_longue": 188}
+{"ev": "etat", "t": 1791203736.556, "h": "12:35:36", "nom": "RMT captures", "valeur": 1106.0}
+{"ev": "etat", "t": 1791203736.557, "h": "12:35:36", "nom": "Valid frames", "valeur": 302.0}
+{"ev": "etat", "t": 1791203736.557, "h": "12:35:36", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203736.557, "h": "12:35:36", "nom": "Duplicates ignored", "valeur": 291.0}
+{"ev": "trame", "t": 1791203745.223, "h": "12:35:45", "tx": 12, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203745.325, "h": "12:35:45", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203745.325, "h": "12:35:45", "nom": "TX counter", "valeur": 12.0}
+{"ev": "compteurs", "t": 1791203745.872, "h": "12:35:45", "captures": 1109, "delta": 3, "trames": 303, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 176, "plus_longue": 188}
+{"ev": "etat", "t": 1791203746.548, "h": "12:35:46", "nom": "RMT captures", "valeur": 1109.0}
+{"ev": "etat", "t": 1791203746.548, "h": "12:35:46", "nom": "Valid frames", "valeur": 303.0}
+{"ev": "etat", "t": 1791203746.548, "h": "12:35:46", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203746.548, "h": "12:35:46", "nom": "Duplicates ignored", "valeur": 292.0}
+{"ev": "etat", "t": 1791203756.551, "h": "12:35:56", "nom": "RMT captures", "valeur": 1109.0}
+{"ev": "etat", "t": 1791203756.551, "h": "12:35:56", "nom": "Valid frames", "valeur": 303.0}
+{"ev": "etat", "t": 1791203756.551, "h": "12:35:56", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203756.551, "h": "12:35:56", "nom": "Duplicates ignored", "valeur": 292.0}
+{"ev": "trame", "t": 1791203765.212, "h": "12:36:05", "tx": 51, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203765.314, "h": "12:36:05", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203765.314, "h": "12:36:05", "nom": "TX counter", "valeur": 51.0}
+{"ev": "compteurs", "t": 1791203765.909, "h": "12:36:05", "captures": 1112, "delta": 3, "trames": 304, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 176, "plus_longue": 188}
+{"ev": "etat", "t": 1791203766.553, "h": "12:36:06", "nom": "RMT captures", "valeur": 1112.0}
+{"ev": "etat", "t": 1791203766.554, "h": "12:36:06", "nom": "Valid frames", "valeur": 304.0}
+{"ev": "etat", "t": 1791203766.554, "h": "12:36:06", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203766.554, "h": "12:36:06", "nom": "Duplicates ignored", "valeur": 293.0}
+{"ev": "etat", "t": 1791203776.556, "h": "12:36:16", "nom": "RMT captures", "valeur": 1112.0}
+{"ev": "etat", "t": 1791203776.556, "h": "12:36:16", "nom": "Valid frames", "valeur": 304.0}
+{"ev": "etat", "t": 1791203776.556, "h": "12:36:16", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203776.556, "h": "12:36:16", "nom": "Duplicates ignored", "valeur": 293.0}
+{"ev": "trame", "t": 1791203785.216, "h": "12:36:25", "tx": 90, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203785.317, "h": "12:36:25", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203785.318, "h": "12:36:25", "nom": "TX counter", "valeur": 90.0}
+{"ev": "compteurs", "t": 1791203785.943, "h": "12:36:25", "captures": 1115, "delta": 3, "trames": 305, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 180, "plus_longue": 188}
+{"ev": "etat", "t": 1791203786.556, "h": "12:36:26", "nom": "RMT captures", "valeur": 1115.0}
+{"ev": "etat", "t": 1791203786.556, "h": "12:36:26", "nom": "Valid frames", "valeur": 305.0}
+{"ev": "etat", "t": 1791203786.556, "h": "12:36:26", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203786.556, "h": "12:36:26", "nom": "Duplicates ignored", "valeur": 294.0}
+{"ev": "etat", "t": 1791203796.557, "h": "12:36:36", "nom": "RMT captures", "valeur": 1115.0}
+{"ev": "etat", "t": 1791203796.557, "h": "12:36:36", "nom": "Valid frames", "valeur": 305.0}
+{"ev": "etat", "t": 1791203796.557, "h": "12:36:36", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203796.557, "h": "12:36:36", "nom": "Duplicates ignored", "valeur": 294.0}
+{"ev": "trame", "t": 1791203805.22, "h": "12:36:45", "tx": 129, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203805.322, "h": "12:36:45", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203805.322, "h": "12:36:45", "nom": "TX counter", "valeur": 129.0}
+{"ev": "compteurs", "t": 1791203805.982, "h": "12:36:45", "captures": 1118, "delta": 3, "trames": 306, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 168, "plus_longue": 188}
+{"ev": "etat", "t": 1791203806.545, "h": "12:36:46", "nom": "RMT captures", "valeur": 1118.0}
+{"ev": "etat", "t": 1791203806.546, "h": "12:36:46", "nom": "Valid frames", "valeur": 306.0}
+{"ev": "etat", "t": 1791203806.546, "h": "12:36:46", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203806.546, "h": "12:36:46", "nom": "Duplicates ignored", "valeur": 295.0}
+{"ev": "etat", "t": 1791203816.55, "h": "12:36:56", "nom": "RMT captures", "valeur": 1118.0}
+{"ev": "etat", "t": 1791203816.55, "h": "12:36:56", "nom": "Valid frames", "valeur": 306.0}
+{"ev": "etat", "t": 1791203816.55, "h": "12:36:56", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203816.55, "h": "12:36:56", "nom": "Duplicates ignored", "valeur": 295.0}
+{"ev": "trame", "t": 1791203825.21, "h": "12:37:05", "tx": 168, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203825.312, "h": "12:37:05", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203825.312, "h": "12:37:05", "nom": "TX counter", "valeur": 168.0}
+{"ev": "compteurs", "t": 1791203826.001, "h": "12:37:06", "captures": 1121, "delta": 3, "trames": 307, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 178, "plus_longue": 188}
+{"ev": "etat", "t": 1791203826.553, "h": "12:37:06", "nom": "RMT captures", "valeur": 1121.0}
+{"ev": "etat", "t": 1791203826.553, "h": "12:37:06", "nom": "Valid frames", "valeur": 307.0}
+{"ev": "etat", "t": 1791203826.553, "h": "12:37:06", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203826.553, "h": "12:37:06", "nom": "Duplicates ignored", "valeur": 296.0}
+{"ev": "etat", "t": 1791203836.554, "h": "12:37:16", "nom": "RMT captures", "valeur": 1121.0}
+{"ev": "etat", "t": 1791203836.554, "h": "12:37:16", "nom": "Valid frames", "valeur": 307.0}
+{"ev": "etat", "t": 1791203836.554, "h": "12:37:16", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203836.554, "h": "12:37:16", "nom": "Duplicates ignored", "valeur": 296.0}
+{"ev": "trame", "t": 1791203845.217, "h": "12:37:25", "tx": 207, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203845.319, "h": "12:37:25", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203845.319, "h": "12:37:25", "nom": "TX counter", "valeur": 207.0}
+{"ev": "compteurs", "t": 1791203846.026, "h": "12:37:26", "captures": 1124, "delta": 3, "trames": 308, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 172, "plus_longue": 188}
+{"ev": "etat", "t": 1791203846.544, "h": "12:37:26", "nom": "RMT captures", "valeur": 1124.0}
+{"ev": "etat", "t": 1791203846.544, "h": "12:37:26", "nom": "Valid frames", "valeur": 308.0}
+{"ev": "etat", "t": 1791203846.544, "h": "12:37:26", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203846.544, "h": "12:37:26", "nom": "Duplicates ignored", "valeur": 297.0}
+{"ev": "appui_reapply", "t": 1791203850.319, "h": "12:37:30"}
+{"ev": "bilan", "t": 1791203850.32, "h": "12:37:30", "trames": 12, "ecart_s": 5.1}
+{"ev": "compteurs", "t": 1791203851.04, "h": "12:37:31", "captures": 1126, "delta": 2, "trames": 308, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 2, "plus_longue": 188}
+{"ev": "etat", "t": 1791203856.553, "h": "12:37:36", "nom": "RMT captures", "valeur": 1126.0}
+{"ev": "etat", "t": 1791203856.553, "h": "12:37:36", "nom": "Valid frames", "valeur": 308.0}
+{"ev": "etat", "t": 1791203856.553, "h": "12:37:36", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203856.553, "h": "12:37:36", "nom": "Duplicates ignored", "valeur": 297.0}
+{"ev": "trame", "t": 1791203865.218, "h": "12:37:45", "tx": 246, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203865.32, "h": "12:37:45", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203865.32, "h": "12:37:45", "nom": "TX counter", "valeur": 246.0}
+{"ev": "compteurs", "t": 1791203866.059, "h": "12:37:46", "captures": 1129, "delta": 3, "trames": 309, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 170, "plus_longue": 188}
+{"ev": "etat", "t": 1791203866.544, "h": "12:37:46", "nom": "RMT captures", "valeur": 1129.0}
+{"ev": "etat", "t": 1791203866.544, "h": "12:37:46", "nom": "Valid frames", "valeur": 309.0}
+{"ev": "etat", "t": 1791203866.544, "h": "12:37:46", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203866.544, "h": "12:37:46", "nom": "Duplicates ignored", "valeur": 298.0}
+{"ev": "etat", "t": 1791203876.547, "h": "12:37:56", "nom": "RMT captures", "valeur": 1129.0}
+{"ev": "etat", "t": 1791203876.547, "h": "12:37:56", "nom": "Valid frames", "valeur": 309.0}
+{"ev": "etat", "t": 1791203876.547, "h": "12:37:56", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203876.547, "h": "12:37:56", "nom": "Duplicates ignored", "valeur": 298.0}
+{"ev": "trame", "t": 1791203885.223, "h": "12:38:05", "tx": 29, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203885.325, "h": "12:38:05", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203885.325, "h": "12:38:05", "nom": "TX counter", "valeur": 29.0}
+{"ev": "compteurs", "t": 1791203886.081, "h": "12:38:06", "captures": 1132, "delta": 3, "trames": 310, "rejets": 346, "reparees": 3, "refusees": 0, "dernieres_impulsions": 170, "plus_longue": 188}
+{"ev": "etat", "t": 1791203886.55, "h": "12:38:06", "nom": "RMT captures", "valeur": 1132.0}
+{"ev": "etat", "t": 1791203886.55, "h": "12:38:06", "nom": "Valid frames", "valeur": 310.0}
+{"ev": "etat", "t": 1791203886.55, "h": "12:38:06", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203886.55, "h": "12:38:06", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "etat", "t": 1791203896.553, "h": "12:38:16", "nom": "RMT captures", "valeur": 1132.0}
+{"ev": "etat", "t": 1791203896.554, "h": "12:38:16", "nom": "Valid frames", "valeur": 310.0}
+{"ev": "etat", "t": 1791203896.554, "h": "12:38:16", "nom": "Rejected frames", "valeur": 346.0}
+{"ev": "etat", "t": 1791203896.554, "h": "12:38:16", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "trame", "t": 1791203905.215, "h": "12:38:25", "tx": 68, "ecart_s": 20.0}
+{"ev": "etat", "t": 1791203905.321, "h": "12:38:25", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203905.321, "h": "12:38:25", "nom": "TX counter", "valeur": 68.0}
+{"ev": "compteurs", "t": 1791203906.107, "h": "12:38:26", "captures": 1137, "delta": 5, "trames": 311, "rejets": 351, "reparees": 3, "refusees": 0, "dernieres_impulsions": 82, "plus_longue": 188}
+{"ev": "etat", "t": 1791203906.544, "h": "12:38:26", "nom": "RMT captures", "valeur": 1137.0}
+{"ev": "etat", "t": 1791203906.544, "h": "12:38:26", "nom": "Valid frames", "valeur": 311.0}
+{"ev": "etat", "t": 1791203906.544, "h": "12:38:26", "nom": "Rejected frames", "valeur": 351.0}
+{"ev": "etat", "t": 1791203906.544, "h": "12:38:26", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "etat", "t": 1791203916.54, "h": "12:38:36", "nom": "RMT captures", "valeur": 1137.0}
+{"ev": "etat", "t": 1791203916.54, "h": "12:38:36", "nom": "Valid frames", "valeur": 311.0}
+{"ev": "etat", "t": 1791203916.54, "h": "12:38:36", "nom": "Rejected frames", "valeur": 351.0}
+{"ev": "etat", "t": 1791203916.54, "h": "12:38:36", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "compteurs", "t": 1791203926.135, "h": "12:38:46", "captures": 1142, "delta": 5, "trames": 311, "rejets": 361, "reparees": 3, "refusees": 0, "dernieres_impulsions": 82, "plus_longue": 188}
+{"ev": "etat", "t": 1791203926.54, "h": "12:38:46", "nom": "RMT captures", "valeur": 1142.0}
+{"ev": "etat", "t": 1791203926.54, "h": "12:38:46", "nom": "Valid frames", "valeur": 311.0}
+{"ev": "etat", "t": 1791203926.54, "h": "12:38:46", "nom": "Rejected frames", "valeur": 361.0}
+{"ev": "etat", "t": 1791203926.54, "h": "12:38:46", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "etat", "t": 1791203936.546, "h": "12:38:56", "nom": "RMT captures", "valeur": 1142.0}
+{"ev": "etat", "t": 1791203936.546, "h": "12:38:56", "nom": "Valid frames", "valeur": 311.0}
+{"ev": "etat", "t": 1791203936.546, "h": "12:38:56", "nom": "Rejected frames", "valeur": 361.0}
+{"ev": "etat", "t": 1791203936.546, "h": "12:38:56", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "trame", "t": 1791203945.223, "h": "12:39:05", "tx": 146, "ecart_s": 40.0}
+{"ev": "etat", "t": 1791203945.326, "h": "12:39:05", "nom": "Station ID", "valeur": 33995.0}
+{"ev": "etat", "t": 1791203945.327, "h": "12:39:05", "nom": "TX counter", "valeur": 146.0}
+{"ev": "compteurs", "t": 1791203946.167, "h": "12:39:06", "captures": 1146, "delta": 4, "trames": 312, "rejets": 366, "reparees": 3, "refusees": 0, "dernieres_impulsions": 80, "plus_longue": 188}
+{"ev": "etat", "t": 1791203946.55, "h": "12:39:06", "nom": "RMT captures", "valeur": 1146.0}
+{"ev": "etat", "t": 1791203946.55, "h": "12:39:06", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791203946.55, "h": "12:39:06", "nom": "Rejected frames", "valeur": 366.0}
+{"ev": "etat", "t": 1791203946.55, "h": "12:39:06", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "etat", "t": 1791203956.538, "h": "12:39:16", "nom": "RMT captures", "valeur": 1146.0}
+{"ev": "etat", "t": 1791203956.538, "h": "12:39:16", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791203956.538, "h": "12:39:16", "nom": "Rejected frames", "valeur": 366.0}
+{"ev": "etat", "t": 1791203956.538, "h": "12:39:16", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "compteurs", "t": 1791203966.206, "h": "12:39:26", "captures": 1151, "delta": 5, "trames": 312, "rejets": 376, "reparees": 3, "refusees": 0, "dernieres_impulsions": 80, "plus_longue": 188}
+{"ev": "etat", "t": 1791203966.548, "h": "12:39:26", "nom": "RMT captures", "valeur": 1151.0}
+{"ev": "etat", "t": 1791203966.548, "h": "12:39:26", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791203966.548, "h": "12:39:26", "nom": "Rejected frames", "valeur": 376.0}
+{"ev": "etat", "t": 1791203966.548, "h": "12:39:26", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "appui_reapply", "t": 1791203970.445, "h": "12:39:30"}
+{"ev": "bilan", "t": 1791203970.445, "h": "12:39:30", "trames": 16, "ecart_s": 25.2}
+{"ev": "compteurs", "t": 1791203971.207, "h": "12:39:31", "captures": 1152, "delta": 1, "trames": 312, "rejets": 376, "reparees": 3, "refusees": 0, "dernieres_impulsions": 4, "plus_longue": 188}
+{"ev": "etat", "t": 1791203976.544, "h": "12:39:36", "nom": "RMT captures", "valeur": 1152.0}
+{"ev": "etat", "t": 1791203976.544, "h": "12:39:36", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791203976.544, "h": "12:39:36", "nom": "Rejected frames", "valeur": 376.0}
+{"ev": "etat", "t": 1791203976.544, "h": "12:39:36", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "compteurs", "t": 1791203986.218, "h": "12:39:46", "captures": 1157, "delta": 5, "trames": 312, "rejets": 386, "reparees": 3, "refusees": 0, "dernieres_impulsions": 74, "plus_longue": 188}
+{"ev": "etat", "t": 1791203986.543, "h": "12:39:46", "nom": "RMT captures", "valeur": 1157.0}
+{"ev": "etat", "t": 1791203986.543, "h": "12:39:46", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791203986.543, "h": "12:39:46", "nom": "Rejected frames", "valeur": 386.0}
+{"ev": "etat", "t": 1791203986.543, "h": "12:39:46", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "etat", "t": 1791203996.548, "h": "12:39:56", "nom": "RMT captures", "valeur": 1157.0}
+{"ev": "etat", "t": 1791203996.548, "h": "12:39:56", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791203996.548, "h": "12:39:56", "nom": "Rejected frames", "valeur": 386.0}
+{"ev": "etat", "t": 1791203996.548, "h": "12:39:56", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "compteurs", "t": 1791204006.25, "h": "12:40:06", "captures": 1162, "delta": 5, "trames": 312, "rejets": 396, "reparees": 3, "refusees": 0, "dernieres_impulsions": 74, "plus_longue": 188}
+{"ev": "etat", "t": 1791204006.543, "h": "12:40:06", "nom": "RMT captures", "valeur": 1162.0}
+{"ev": "etat", "t": 1791204006.543, "h": "12:40:06", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791204006.543, "h": "12:40:06", "nom": "Rejected frames", "valeur": 396.0}
+{"ev": "etat", "t": 1791204006.543, "h": "12:40:06", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "etat", "t": 1791204016.547, "h": "12:40:16", "nom": "RMT captures", "valeur": 1162.0}
+{"ev": "etat", "t": 1791204016.547, "h": "12:40:16", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791204016.547, "h": "12:40:16", "nom": "Rejected frames", "valeur": 396.0}
+{"ev": "etat", "t": 1791204016.547, "h": "12:40:16", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "compteurs", "t": 1791204026.286, "h": "12:40:26", "captures": 1167, "delta": 5, "trames": 312, "rejets": 406, "reparees": 3, "refusees": 0, "dernieres_impulsions": 80, "plus_longue": 188}
+{"ev": "etat", "t": 1791204026.545, "h": "12:40:26", "nom": "RMT captures", "valeur": 1167.0}
+{"ev": "etat", "t": 1791204026.545, "h": "12:40:26", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791204026.545, "h": "12:40:26", "nom": "Rejected frames", "valeur": 406.0}
+{"ev": "etat", "t": 1791204026.545, "h": "12:40:26", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "etat", "t": 1791204036.543, "h": "12:40:36", "nom": "RMT captures", "valeur": 1167.0}
+{"ev": "etat", "t": 1791204036.543, "h": "12:40:36", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791204036.543, "h": "12:40:36", "nom": "Rejected frames", "valeur": 406.0}
+{"ev": "etat", "t": 1791204036.543, "h": "12:40:36", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "compteurs", "t": 1791204046.317, "h": "12:40:46", "captures": 1172, "delta": 5, "trames": 312, "rejets": 416, "reparees": 3, "refusees": 0, "dernieres_impulsions": 82, "plus_longue": 188}
+{"ev": "etat", "t": 1791204046.543, "h": "12:40:46", "nom": "RMT captures", "valeur": 1172.0}
+{"ev": "etat", "t": 1791204046.543, "h": "12:40:46", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791204046.543, "h": "12:40:46", "nom": "Rejected frames", "valeur": 416.0}
+{"ev": "etat", "t": 1791204046.543, "h": "12:40:46", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "etat", "t": 1791204056.547, "h": "12:40:56", "nom": "RMT captures", "valeur": 1172.0}
+{"ev": "etat", "t": 1791204056.547, "h": "12:40:56", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791204056.547, "h": "12:40:56", "nom": "Rejected frames", "valeur": 416.0}
+{"ev": "etat", "t": 1791204056.547, "h": "12:40:56", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "compteurs", "t": 1791204066.36, "h": "12:41:06", "captures": 1177, "delta": 5, "trames": 312, "rejets": 426, "reparees": 3, "refusees": 0, "dernieres_impulsions": 80, "plus_longue": 188}
+{"ev": "etat", "t": 1791204066.54, "h": "12:41:06", "nom": "RMT captures", "valeur": 1177.0}
+{"ev": "etat", "t": 1791204066.54, "h": "12:41:06", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791204066.54, "h": "12:41:06", "nom": "Rejected frames", "valeur": 426.0}
+{"ev": "etat", "t": 1791204066.54, "h": "12:41:06", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "etat", "t": 1791204076.545, "h": "12:41:16", "nom": "RMT captures", "valeur": 1177.0}
+{"ev": "etat", "t": 1791204076.545, "h": "12:41:16", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791204076.545, "h": "12:41:16", "nom": "Rejected frames", "valeur": 426.0}
+{"ev": "etat", "t": 1791204076.545, "h": "12:41:16", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "compteurs", "t": 1791204086.39, "h": "12:41:26", "captures": 1182, "delta": 5, "trames": 312, "rejets": 436, "reparees": 3, "refusees": 0, "dernieres_impulsions": 80, "plus_longue": 188}
+{"ev": "etat", "t": 1791204086.539, "h": "12:41:26", "nom": "RMT captures", "valeur": 1182.0}
+{"ev": "etat", "t": 1791204086.539, "h": "12:41:26", "nom": "Valid frames", "valeur": 312.0}
+{"ev": "etat", "t": 1791204086.539, "h": "12:41:26", "nom": "Rejected frames", "valeur": 436.0}
+{"ev": "etat", "t": 1791204086.539, "h": "12:41:26", "nom": "Duplicates ignored", "valeur": 299.0}
+{"ev": "socket_fermee", "t": 1791204090.569, "h": "12:41:30", "attendu": true}
+{"ev": "phase_fin", "t": 1791204090.57, "h": "12:41:30", "trames": 16, "seuils_confirmes": {"creneaux": 30.0, "redemarrage": 3600.0}}
