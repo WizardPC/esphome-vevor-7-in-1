@@ -42,7 +42,9 @@ PANNE_S = 240                  # aucune trame pendant 4 min alors que des captur
 IMMOBILE_S = 900               # aucune capture du tout pendant 15 min : carte muette, inutile d'insister
 REESSAI_S = 300                # ne pas redemander un vidage plus d'une fois par tranche de 5 min
 VIDAGE_PERIODIQUE_S = 600      # vidage de courtoisie toutes les 10 min de silence
-CANARI_S = 90                  # aucune ligne du tout pendant 90 s : socket muet, on reconnecte
+CANARI_S = 45                  # aucune ligne du tout : la carte publie toutes les ~20 s, donc deux
+                               # battements manqués suffisent — à 90 s la socket morte était
+                               # rattrapée APRÈS la panne, et l'appui tombait dans le vide
 
 ETAT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "state")
 JOURNAL = os.path.join(ETAT, "veille_reception.log")
@@ -85,12 +87,15 @@ class Veille:
         if self.cli is None or self.dump_key is None:
             self.ligne(f"### {raison} — vidage IMPOSSIBLE (bouton inconnu)")
             return
-        self.dernier_vidage = time.time()
         self.ligne(f"### {raison} — vidage des impulsions demandé")
         try:
             self.cli.button_command(self.dump_key)
-        except Exception as exc:                                 # pragma: no cover
-            self.ligne(f"### appui sur le bouton impossible : {exc!r}")
+            self.dernier_vidage = time.time()   # SEULEMENT si l'appui est passé : un appui raté
+        except Exception as exc:                 # doit être retenté tout de suite, pas dans 5 min
+            # Une socket morte ne prévient pas : on force le canari à se déclencher au prochain
+            # tour, pour que la reconnexion soit immédiate et le vidage rejoué aussitôt après.
+            self.derniere_ligne = 0.0
+            self.ligne(f"### appui sur le bouton impossible ({exc!r}) — reconnexion immédiate")
 
     def _instantane(self) -> None:
         instantane = os.path.join(ETAT, f"panne_{datetime.datetime.now():%Y%m%d_%H%M%S}.txt")
@@ -111,7 +116,7 @@ class Veille:
             return
         if maintenant - self.dernier_vidage < REESSAI_S:
             return
-        self._vider(f"### PANNE : aucune trame depuis {int(maintenant - self.derniere_trame)} s "
+        self._vider(f"PANNE : aucune trame depuis {int(maintenant - self.derniere_trame)} s "
                     "alors que des captures arrivent")
         self._instantane()
 
