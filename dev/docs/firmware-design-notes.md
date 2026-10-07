@@ -173,3 +173,31 @@ component itself owns (`number/`, `button/`).
   State the consequence with the setting: without a fallback access point, a board that stops
   joining its Wi-Fi can only be recovered over USB. Removing `ap:` also took the firmware from
   52.3 % to 47.2 % of flash (about 93 kB).
+
+## Configuration traps — measured, kept here so the YAML stays readable
+
+* **RX filter 162 kHz, not 100.** At 100 kHz (±50 kHz) one of the two FSK tones falls out of band:
+  the deviation is ±70 kHz and a quartz drifts by tens of kHz over a few degrees. The demodulator
+  then returns fragments (47-74 pulses instead of ~176) and the captures hold only noise.
+  Sweep, 150 s per value, six filters on the same air: 58 → 1 frame, 81 → 0, 100 → 0,
+  **162 → 5** (exactly the station's 20 s cadence), 203 → 0, 232 → 3. Confirmed live at 100 s per
+  value: 100 → 3 frames/14 rejects, 135 → 5/0, 162 → 5/1.
+* **`idle: 1100us` — do not raise it.** 1100 is the only value proven in service: a whole day,
+  507 frames decoded, ~30 of them stitched back from two fragments by the component. 8000us was a
+  regression — the interferer's 77 ms bursts then arrive as ONE capture, which overflows the C3's
+  RMT buffer (512 symbols) and KILLS the receiver: 8 h without a single frame, counters frozen,
+  cured only by a restart (last frame 21:37, the 8000us build flashed 22:17, nothing since).
+  2000us froze it again within minutes: the interferer's burst has no internal gap above that.
+* **Live radio settings write their initial value at boot.** The `RX filter bandwidth` entity
+  overrides the compiled `bw_khz` when its `initial_value` is stale — caught before a flash on
+  05/10/2026 (a board stuck at 100 kHz while the YAML said 162). The two must stay in step.
+* **Station ID pinning.** 0 learns the first station seen; any other value pins it and drops every
+  other ID, which is how a neighbour's station on the same protocol stays out. The ID changes with
+  the batteries, hence the warning plus the re-learn path.
+* **Watchdog defaults.** 3 silent slots (60 s) before a re-arm, 180 s of silence before a restart
+  (`creneaux_avant_rearmement_`, `duree_max_avant_redemarrage_s_` in vevor_7in1.h). The FAST
+  criterion (`seuil_impulsions`: re-arm on a capture too short to hold a burst) is measured but NOT
+  shipped — the paired on-board test showed a periodic re-arm does not end the deaf episodes.
+* **Frequency compensation limit is BW/2** in this repo's copy of the driver
+  (`esphome/components/cc1101/cc1101.cpp`): the driver exposes no action for it, so it is not
+  swappable at runtime. Campaign log: dev/state/CAMPAGNE_20261005.md.

@@ -1,39 +1,31 @@
 # Vevor 7-in-1 weather station receiver, 868 MHz — ESP32-C3 SuperMini + CC1101.
-# Wiring, design choices and measurements: dev/docs/firmware-design-notes.md
+# Wiring, design choices and measured traps: dev/docs/firmware-design-notes.md
 # Frame layout: dev/references/PROTOCOL.md — decoder: esphome/components/vevor_7in1/vevor_protocol.h
 
 substitutions:
   freq_mhz: "868.35"
   deviation_khz: "70"
   symbol_rate: "11111"
-  # 162 kHz, pas 100 : mesuré le 05/10/2026 en fin de soirée, après une panne d'une heure.
-  # Le filtre de 100 kHz (±50 kHz) laissait HORS BANDE l'un des deux tons FSK du signal : la
-  # déviation est de ±70 kHz, et un quartz dérive de quelques dizaines de kHz sur un écart de
-  # température de 5 °C. Résultat : le démodulateur ne rendait que des fragments (47-74 impulsions
-  # au lieu de 176), et les captures ne contenaient que du bruit (durées jusqu'à 3352 µs).
-  # Balayage mesuré, 150 s par valeur, sur six filtres : 58 kHz → 1 trame ; 81 → 0 ; 100 → 0 ;
-  # 162 → 5 trames à la cadence exacte de la station (20 s) ; 203 → 0 ; 232 → non mesuré.
+  # 162 kHz, not 100: at 100 kHz one of the two FSK tones falls out of band (deviation is ±70 kHz,
+  # and a quartz drifts by tens of kHz over a few degrees). See design notes, "Configuration traps".
   bw_khz: "162"
-  # Log level (see the logger block): INFO in production, DEBUG for a measurement campaign.
-  # Raised without editing the file: esphome -s niveau_journal DEBUG compile
+  # INFO in production, DEBUG for a measurement campaign (see the logger block).
   niveau_journal: "INFO"
-  # Components fetched from the public repo (see `external_components` below): this YAML is
-  # copyable as-is, no repo file needed beside it. In THIS repo, local sources are compiled
-  # with `-s vevor_components components`.
+  # Components come from the public repo; building from this tree needs -s vevor_components components.
   vevor_components: "github://WizardPC/esphome-vevor-7-in-1@main"
 
 esphome:
   name: vevor-7in1
   friendly_name: "Vevor 7-in-1 weather station"   # rename it in Home Assistant, not here
-  comment: "Récepteur 868 MHz Vevor 7-in-1 (YT60309) — ESP32-C3 + CC1101"
+  comment: "868 MHz receiver for the Vevor 7-in-1 (YT60309) — ESP32-C3 + CC1101"
   on_boot:
     priority: -100          # after every setup(), including the radio and the RMT
     then:
       - lambda: |-
-          ESP_LOGD("v7in1", "V7IN1 BOOT recepteur pret, freq=%s MHz dev=%s kHz sr=%s",
+          ESP_LOGD("v7in1", "V7IN1 BOOT receiver ready, freq=%s MHz dev=%s kHz sr=%s",
                    "${freq_mhz}", "${deviation_khz}", "${symbol_rate}");
-  # Put the radio in IDLE before a clean stop: the chip keeps its registers while the ESP32
-  # restarts, and its bus lines float during that restart. See design notes §6.
+  # Park the radio in IDLE before a clean stop: the chip keeps its registers while the ESP32
+  # restarts, and its bus lines float during that restart.
   on_shutdown:
     priority: 600.0
     then:
@@ -45,14 +37,11 @@ esp32:
     type: esp-idf
 
 logger:
-  # Substitutable log level: INFO in production, DEBUG for a measurement campaign.
-  # Raise the GLOBAL level (a more verbose per-tag level is rejected): the RAW line and the
-  # rejection reasons are DEBUG, hence absent from a production build. See design notes §9.
   level: ${niveau_journal}
 
 api:
   encryption:
-    key: !secret api_key
+    key: !secret encryption_key
   reboot_timeout: 0s        # never reboot on client disconnect: it would cut a capture session
 
 ota:
@@ -60,33 +49,24 @@ ota:
     encryption: {}          # inherits the API key: no separate OTA password
     on_begin:
       then:
-        # Second moment the radio is parked in IDLE, during a whole update. See design notes §6.
         - logger.log:
-            format: "OTA en cours : passage du CC1101 en IDLE..."
+            format: "OTA: parking the CC1101 in IDLE..."
             level: DEBUG
         - cc1101.set_idle:
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  # These settings depend on the user's NETWORK, not the project: they live in secrets.yaml
-  # (unpublished). use_address: only if mDNS does not cross your network (VLAN, other subnet),
-  # else OTA cannot find the board.
-  use_address: !secret use_address
-  # output_power: 8.5dB   # 8.5 dB is the LOWEST value accepted (range 8.5-20.5). Some access points
-                          # refuse the board at the default power: uncomment in that case.
-  # No `ap:` section on purpose: the board never broadcasts a fallback SSID.
+  # Network-dependent, hence in secrets.yaml. use_address is only needed when mDNS does not cross
+  # your network (VLAN, other subnet): OTA cannot find the board otherwise.
+  use_address: !secret vevor_7in1__use_address
+  output_power: 8.5dB       # lowest accepted value (range 8.5-20.5); raise it if your AP refuses
 
 captive_portal:
 
 external_components:
-  # Both components come from the public repo: this block is copyable as-is (pin versions by
-  # replacing @main with a tag — README §1.5). Building from the local tree requires the override
-  # `-s vevor_components components` (tools/build.sh already sets it), else your edits are ignored.
   - source: ${vevor_components}
     refresh: 0s
-    # esphome/components/cc1101: local copy of ESPHome's driver — identity re-reads, verified
-    # writes, VCO calibration diagnostics, SPI at 1 MHz (this repo's version). See design notes §5.
     components: [vevor_7in1, cc1101]
 
 spi:
@@ -100,10 +80,10 @@ cc1101:
     number: GPIO7
     mode:
       output: true
-      pullup: true          # an external 10 kΩ pull-up to 3V3 is fitted as well (design notes §6)
-  # No gdo0_pin here on purpose: the cc1101 component would take the pin back from the
-  # remote_receiver RMT channel. No packet_mode either: the asynchronous path is the one that
-  # works on this build. Both points in design notes §7.
+      pullup: true          # an external 10 kΩ pull-up to 3V3 is fitted as well
+  # No gdo0_pin on purpose: the cc1101 component would take the pin back from the remote_receiver
+  # RMT channel, and nothing would then be captured. No packet_mode either: only the asynchronous
+  # path works on this build.
   frequency: ${freq_mhz}MHz
   modulation_type: 2-FSK
   symbol_rate: ${symbol_rate}
@@ -114,17 +94,9 @@ remote_receiver:
   id: rf_receiver
   pin:
     number: GPIO3          # the CC1101 GDO0 pin — a single data wire
-  filter: 45us             # half a bit period: shorter pulses are noise (design notes §7)
-  # Closes one burst into one capture. HISTORY AND WHY IT IS *NOT* 8000us (06/10/2026):
-  # 1100us worked for a whole day (507 frames decoded, ~30 of them stitched from two fragments by
-  # the component) but the frame was cut in the middle. Raising it to 8000us was a REGRESSION: the
-  # interferer's bursts (505-549 pulses, 77 ms) then arrived in ONE capture, overflowed the ESP32-C3
-  # RMT buffer (512 symbols hard limit, documented in dev/docs), and the receiver DIED — 8 hours
-  # without a single frame, counters frozen, cured only by a full restart. Timeline proves it: last
-  # frame at 21:37, the 8000us build flashed at 22:17, nothing since.
-  # 1100us (the original value) is the only one PROVEN in service: it held a whole day (507 frames,
-  # ~30 stitched by the component). Neither 2000 nor 8000 splits the interferer burst - measured on
-  # 07/10, the RMT froze again at 2000us within minutes.
+  filter: 45us             # half a bit period: shorter pulses are noise
+  # Do NOT raise: 2000us and 8000us both let the interferer's 77 ms burst in as ONE capture, which
+  # overflows the C3's RMT buffer and kills the receiver. Measured, with the timeline: design notes.
   idle: 1100us
   receive_symbols: 512
   tolerance: 25%
@@ -133,16 +105,14 @@ remote_receiver:
 vevor_7in1:
   id: vevor_rx
   receiver_id: rf_receiver
-  radio_id: radio          # le garde-fou du composant ré-arme la radio lui-même (cc1101.reset)
-  # Identité de la station : en décimal, comme le capteur « Station ID » (33995 = 0x84cb).
-  # 0 = apprendre la première station vue ; toute autre valeur ÉPINGLE cette station et fait ignorer
-  # les autres ID — c'est ce qui tient dehors la station d'un voisin sur le même protocole.
-  # L'ID change à chaque changement de pile : le composant journalise un avertissement s'il voit un
-  # autre ID, et remettre cette valeur à 0 (ou forcer « Station ID » depuis Home Assistant) réapprend.
+  radio_id: radio          # the component's watchdog re-arms the radio itself (cc1101.reset)
+  # Station identity, in decimal as the "Station ID" sensor reads it (33995 = 0x84cb).
+  # 0 = learn the first station seen; any other value PINS that station and ignores every other ID,
+  # which is how a neighbour's station on the same protocol stays out. The ID changes with the
+  # batteries: the component logs a warning on another ID, and 0 (or "Station ID" in HA) re-learns.
   station_id: 33995
-  # Deuxième station, à titre d'exemple : elle aurait son PROPRE jeu de capteurs et son propre bloc.
-  # ESPHome ne crée pas d'entités à la volée, donc l'intégrer est l'étape suivante du projet.
-  # Tant que l'ID ci-dessus est épinglé, une deuxième station est simplement ignorée, pas publiée.
+  # Second station example: it would need its own sensor set and its own block, since ESPHome does
+  # not create entities on the fly. While the ID above is pinned, a second station stays ignored.
   # station_id: 12345
   on_frame:
     then:
@@ -151,7 +121,7 @@ vevor_7in1:
           const char *reason = "taille";
           if (x.size() != vevor::FRAME_BYTES || !vevor::decode(x.data(), f, &reason)) {
             // Safety net: should never happen, the component validates before handing over.
-            ESP_LOGW("v7in1", "V7IN1 ANOMALIE trame livree invalide (%u octets, %s)",
+            ESP_LOGW("v7in1", "V7IN1 ANOMALY invalid frame handed over (%u bytes, %s)",
                      (unsigned) x.size(), reason);
             id(reason_sensor).publish_state(reason);
             return;
@@ -175,10 +145,7 @@ vevor_7in1:
           ESP_LOGI("v7in1", "V7IN1 OK %s", vevor::to_json(f).c_str());
 
 interval:
-  # Internal counters, published as entities.
-  # TODO: these four publications are still logic in the YAML; they belong in the component (which
-  # then needs the sensor ids). The watchdog itself already lives in the component:
-  # esphome/components/vevor_7in1/vevor_7in1.cpp.
+  # TODO: these publications are still YAML logic; they belong in the component.
   - interval: 10s
     then:
       - lambda: |-
@@ -191,8 +158,6 @@ interval:
           id(fenetre_emises_sensor).publish_state(id(vevor_rx).get_fenetre_emises());
 
 button:
-  # Instruments de diagnostic. Le composant les possède (platform: vevor_7in1) : le YAML ne fait
-  # que les nommer. « Re-apply radio config » partage le ré-armement du garde-fou.
   - platform: vevor_7in1
     vevor_7in1_id: vevor_rx
     type: dump_pulses
@@ -207,9 +172,8 @@ button:
     name: "Restart board"
 
 number:
-  # Reception watchdog: its only two settings, exposed here as Home Assistant entities. The policy
-  # lives in the component (esphome/components/vevor_7in1/vevor_7in1.cpp): the YAML only names and
-  # bounds. Compiled defaults: 3 slots (60 s) before a re-arm, 180 s of silence before a restart.
+  # Watchdog settings; the policy lives in the component. Compiled defaults: a re-arm after 3 silent
+  # slots (60 s), a restart after 180 s of silence.
   - platform: vevor_7in1
     vevor_7in1_id: vevor_rx
     type: creneaux_avant_rearmement
@@ -222,24 +186,15 @@ number:
     name: "Watchdog max silence before restart"
     unit_of_measurement: "s"
     entity_category: config
-  # Fast criterion: a capture below this many pulses cannot hold a burst. 40 sits between a fragment
-  # (70-96 pulses, normal after an RMT cut) and silence (2-7 pulses, a chip that stopped delivering).
-  # DELIBERATELY NOT SHIPPED YET (05/10): the paired on-board test showed a periodic re-arm does not
-  # end the deaf episodes (two presses fell inside one and it cleared by itself) while the historical
-  # logs show the same outage durations with and without the watchdog. Re-bench before enabling.
-  # - platform: vevor_7in1
-  #   vevor_7in1_id: vevor_rx
-  #   type: seuil_impulsions
-  #   name: "Silent capture pulse threshold"
-  #   unit_of_measurement: "pulses"
-  #   entity_category: config
-  # Station identity: 0 (default) learns the first station seen; any other value PINS that station
-  # and drops every other ID (a neighbour's station on the same protocol). See vevor_7in1.cpp.
   - platform: vevor_7in1
     vevor_7in1_id: vevor_rx
     type: station_id
     name: "Station ID (0 = learn)"
     entity_category: config
+  # Radio settings exposed so they can be swept live: the driver registers cc1101.set_* actions, so
+  # a change needs no recompile. No restore_value: a reboot returns to the compiled values. Their
+  # initial_value MUST match the substitutions above — these entities WRITE their initial value at
+  # boot, so a stale 100 here silently overrides a compiled 162.
   - platform: template
     name: "CC1101 frequency"
     id: freq_number
@@ -249,16 +204,11 @@ number:
     step: 0.005
     initial_value: 868.35
     optimistic: true
-    restore_value: false     # a restored value used to override the compiled frequency
+    restore_value: false
     entity_category: config
     on_value:
       then:
         - cc1101.set_frequency: !lambda "return x * 1000000.0f;"
-  # Radio settings exposed so they can be SWEPT LIVE: the driver registers cc1101.set_* actions, so
-  # a change takes effect without recompiling. Inert until moved, and no restore_value: a reboot
-  # returns to the compiled values. Initial values are the COMPILED ones, and they MUST stay in step
-  # with the substitutions above: these entities WRITE their initial value at boot, so a stale 100
-  # here silently overrides a compiled 162 (caught 05/10/2026 before the flash).
   - platform: template
     name: "RX filter bandwidth"
     id: bw_number
@@ -301,10 +251,6 @@ number:
     on_value:
       then:
         - cc1101.set_fsk_deviation: !lambda "return x * 1000.0f;"
-  # Marge de compensation de fréquence de la puce : réglée à BW/2 (±81 kHz) dans notre copie locale
-  # du pilote (esphome/components/cc1101/cc1101.cpp, commentaire du 05/10/2026). Le pilote n'expose
-  # pas d'action cc1101.set_foc_limit, donc ce n'est pas balayable à chaud — la valeur vit dans le
-  # code, avec le raisonnement et la mesure. Voir dev/state/CAMPAGNE_20261005.md.
 
 sensor:
   - platform: template
@@ -389,10 +335,8 @@ sensor:
     id: duplicates_sensor
     accuracy_decimals: 0
     entity_category: diagnostic
-  # Share of the station's transmissions actually decoded (%), computed INSIDE the component from
-  # the station's own counter over the last 30 frames (10 minutes). Uses that counter rather than
-  # elapsed time: it advances 39 units every 20 s and never skips a value, so it says exactly how
-  # many emissions were missed. Reads "unknown" until there is enough material.
+  # Share of the station's OWN transmissions actually decoded, over the last 30 frames (~10 min),
+  # computed in the component from the station's counter — not from elapsed time.
   - platform: template
     name: "Reception rate"
     id: taux_reception_sensor
@@ -400,9 +344,7 @@ sensor:
     state_class: measurement
     accuracy_decimals: 1
     entity_category: diagnostic
-  # The two TERMS of the ratio above, exposed so the dashboard can verify it rather than only show
-  # it: frames decoded in the window, and frames the station produced over that same window (its own
-  # counter, 39 units = one emission). "29 / 30" then reads straight off the card.
+  # The two terms of that ratio, so a dashboard can read "29 / 30" instead of trusting a percentage.
   - platform: template
     name: "Reception window decoded"
     id: fenetre_recues_sensor
@@ -413,13 +355,6 @@ sensor:
     id: fenetre_emises_sensor
     accuracy_decimals: 0
     entity_category: diagnostic
-  # Re-arms triggered by the FAST criterion (a capture too short to hold a burst) — as opposed to the
-  # slow criterion (a whole silent slot). NOT SHIPPED YET: see the comment on seuil_impulsions above.
-  # - platform: template
-  #   name: "Radio re-arms (deaf chip)"
-  #   id: rearmements_surdite_sensor
-  #   accuracy_decimals: 0
-  #   entity_category: diagnostic
 
 binary_sensor:
   - platform: template
