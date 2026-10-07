@@ -4,8 +4,8 @@ esphome/secrets.yaml
 secrets.yaml
 *.secret.yaml
 
-# === Environnements et caches de build (le .esphome généré contient la config compilée,
-#     donc les mots de passe Wi-Fi et les clés API en clair) ===
+# === Build environments and caches (the generated .esphome holds the compiled config,
+#     hence the Wi-Fi passwords and the API keys in the clear) ===
 .venv/
 .venv-dev/
 esphome/.esphome/
@@ -13,7 +13,7 @@ esphome/.esphome/
 *.elf
 *.map
 
-# === Artefacts de build (binaires et journaux de compilation : régénérables) ===
+# === Build artefacts (binaries and compilation logs: regenerable) ===
 build/test_decoder
 build/*.log
 build/.build_flash.lock
@@ -43,7 +43,7 @@ logs/*
 # === Sorties de build (journaux de compilation, statuts, binaires de test) ===
 build/
 
-# === Modèle C/C++ fourni par GitHub à la création du dépôt (conservé) ===
+# === C/C++ template provided by GitHub when the repo was created (kept) ===
 # Prerequisites
 *.d
 
@@ -114,7 +114,7 @@ vcpkg_installed/
 Testing/
 .cache/
 
-# === Rapports de revue de code (contiennent des détails d'installation) ===
+# === Code review reports (they contain installation details) ===
 reviews/
 
 # Le dossier des journaux est ignore a tout niveau, SAUF son marqueur (git ne suit pas un dossier vide).
