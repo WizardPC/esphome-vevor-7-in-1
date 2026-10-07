@@ -1,18 +1,18 @@
-# Entities actually exposed by Home Assistant - a measurement, not an inference.
+# Entities actually exposed by Home Assistant — measured, not inferred.
 #
-# Source     = Home Assistant REST API, http://192.168.2.104/api/states
-# Measured on = 07/10/2026 09:51 (local time)
-# Prefix     = jardin_vevor_7_in_1_weather_station   (read, never derived)
-# Refresh    = .venv/bin/python dev/tools/check_ha_card.py --refresh
-# Verify     = .venv/bin/python dev/tools/check_ha_card.py  (step 5 of run_tests.sh)
+# Source      = Home Assistant REST API, http://192.168.2.104/api/states
+# Measured on = 07/10/2026 15:40 (local time)
+# Prefix      = jardin_vevor_7_in_1_weather_station   (read, never derived)
+# Refresh     = .venv/bin/python dev/tools/check_ha_card.py --refresh
+# Check       = .venv/bin/python dev/tools/check_ha_card.py  (step 5 of run_tests.sh)
 #
 # NOT listed below, although attached to the same device: the utility counters
 # created by the owner on rain_total (rain_hour, rain_day, rain_week, rain_month, rain_year — measured platform:
-# utility_meter). They are HA helpers, not firmware entities: including them would make
-# the firmware <-> HA equality check of step 3 fail.
+# utility_meter). They are HA helpers, not firmware entities: including them would
+# break the firmware <-> HA equality of step 3.
 #
-# The entity_id cannot be derived from the firmware: the device name is renamed in Home
-# Assistant and renames every entity_id at once. Hence this MEASURED list, and the rule:
+# The entity_id is not derivable from the firmware: the device name is renamed in Home
+# Assistant and renames all entity_ids at once. Hence this MEASURED list, and the rule:
 # re-read it before touching the card.
 #
 ## Device
@@ -41,6 +41,7 @@ sensor.jardin_vevor_7_in_1_weather_station_reception_rate
 sensor.jardin_vevor_7_in_1_weather_station_reception_window_decoded
 sensor.jardin_vevor_7_in_1_weather_station_reception_window_emitted
 sensor.jardin_vevor_7_in_1_weather_station_rejected_frames
+sensor.jardin_vevor_7_in_1_weather_station_reset_reason
 sensor.jardin_vevor_7_in_1_weather_station_rmt_captures
 sensor.jardin_vevor_7_in_1_weather_station_station_id
 sensor.jardin_vevor_7_in_1_weather_station_tx_counter

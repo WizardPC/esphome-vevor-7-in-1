@@ -53,7 +53,7 @@ EXCEPTIONS_HA = ("rain_hour", "rain_day", "rain_week", "rain_month", "rain_year"
 # since. Deliberately kept APART from EXCEPTIONS_HA: those five are permanent (the owner's helpers),
 # these must be removed from here as soon as the listing reports them — otherwise the entry would
 # silently mask a genuine disappearance later. Printed on every run so it cannot go unnoticed.
-PENDING_FLASH = ("reset_reason",)
+PENDING_FLASH = ()   # empty since the 07/10 17:38 flash: reset_reason arrived in HA.
 
 # --------------------------------------------------------------------------- refresh
 # The listing is a MEASUREMENT: never derive it, always re-read it. This rewrites it from the live
