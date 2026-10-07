@@ -1,17 +1,17 @@
-# Entités réellement exposées par Home Assistant — relevé, pas déduction.
+# Entities actually exposed by Home Assistant - a measurement, not an inference.
 #
 # Source     = API REST de Home Assistant, http://192.168.2.104/api/states
-# Relevé le  = 07/10/2026 09:51 (heure locale)
-# Préfixe    = jardin_vevor_7_in_1_weather_station   (lu, jamais dérivé)
-# Rafraîchir = .venv/bin/python dev/tools/check_ha_card.py --refresh
-# Vérifier   = .venv/bin/python dev/tools/check_ha_card.py  (étape 5 de run_tests.sh)
+# Measured on = 07/10/2026 09:51 (local time)
+# Prefix     = jardin_vevor_7_in_1_weather_station   (read, never derived)
+# Refresh    = .venv/bin/python dev/tools/check_ha_card.py --refresh
+# Verify     = .venv/bin/python dev/tools/check_ha_card.py  (step 5 of run_tests.sh)
 #
-# Ne figurent PAS ci-dessous, bien qu'attachées au même appareil : les compteurs d'utilité
+# NOT listed below, although attached to the same device: the utility counters
 # créés par le propriétaire sur rain_total (rain_hour, rain_day, rain_week, rain_month, rain_year — plateforme mesurée :
-# utility_meter). Ce sont des helpers HA, pas des entités du firmware : les inclure ferait
-# échouer l'égalité firmware <-> HA de l'étape 3.
+# utility_meter). They are HA helpers, not firmware entities: including them would make
+# the firmware <-> HA equality check of step 3 fail.
 #
-# L'entity_id n'est pas déductible du firmware : le nom d'appareil se renomme dans Home
+# The entity_id cannot be derived from the firmware: the device name is renamed in Home
 # Assistant et renomme tous les entity_id d'un coup. D'où cette liste MESURÉE, et la règle :
 # la relire avant de toucher la carte.
 #
