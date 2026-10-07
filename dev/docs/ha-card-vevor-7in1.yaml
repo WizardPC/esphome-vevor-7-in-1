@@ -4,7 +4,7 @@
 #   - la vignette « taux » lit sensor..._reception_rate, la nouvelle entité du firmware. L'ancien
 #     calcul OK/(OK+KO) mesurait la part de trames valides PARMI LES TENTATIVES : il confondait
 #     « la station n'émet pas » avec « on ne l'entend pas », et sa fenêtre repartait de zéro à
-#     chaque redémarrage. Les compteurs cumulés restent affichés, mais nommés pour ce qu'ils sont.
+#     chaque redémarrage. Son texte de détail (« Trames : OK / total ») est conservé tel quel.
 #   - la vignette « état » garde les mots et les seuils d'origine (35 / 60 / 180 s — ceux du
 #     composant : creneaux_avant_rearmement_ = 3 x 20 s, duree_max_avant_redemarrage_s_ = 180) et
 #     gagne l'heure de la dernière trame, qui ne dérive jamais.
@@ -52,11 +52,11 @@ cards:
           {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
           {% if r is none %}en attente {% else %}{{ r | round(1) }} % {% endif %}
         secondary: >-
-          {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
           {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
           {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
           {% set dup = states('sensor.jardin_vevor_7_in_1_weather_station_duplicates_ignored') | float(none) %}
-          {% if r is none %}Deux trames requises pour la première mesure {% else %}Émissions décodées, 30 dernières trames (environ 10 min) {% endif %}· cumul depuis le démarrage : {{ ok | int }} OK · {{ ko | int }} KO · {{ dup | int }} doublons
+          {% set total = (ok + ko) if ok is not none and ko is not none else 0 %}
+          {% if ok is none or ko is none %}Indisponibilité {% elif total < 20 %}Analyse... {% else %}Trames : {{ ok | int }} / {{ (ok + ko) | int }}{% endif %}
         icon: mdi:access-point
         icon_color: >-
           {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}

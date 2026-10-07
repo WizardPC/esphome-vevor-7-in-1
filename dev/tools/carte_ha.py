@@ -311,9 +311,11 @@ def main() -> int:
         s1 = rendre(v1["secondary"], states)
         c1 = rendre(v1["icon_color"], states)
         p2 = rendre(v2["primary"], states)
+        s2 = rendre(v2["secondary"], states)
         c2 = rendre(v2["icon_color"], states)
         ok1 = attendu1 in p1 and attendu2 in s1 and c1 == couleur
-        print("   %-20s v1(%-24s | %-58s | %-6s) v2(%s | %s)" % (nom, p1, s1[:57], c1, p2, c2))
+        
+        print("   %-20s v1(%-24s | %-58s | %-6s) v2(%s | %s | %s)" % (nom, p1, s1[:57], c1, p2, s2[:50], c2))
         if not ok1:
             echecs.append("scenario « %s » : attendu %r / %r / %s, obtenu %r / %r / %s"
                           % (nom, attendu1, attendu2, couleur, p1, s1, c1))
