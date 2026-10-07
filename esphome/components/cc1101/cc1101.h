@@ -99,7 +99,7 @@ class CC1101Component final : public Component,
  protected:
   uint16_t chip_id_{0};
   bool initialized_{false};
-  // MODIFICATION LOCALE — non-blocking chip identity re-reads (see cc1101.cpp).
+  // LOCAL CHANGE — non-blocking chip identity re-reads (see cc1101.cpp).
   uint8_t retry_budget_{0};
   uint32_t next_retry_ms_{0};
   void retry_radio_init_();
@@ -128,7 +128,7 @@ class CC1101Component final : public Component,
   void write_(Register reg, uint8_t value);
   void write_(Register reg, const uint8_t *buffer, size_t length);
   void read_(Register reg);
-  uint8_t read_status_();  // MODIFICATION LOCALE — CHIP_RDYn (status byte bit 7)
+  uint8_t read_status_();  // LOCAL CHANGE — CHIP_RDYn (status byte bit 7)
   void read_(Register reg, uint8_t *buffer, size_t length);
 
   // State Management

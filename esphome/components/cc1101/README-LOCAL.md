@@ -6,7 +6,7 @@ component.
 
 ## Local changes
 
-Every change is marked `LOCAL CHANGE` in the code: **10 markers in total** (8 blocks in
+Every change is marked `LOCAL CHANGE` in the code: **11 markers in total** (9 in
 `cc1101.cpp`, 2 declarations in `cc1101.h`). They cover:
 
 1. **identity re-read with retries**: 4 attempts 50 ms apart in `configure()`, then up to **60
@@ -49,8 +49,8 @@ apart, then up to 60 re-reads 250 ms apart (≈ 15 s) from `loop()` before givin
   automatically**.
 - **Source of truth for the diff**: the installed native component, so the gap stays readable —
   e.g. `.venv/lib/python3.13/site-packages/esphome/components/cc1101/`.
-- **Finding the changes**: `grep -rn "LOCAL CHANGE" esphome/components/cc1101/` lists the 10 markers
-  (8 blocks in `cc1101.cpp`, 2 in `cc1101.h`).
+- **Finding the changes**: `grep -rn "LOCAL CHANGE" esphome/components/cc1101/` lists the 11 markers
+  (9 in `cc1101.cpp`, 2 in `cc1101.h`).
 - **Replaying the changes** after an ESPHome upgrade: compare the local folder with the native
   component of the new version (`diff -ru <native> esphome/components/cc1101/`), then carry the
   marked blocks over. There is **no** patch file: the `LOCAL CHANGE` blocks stand in for a hunk set.

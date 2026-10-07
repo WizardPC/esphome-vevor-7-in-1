@@ -168,7 +168,7 @@ void CC1101Component::configure() {
   this->strobe_(Command::RES);
   delay(5);
 
-  // MODIFICATION LOCALE — identity check with re-reads (README-LOCAL.md). Per datasheet SWRS061I
+  // LOCAL CHANGE — identity check with re-reads (README-LOCAL.md). Per datasheet SWRS061I
   // §10.1, CHIP_RDYn (status bit 7) stays high until power AND crystal are stable, so Chip ID 0xFFFF
   // means "chip not ready", not "bad wiring"; here 4 attempts at 50 ms instead of a single read.
   uint8_t tentatives = 0;
@@ -203,7 +203,7 @@ void CC1101Component::configure() {
 
   this->initialized_ = true;
 
-  // MODIFICATION LOCALE — verified write, rewritten until it takes. Some register writes are lost
+  // LOCAL CHANGE — verified write, rewritten until it takes. Some register writes are lost
   // intermittently (MDMCFG3 0xC0->0x22, FREQ0 0xE8->0xEC, MDMCFG4 0xC8->0x8C) while reads are
   // reliable: a chip whose registers do not take demodulates nothing. TEST0/1/2 written once.
   uint8_t non_prises = 0;
@@ -243,7 +243,7 @@ void CC1101Component::configure() {
            (unsigned) reprises, (unsigned) non_prises);
   this->set_output_power(this->output_power_requested_);
 
-  // MODIFICATION LOCALE — write check (read back what was just written). The chip can answer the
+  // LOCAL CHANGE — write check (read back what was just written). The chip can answer the
   // identity read (0x0014) and declare ready (CHIP_RDYn low) yet receive nothing; a ±100 kHz sweep
   // catches a crystal offset, so failing that points to the config writes (firmware-design-notes.md).
   {
@@ -276,7 +276,7 @@ void CC1101Component::configure() {
     }
   }
 
-  // MODIFICATION LOCALE — settle delay before entering RX. Measured: RX entry succeeded on a cold
+  // LOCAL CHANGE — settle delay before entering RX. Measured: RX entry succeeded on a cold
   // boot but failed on every warm re-arm, so the chip is given time to recover from its reset.
   delay(20);
   if (!this->enter_rx_()) {
@@ -285,7 +285,7 @@ void CC1101Component::configure() {
     return;
   }
 
-  // MODIFICATION LOCALE — VCO/PLL calibration state after entering RX. TI errata SWRZ020E: the
+  // LOCAL CHANGE — VCO/PLL calibration state after entering RX. TI errata SWRZ020E: the
   // PLL lock detector is unreliable and the reliable test is FSCAL1 != 0x3F; a chip can read back
   // compliant and still demodulate nothing, so 0x3F points to hardware (crystal, power), not code.
   {
@@ -316,7 +316,7 @@ void CC1101Component::call_listeners_(const std::vector<uint8_t> &packet, float 
   this->packet_trigger_.trigger(packet, freq_offset, rssi, lqi);
 }
 
-// MODIFICATION LOCALE — non-blocking chip identity re-read, called from loop(). One attempt every
+// LOCAL CHANGE — non-blocking chip identity re-read, called from loop(). One attempt every
 // 250 ms, bounded budget: the counterpart of RadioLib's 10 re-reads 10 ms apart, never blocking the
 // main loop — a multi-second blocking loop in setup() trips the ESP32 task watchdog.
 void CC1101Component::retry_radio_init_() {
@@ -491,7 +491,7 @@ bool CC1101Component::wait_for_state_(State target_state, uint32_t timeout_ms) {
 }
 
 bool CC1101Component::enter_calibrated_(State target_state, Command cmd) {
-  // MODIFICATION LOCALE — do not give up on a timeout. Measured: RX entry failed four times running
+  // LOCAL CHANGE — do not give up on a timeout. Measured: RX entry failed four times running
   // while all writes passed and calibration was valid (FSCAL1 = 0x18, MARCSTATE = 0x0D) — only the
   // 100 ms wait was at fault. §22.1: recalibrate until lock; SWRZ020E: lock detector unreliable.
   for (uint8_t retries = PLL_LOCK_RETRIES; retries > 0; retries--) {
@@ -555,7 +555,7 @@ void CC1101Component::write_(Register reg, const uint8_t *buffer, size_t length)
   this->disable();
 }
 
-// MODIFICATION LOCALE — read the status byte (bit 7 = CHIP_RDYn, active low) without touching the
+// LOCAL CHANGE — read the status byte (bit 7 = CHIP_RDYn, active low) without touching the
 // chip. The only documented way to know whether power and crystal are stable (§10.1).
 uint8_t CC1101Component::read_status_() {
   this->enable();
