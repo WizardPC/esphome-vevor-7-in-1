@@ -147,8 +147,10 @@ async def main() -> int:
             marque = ""
             if delta < 0:
                 marque = "  <- NEGATIVE: the board restarted (counters back to zero)"
-            elif delta and clef in ("temp_refused", "rain_refused", "repaired", "repairs_refused"):
-                marque = "  <- the gate fired"
+            elif delta and clef in ("temp_refused", "rain_refused", "repairs_refused"):
+                marque = "  <- a gate refused frames"
+            elif delta and clef == "repaired":
+                marque = "  <- frames rebuilt by the decoder's bounded repair"
             faits.append("   %-16s %6d -> %-6d  (%+d)%s" % (clef, avant, apres, delta, marque))
         if precedent.get("reset_reason") != actuel["reset_reason"]:
             faits.append("restart: the reason changed, %s -> %s"
