@@ -1,0 +1,46 @@
+# Entites exposees par Home Assistant pour le recepteur Vevor 7-en-1 (jardin).
+# Source   = API REST de Home Assistant, http://192.168.2.104/api/states
+# Lu le    = 07/10/2026 08:34 (heure locale)
+# Prefixe  = jardin_vevor_7_in_1_weather_station   (lu, jamais derive)
+# Procedure = .venv/bin/python dev/tools/carte_ha.py --refresh
+# Verification de la carte = .venv/bin/python dev/tools/carte_ha.py
+# Exceptions declarees (entites HA qui ne viennent pas du firmware) :
+#   rain_day -> agregat cote HA (utility_meter) sur Rain total
+#   rain_hour -> agregat cote HA (utility_meter) sur Rain total
+#   rain_month -> agregat cote HA (utility_meter) sur Rain total
+#   rain_week -> agregat cote HA (utility_meter) sur Rain total
+#   rain_year -> agregat cote HA (utility_meter) sur Rain total
+#
+binary_sensor.jardin_vevor_7_in_1_weather_station_station_battery_low  off            2026-10-07T08:17:25
+button.jardin_vevor_7_in_1_weather_station_dump_pulses                 unknown        2026-10-07T08:17:24
+button.jardin_vevor_7_in_1_weather_station_re_apply_radio_config       unknown        2026-10-07T08:17:24
+button.jardin_vevor_7_in_1_weather_station_restart_board               unknown        2026-10-07T08:17:24
+number.jardin_vevor_7_in_1_weather_station_cc1101_frequency            868.35         2026-10-07T08:17:24
+number.jardin_vevor_7_in_1_weather_station_data_rate                   11111.0        2026-10-07T08:17:24
+number.jardin_vevor_7_in_1_weather_station_fsk_deviation               70.0           2026-10-07T08:17:24
+number.jardin_vevor_7_in_1_weather_station_rx_filter_bandwidth         162.0          2026-10-07T08:17:24
+number.jardin_vevor_7_in_1_weather_station_station_id_0_learn          unknown        2026-10-07T08:17:24
+number.jardin_vevor_7_in_1_weather_station_watchdog_max_silence_before_restart unknown        2026-10-07T08:17:24
+number.jardin_vevor_7_in_1_weather_station_watchdog_silent_slots_before_re_arm unknown        2026-10-07T08:17:24
+sensor.jardin_vevor_7_in_1_weather_station_duplicates_ignored          49.0           2026-10-07T08:33:51
+sensor.jardin_vevor_7_in_1_weather_station_illuminance                 8370.0         2026-10-07T08:34:05
+sensor.jardin_vevor_7_in_1_weather_station_last_raw_frame              aa 00 84 cb 16 02 8c 59 01 0e 04 02 24 02 3e 01 21 b3 d8 1c d9 2026-10-07T08:34:05
+sensor.jardin_vevor_7_in_1_weather_station_last_verdict                ok             2026-10-07T08:17:25
+sensor.jardin_vevor_7_in_1_weather_station_outdoor_humidity            89.0           2026-10-07T08:33:25
+sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature         15.1999998092651 2026-10-07T08:34:05
+sensor.jardin_vevor_7_in_1_weather_station_rain_day                    0E-13          2026-10-07T07:42:30
+sensor.jardin_vevor_7_in_1_weather_station_rain_hour                   0E-13          2026-10-07T08:17:25
+sensor.jardin_vevor_7_in_1_weather_station_rain_month                  14.6790008544922 2026-10-07T07:42:30
+sensor.jardin_vevor_7_in_1_weather_station_rain_total                  73.8610000610352 2026-10-07T08:17:25
+sensor.jardin_vevor_7_in_1_weather_station_rain_week                   14.6790008544922 2026-10-07T07:42:30
+sensor.jardin_vevor_7_in_1_weather_station_rain_year                   14.6790008544922 2026-10-07T07:42:30
+sensor.jardin_vevor_7_in_1_weather_station_reception_rate              100.0          2026-10-07T08:17:51
+sensor.jardin_vevor_7_in_1_weather_station_rejected_frames             15.0           2026-10-07T08:30:31
+sensor.jardin_vevor_7_in_1_weather_station_rmt_captures                153.0          2026-10-07T08:33:51
+sensor.jardin_vevor_7_in_1_weather_station_station_id                  33995.0        2026-10-07T08:17:25
+sensor.jardin_vevor_7_in_1_weather_station_tx_counter                  216.0          2026-10-07T08:34:05
+sensor.jardin_vevor_7_in_1_weather_station_uv_index                    0.0            2026-10-07T08:17:25
+sensor.jardin_vevor_7_in_1_weather_station_valid_frames                50.0           2026-10-07T08:33:51
+sensor.jardin_vevor_7_in_1_weather_station_wind_direction              291.0          2026-10-07T08:32:05
+sensor.jardin_vevor_7_in_1_weather_station_wind_gust                   3.20000004768372 2026-10-07T08:33:45
+sensor.jardin_vevor_7_in_1_weather_station_wind_speed                  1.56006240844727 2026-10-07T08:34:05

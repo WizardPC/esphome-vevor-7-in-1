@@ -1,0 +1,78 @@
+# ================================================================================================
+# Carte Lovelace — Vevor 7-en-1 (jardin) — réception et santé de la liaison 868 MHz
+# Version du 07/10/2026. Remplace la carte à deux vignettes précédente, à coller telle quelle dans
+# un tableau de bord (éditeur YAML).
+#
+# PREFIXE DES ENTITES — lu dans Home Assistant, jamais déduit du firmware
+#   sensor.jardin_vevor_7_in_1_weather_station_tx_counter   (33 entités sous ce préfixe au 07/10/2026)
+#   Liste mesurée et procédure de rafraîchissement — dev/state/entites_ha.txt
+#   Le préfixe vient du NOM D'APPAREIL côté Home Assistant — le renommer casse tous ces
+#   identifiants d'un coup, sans qu'aucun contrôle hors ligne ne puisse le voir.
+#   Contrôle en 5 s — Outils de développement > États, filtrer « vevor ».
+#   Réparation en masse si l'appareil est renommé — remplacer partout l'ancien préfixe.
+#
+# CE QUI CHANGE PAR RAPPORT A LA CARTE PRECEDENTE
+#   1. Le taux vient de sensor..._reception_rate, la nouvelle entité du firmware, calculée sur le
+#      compteur de la station. L'ancien calcul OK/(OK+KO) mesurait la part de trames valides PARMI
+#      LES TENTATIVES — il confondait « la station n'émet pas » et « on ne l'entend pas », et sa
+#      fenêtre repartait de zéro à chaque redémarrage. Ce n'est pas la même question.
+#   2. Le timer s'appuie toujours sur tx_counter — la seule entité qui bouge à CHAQUE trame. Les
+#      compteurs voisins sont republiés toutes les 10 s et ESPHome ne republie pas une valeur
+#      identique, donc leur horodatage est quantifié. Il porte maintenant l'heure de la dernière
+#      trame, qui ne dérive jamais, en plus de l'âge.
+#
+# LIMITES — à lire avant de juger un chiffre
+#   * Un template de carte utilisant now() est réévalué par Home Assistant au début de chaque
+#     minute (helpers/event.py — async_track_utc_time_change(..., second=0)) et immédiatement à
+#     chaque changement d'état de l'entité citée. Le nombre de secondes affiché est donc un
+#     INSTANTANE pris au moment du rendu, pas un compteur qui défile à la seconde. Le verdict, lui,
+#     reste juste à moins d'une minute près.
+#   * reception_rate couvre les 30 DERNIERES trames (environ 10 min), d'après le compteur de la
+#     station. Les compteurs OK / KO / doublons, eux, repartent de zéro à chaque redémarrage.
+#   * Les seuils 35 / 60 / 180 s ne sont pas arbitraires — ce sont ceux du composant
+#     (vevor_7in1.h — creneaux_avant_rearmement_ = 3 créneaux de 20 s = 60 s, puis
+#     duree_max_avant_redemarrage_s_ = 180 s).
+#   * Une valeur basse peut venir d'un émetteur tiers sur 868,35 MHz — constaté et mesuré, pas
+#     supposé. Les bandes de couleur 90 / 70 % sont un choix, ajustable, pas une vérité.
+# ================================================================================================
+- type: grid
+  columns: 2
+  square: false
+  cards:
+    # ---------- vignette 1 — état de la liaison (timer de réception) ----------
+    - type: custom:mushroom-template-card
+      entity: sensor.jardin_vevor_7_in_1_weather_station_tx_counter
+      primary: >-
+        {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
+        {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
+        {% if age is none %}inconnu {% elif age < 60 %}il y a {{ age | round(0) | int }} s {% elif age < 3600 %}il y a {{ (age / 60) | round(0) | int }} min {% else %}il y a {{ (age / 3600) | round(1) }} h {% endif %}
+      secondary: >-
+        {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
+        {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
+        {% if age is none %}Carte injoignable, ou entité absente {% else %}Trame {{ e.state | int }} à {{ as_timestamp(e.last_changed) | timestamp_custom('%H:%M:%S', true) }} — {% if age <= 35 %}réception normale, une trame toutes les 20 s {% elif age <= 60 %}une trame manquée {% elif age <= 180 %}silence radio, ré-armement demandé à 60 s {% else %}silence radio, la carte redémarre à 180 s {% endif %}{% endif %}
+      icon: >-
+        {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
+        {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
+        {% if age is none %}mdi:help-circle-outline {% elif age <= 35 %}mdi:clock-check-outline {% elif age <= 180 %}mdi:clock-alert-outline {% else %}mdi:clock-remove-outline {% endif %}
+      icon_color: >-
+        {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
+        {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
+        {% if age is none %}grey {% elif age <= 35 %}green {% elif age <= 60 %}amber {% elif age <= 180 %}orange {% else %}red {% endif %}
+    # ---------- vignette 2 — taux de réception conforme ----------
+    - type: custom:mushroom-template-card
+      entity: sensor.jardin_vevor_7_in_1_weather_station_reception_rate
+      primary: >-
+        {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
+        {% if r is none %}en attente {% else %}{{ r | round(1) }} % {% endif %}
+      secondary: >-
+        {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
+        {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
+        {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
+        {% set dup = states('sensor.jardin_vevor_7_in_1_weather_station_duplicates_ignored') | float(none) %}
+        {% if r is none %}Il faut deux trames pour une première mesure — fenêtre des 30 dernières, environ 10 min {% else %}Trames de la station décodées, sur les 30 dernières — environ 10 min {% endif %}· depuis le démarrage de la carte — OK {{ ok | int }} · KO {{ ko | int }} · doublons {{ dup | int }}
+      icon: >-
+        {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
+        {% if r is none %}mdi:help-circle-outline {% elif r >= 90 %}mdi:check-circle-outline {% elif r >= 70 %}mdi:alert-circle-outline {% else %}mdi:close-circle-outline {% endif %}
+      icon_color: >-
+        {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
+        {% if r is none %}grey {% elif r >= 90 %}green {% elif r >= 70 %}amber {% else %}red {% endif %}
