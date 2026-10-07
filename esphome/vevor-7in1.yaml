@@ -10,7 +10,7 @@ substitutions:
   # and a quartz drifts by tens of kHz over a few degrees). See design notes, "Configuration traps".
   bw_khz: "162"
   # INFO in production, DEBUG for a measurement campaign (see the logger block).
-  niveau_journal: "INFO"
+  log_level: "INFO"
   # Components come from the public repo; building from this tree needs -s vevor_components components.
   vevor_components: "github://WizardPC/esphome-vevor-7-in-1@main"
 
@@ -37,7 +37,7 @@ esp32:
     type: esp-idf
 
 logger:
-  level: ${niveau_journal}
+  level: ${log_level}
 
 api:
   encryption:

@@ -34,6 +34,9 @@ state/.tmp_entry.md
 # they stay on disk, out of the repository.
 dev/state/panne_*.txt
 dev/state/*.jsonl
+# Etat d'execution des surveillances (propre a la machine qui les fait tourner).
+dev/state/board_watch_state.json
+dev/state/temperature_watch_last.txt
 
 # === Raw measurement logs (2.4 MB of captures): out of the repository by default.
 #     The evidence kept in the repo lives in state/ (PROGRESS.md, DONE.md) and the JSON reports.
