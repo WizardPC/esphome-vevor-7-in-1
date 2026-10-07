@@ -168,6 +168,14 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // those triggered by a whole silent slot: telling them apart is what makes the fix measurable.
   uint32_t get_rearmements_surdite() const { return this->rearmements_surdite_; }
 
+  // Taux de réception conforme, en pourcent : la part des ÉMISSIONS de la station réellement
+  // décodées sur la fenêtre des FENETRE_TAUX dernières trames (NaN tant qu'il n'y a pas de quoi
+  // mesurer). Repose sur le compteur de la station : il avance de 39 unités toutes les 20 s
+  // (mesuré : 1 unité = 0,513 s) et ne saute JAMAIS de valeur — vérifié sur 589 trames, y compris
+  // pendant huit heures de panne de réception. C'est donc lui qui dit combien d'émissions ont été
+  // manquées, pas le temps écoulé qui suppose une cadence parfaite.
+  float get_taux_reception() const;
+
  protected:
   // Stitches the end of the previous capture to the start of the current one, merging the two
   // same-sign pulses at the seam (a cut in the middle of a pulse gives two half-pulses of the same
@@ -180,6 +188,14 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // (estimer_periode_x10 in vevor_protocol.h), so a configured constant would be a knob nothing
   // reads — and the value actually used is already logged for every frame.
   uint32_t frames_{0};
+  // Fenêtre glissante du taux de réception : le compteur de la station et l'instant d'arrivée de
+  // chaque trame décodée. 30 trames = 10 minutes : assez pour lisser, assez court pour réagir.
+  static constexpr size_t FENETRE_TAUX = 30;
+  uint8_t compteurs_fenetre_[FENETRE_TAUX]{};
+  uint32_t instants_fenetre_[FENETRE_TAUX]{};
+  size_t nb_fenetre_{0};
+  size_t tete_fenetre_{0};
+  void maj_fenetre_taux_(uint8_t compteur);
   uint32_t captures_{0};
   uint32_t rejected_{0};
   uint32_t duplicates_{0};

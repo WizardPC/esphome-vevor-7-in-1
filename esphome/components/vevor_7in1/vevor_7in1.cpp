@@ -247,6 +247,7 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   }
 
   this->frames_++;
+  this->maj_fenetre_taux_(raw[18]);   // octet 18 = compteur d'émissions de la station (protocol.h:129)
   // The period is in TENTHS of a microsecond (measured on the burst): we log the value actually
   // kept, not a misleading integer.
   ESP_LOGD(TAG, "trame extraite (période mesurée %d.%d us, polarité %s, %s%s) → %u octets",
@@ -441,6 +442,59 @@ void Vevor7in1::surveiller_radio_() {
       this->radio_->reset();
     }
   }
+}
+
+// -------------------------------------------------------------------------------------------
+// Taux de réception conforme (voir vevor_7in1.h). Le compteur de la station est le seul juge
+// fiable du nombre d'émissions écoulées : il avance de 39 unités toutes les 20 s et ne saute jamais
+// de valeur (589 trames vérifiées, dont huit heures de panne de réception). Le temps écoulé, lui,
+// suppose une cadence parfaite et se trompe dès que la station dérive.
+//
+// Son seul défaut est d'être un octet : il repart à zéro tous les 256 unités, soit 131 s. On lève
+// l'ambiguïté avec l'horodatage d'arrivée — si le temps écoulé implique plus d'unités que l'écart
+// brut, c'est qu'un ou plusieurs tours ont eu lieu.
+// -------------------------------------------------------------------------------------------
+void Vevor7in1::maj_fenetre_taux_(uint8_t compteur) {
+  this->compteurs_fenetre_[this->tete_fenetre_] = compteur;
+  this->instants_fenetre_[this->tete_fenetre_] = millis();
+  this->tete_fenetre_ = (this->tete_fenetre_ + 1) % FENETRE_TAUX;
+  if (this->nb_fenetre_ < FENETRE_TAUX) {
+    this->nb_fenetre_++;
+  }
+}
+
+float Vevor7in1::get_taux_reception() const {
+  if (this->nb_fenetre_ < 3) {
+    return NAN;   // pas encore de quoi mesurer : deux trames au minimum, trois pour un intervalle
+  }
+  const size_t premier = (this->tete_fenetre_ + FENETRE_TAUX - this->nb_fenetre_) % FENETRE_TAUX;
+  uint32_t recues = 0;
+  uint32_t emissions = 0;
+  for (size_t i = 0; i + 1 < this->nb_fenetre_; i++) {
+    const size_t a = (premier + i) % FENETRE_TAUX;
+    const size_t b = (premier + i + 1) % FENETRE_TAUX;
+    const uint32_t ecart = (uint32_t) ((this->compteurs_fenetre_[b] - this->compteurs_fenetre_[a]) & 0xFF);
+    if (ecart == 0u) {
+      continue;   // même compteur deux fois : une religne du journal, pas une émission
+    }
+    const uint32_t dt_ms = this->instants_fenetre_[b] - this->instants_fenetre_[a];
+    const uint32_t unites_temps = (uint32_t) ((dt_ms + 256u) / 513u);   // 1 unité = 0,513 s
+    uint32_t tours = 0;
+    if (unites_temps > ecart) {
+      tours = (unites_temps - ecart + 128u) / 256u;
+    }
+    const uint32_t delta = ecart + 256u * tours;
+    uint32_t n = (delta + 19u) / 39u;   // 39 unités = une émission de la station
+    if (n == 0u) {
+      n = 1u;
+    }
+    recues++;          // la trame d'arrivée de ce couple a bien été reçue
+    emissions += n;
+  }
+  if (emissions == 0u) {
+    return NAN;
+  }
+  return 100.0f * (float) recues / (float) emissions;
 }
 
 }  // namespace vevor_7in1

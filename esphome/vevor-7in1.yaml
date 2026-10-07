@@ -184,6 +184,7 @@ interval:
           id(valid_sensor).publish_state(id(vevor_rx).get_frames());
           id(rejected_sensor).publish_state(id(vevor_rx).get_rejected());
           id(duplicates_sensor).publish_state(id(vevor_rx).get_duplicates());
+          id(taux_reception_sensor).publish_state(id(vevor_rx).get_taux_reception());
 
 button:
   # Instruments de diagnostic. Le composant les possède (platform: vevor_7in1) : le YAML ne fait
@@ -383,6 +384,17 @@ sensor:
     name: "Duplicates ignored"
     id: duplicates_sensor
     accuracy_decimals: 0
+    entity_category: diagnostic
+  # Share of the station's transmissions actually decoded (%), computed INSIDE the component from
+  # the station's own counter over the last 30 frames (10 minutes). Uses that counter rather than
+  # elapsed time: it advances 39 units every 20 s and never skips a value, so it says exactly how
+  # many emissions were missed. Reads "unknown" until there is enough material.
+  - platform: template
+    name: "Reception rate"
+    id: taux_reception_sensor
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 1
     entity_category: diagnostic
   # Re-arms triggered by the FAST criterion (a capture too short to hold a burst) — as opposed to the
   # slow criterion (a whole silent slot). NOT SHIPPED YET: see the comment on seuil_impulsions above.
