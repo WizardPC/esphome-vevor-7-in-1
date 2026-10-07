@@ -214,13 +214,18 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // Frames refused because rain rose by a physically impossible jump (see rain_plausible).
   // Separate counter: a reception fault, not a protocol rejection.
   uint32_t rain_rejected_{0};
+  // Frames refused because the temperature jumped further than the air can (see temp_plausible),
+  // plus the refused value and how many times in a row it has now been seen (the escape hatch).
+  uint32_t temp_rejected_{0};
+  float temp_refused_value_{0.0f};
+  uint32_t temp_same_refusals_{0};
   // --- Silent captures: the FAST symptom of a chip that stopped delivering --------------------
   // Measured on this hardware: a burst is 176-184 pulses, a FRAGMENT (the C3's RMT cuts a burst in
   // two) is ~70-96, and a DEAF chip delivers 2-7. The threshold therefore separates a fragment
   // (perfectly normal) from silence (nothing decodable is arriving). Counted in dump(), acted on by
   // watch_radio_(), which re-arms the radio AT ONCE instead of waiting for a whole 20 s slot
   // (two emissions at the station's real rate of one frame every 20 s).
-  uint32_t captures_creuses_{0};
+  uint32_t silent_captures_{0};
   uint32_t pulse_threshold_{40};
   uint32_t deaf_rearms_{0};
   // A re-arm is a coin flip on the chip's ANALOG state (VCO/PLL calibration): measured 05/10/2026,

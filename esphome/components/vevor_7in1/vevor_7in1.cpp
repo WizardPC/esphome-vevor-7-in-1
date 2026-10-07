@@ -48,10 +48,10 @@ void Vevor7in1::loop() {
 
   ESP_LOGI(TAG,
            "captures=%u (+%u), frames=%u, rejects=%u, repaired=%u (%u refused), "
-           "rain_refused=%u, last pulses=%u, longest=%u",
+           "rain_refused=%u, temp_refused=%u, last pulses=%u, longest=%u",
            (unsigned) this->captures_, (unsigned) (this->captures_ - this->reported_captures_),
            (unsigned) this->frames_, (unsigned) this->rejected_, (unsigned) this->repairs_,
-           (unsigned) this->repairs_rejetees_, (unsigned) this->rain_rejected_,
+           (unsigned) this->repairs_rejetees_, (unsigned) this->rain_rejected_, (unsigned) this->temp_rejected_,
            (unsigned) this->last_pulse_count_, (unsigned) this->longest_capture_);
   this->reported_captures_ = this->captures_;
 }
@@ -76,9 +76,9 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   // fragment (the RMT cuts a burst in two) is 70-96 pulses and perfectly normal; a deaf chip
   // delivers 2-7. The watchdog reads this counter and re-arms the radio at once.
   if (timings.size() < this->pulse_threshold_) {
-    this->captures_creuses_++;
+    this->silent_captures_++;
   } else {
-    this->captures_creuses_ = 0;
+    this->silent_captures_ = 0;
   }
   if (timings.size() > this->longest_capture_) {
     this->longest_capture_ = timings.size();
@@ -187,6 +187,40 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
                  "rain refused: %.1f mm while the previous frame gave %.1f mm (rise "
                  "physiquement impossible) — bruts : %s",
                  f.rain_mm, derniere, bytes.c_str());
+        return false;
+      }
+    }
+  }
+
+  // TEMPERATURE CONTINUITY — same shape as the rain gate above, and for the same reason: a repaired
+  // frame whose checksum still holds can fabricate an absurd temperature (measured 39.1 C against a
+  // reading of 13 C on 07/10/2026, every other field of the same raw frame plausible). Escape hatch:
+  // the same out-of-range value refused three times in a row is accepted, so a real step change is
+  // never blocked for ever.
+  {
+    vevor::Frame f;
+    vevor::Frame precedente;
+    const char *raison = "";
+    if (vevor::decode(raw, f, &raison)) {
+      if (this->temp_rejected_ > 0 && std::fabs(f.temp_c - this->temp_refused_value_) < 0.5f) {
+        this->temp_same_refusals_++;
+      } else {
+        this->temp_same_refusals_ = 0;
+      }
+      float derniere = 0.0f;
+      bool connue = false;
+      if (this->has_last_frame_ && vevor::decode(this->last_frame_, precedente, &raison)) {
+        derniere = precedente.temp_c;
+        connue = true;
+      }
+      if (!vevor::temp_plausible(f.temp_c, derniere, connue) && this->temp_same_refusals_ < 3) {
+        this->temp_rejected_++;
+        this->temp_refused_value_ = f.temp_c;
+        const std::string bytes = vevor::hex_bytes(raw, vevor::FRAME_BYTES);
+        ESP_LOGW(TAG,
+                 "temperature refused: %.1f C while the previous frame gave %.1f C "
+                 "(jump > %.1f C) — raw: %s",
+                 f.temp_c, derniere, (double) vevor::TEMP_JUMP_MAX_C, bytes.c_str());
         return false;
       }
     }
@@ -407,8 +441,8 @@ void Vevor7in1::watch_radio_() {
     return;   // one outstanding attempt at a time: no doubling with the slow criterion
   }
 
-  if (this->captures_creuses_ >= 2) {
-    this->captures_creuses_ = 0;
+  if (this->silent_captures_ >= 2) {
+    this->silent_captures_ = 0;
     this->rearm_attempts_ = 1;
     this->slots_since_rearm_ = 0;
     this->deaf_rearms_++;

@@ -7,6 +7,7 @@
 //
 // Log lines parsed by dev/tools/eval_frames.py: V7IN1 RAW <21 hex bytes> | V7IN1 OK {json} | V7IN1 REJ <reason>.
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <string>
@@ -85,6 +86,16 @@ static constexpr float RAIN_MAX_HAUSSE_MM = 5.0f;
 
 // `connue` = a previous accepted frame to compare against. Without a reference, accept: the frame
 // already passed the header, checksum, counter and the rest of the plausibility gate.
+// A 20 s frame cannot carry a temperature step larger than this: the sensor and the air have
+// thermal mass. Measured failure, 07/10/2026: a raw frame with EVERY other field plausible carried
+// 39.1 C (bytes 03 7b = 891) while the station read 13 C — a repaired frame whose checksum still
+// held. The escape hatch lives in the component: three identical out-of-range values in a row are
+// accepted, so a genuine step change (moved sensor, cold front) is never blocked for ever.
+static constexpr float TEMP_JUMP_MAX_C = 5.0f;
+inline bool temp_plausible(float nouvelle, float precedente, bool connue) {
+  return !connue || std::fabs(nouvelle - precedente) <= TEMP_JUMP_MAX_C;
+}
+
 inline bool rain_plausible(float nouvelle, float precedente, bool connue) {
   if (nouvelle < 0.0f) {
     return false;
