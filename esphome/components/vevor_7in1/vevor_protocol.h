@@ -85,7 +85,7 @@ static constexpr float RAIN_MAX_HAUSSE_MM = 5.0f;
 
 // `connue` = a previous accepted frame to compare against. Without a reference, accept: the frame
 // already passed the header, checksum, counter and the rest of the plausibility gate.
-inline bool pluie_plausible(float nouvelle, float precedente, bool connue) {
+inline bool rain_plausible(float nouvelle, float precedente, bool connue) {
   if (nouvelle < 0.0f) {
     return false;
   }
@@ -302,8 +302,8 @@ inline size_t timings_to_bits_fin(const int32_t *timings, size_t count, int32_t 
 // No allocation: the histogram is static (one task, single-threaded host test).
 static constexpr int32_t PERIODE_MIN_X10 = 500;    // 50 µs: shorter is not a plausible bit
 static constexpr int32_t PERIODE_MAX_X10 = 1500;   // 150 µs: neither is longer
-static constexpr int32_t FENETRE_BAS_US = 45;      // low bound of the protocol window
-static constexpr int32_t FENETRE_HAUT_US = 115;    // high bound
+static constexpr int32_t WINDOW_LOW_US = 45;      // low bound of the protocol window
+static constexpr int32_t WINDOW_HIGH_US = 115;    // high bound
 static constexpr int HIST_MAX_US = 400;
 
 inline int32_t estimer_periode_x10(const int32_t *timings, size_t count) {
@@ -324,11 +324,11 @@ inline int32_t estimer_periode_x10(const int32_t *timings, size_t count) {
   }
   // Median of the protocol window (fallback: median of everything if the window is empty).
   int64_t base = 0;
-  for (int fenetre = 0; fenetre < 2 && base == 0; fenetre++) {
-    const int bas = fenetre == 0 ? FENETRE_BAS_US : 1;
-    const int haut = fenetre == 0 ? FENETRE_HAUT_US : HIST_MAX_US - 1;
+  for (int band = 0; band < 2 && base == 0; band++) {
+    const int low = band == 0 ? WINDOW_LOW_US : 1;
+    const int high = band == 0 ? WINDOW_HIGH_US : HIST_MAX_US - 1;
     size_t total = 0;
-    for (int b = bas; b <= haut; b++) {
+    for (int b = low; b <= high; b++) {
       total += histo[b];
     }
     if (total < 10) {
@@ -336,7 +336,7 @@ inline int32_t estimer_periode_x10(const int32_t *timings, size_t count) {
     }
     const size_t milieu = total / 2;
     size_t cumul = 0;
-    for (int b = bas; b <= haut; b++) {
+    for (int b = low; b <= high; b++) {
       cumul += histo[b];
       if (cumul > milieu) {
         base = b * 10;
@@ -350,12 +350,12 @@ inline int32_t estimer_periode_x10(const int32_t *timings, size_t count) {
   // Consolidation: rescale each pulse to one bit and average.
   int32_t T = (int32_t) base;
   for (int passe = 0; passe < 3; passe++) {
-    const int32_t seuil = (T * 55) / 100;
+    const int32_t threshold = (T * 55) / 100;
     int64_t somme = 0;
     size_t n = 0;
     for (size_t i = 0; i < count; i++) {
       const int32_t d = timings[i] > 0 ? timings[i] : -timings[i];
-      if (d < seuil) {
+      if (d < threshold) {
         continue;
       }
       int32_t k = (d * 10 + T / 2) / T;   // number of bits in this pulse
@@ -441,14 +441,14 @@ inline bool find_frame_candidate(const uint8_t *bits, size_t bit_count, uint8_t 
 // at all). The repair still recovers the same share of real bursts.
 //
 // Bounded: a single insertion, then header + checksum + counter + plausibility must all pass.
-inline bool reparer_par_insertion(const uint8_t *bits, size_t payload_bit, uint8_t *candidate) {
+inline bool repair_by_insertion(const uint8_t *bits, size_t payload_bit, uint8_t *candidate) {
   const size_t frame_bits = FRAME_BYTES * 8;
   for (size_t q = 0; q <= frame_bits; q++) {
     // The recovered bit continues the preceding pulse: same level as the bit that precedes the
     // insertion point (for q = 0, the last bit transmitted before the payload, i.e. the sync word).
     const size_t precedent = payload_bit + q;
     const uint8_t insere = precedent > 0 ? (uint8_t)(bits[precedent - 1] & 1) : 0;
-    uint8_t essai[FRAME_BYTES];
+    uint8_t attempt[FRAME_BYTES];
     for (size_t b = 0; b < FRAME_BYTES; b++) {
       uint8_t octet = 0;
       for (size_t k = 0; k < 8; k++) {
@@ -457,13 +457,13 @@ inline bool reparer_par_insertion(const uint8_t *bits, size_t payload_bit, uint8
                                      : ((i == q) ? insere : bits[payload_bit + i - 1]);
         octet = (uint8_t)((octet << 1) | bit);
       }
-      essai[b] = octet;
+      attempt[b] = octet;
     }
     Frame f;
     const char *raison = "";
-    if (decode(essai, f, &raison)) {
+    if (decode(attempt, f, &raison)) {
       for (size_t i = 0; i < FRAME_BYTES; i++) {
-        candidate[i] = essai[i];
+        candidate[i] = attempt[i];
       }
       return true;
     }
@@ -518,10 +518,10 @@ inline bool essayer_periode(const int32_t *timings, size_t count, int32_t period
           }
         }
         if (!ok) {
-          // Then the one-bit insertion repair (see reparer_par_insertion). Measured cost: 168
+          // Then the one-bit insertion repair (see repair_by_insertion). Measured cost: 168
           // positions × 21 bytes ≈ 28 000 operations, under 1 ms at 160 MHz, and only when a sync
           // was found but no frame decoded.
-          if (reparer_par_insertion(bits, payload_bit, candidate)) {
+          if (repair_by_insertion(bits, payload_bit, candidate)) {
             if (decode(candidate, frame, &reason)) {
               ok = true;
               repaired = true;

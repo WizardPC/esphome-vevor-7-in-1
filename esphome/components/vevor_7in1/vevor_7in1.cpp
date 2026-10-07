@@ -75,7 +75,7 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   // FAST symptom, counted on every capture: a capture too short to hold anything decodable. A
   // fragment (the RMT cuts a burst in two) is 70-96 pulses and perfectly normal; a deaf chip
   // delivers 2-7. The watchdog reads this counter and re-arms the radio at once.
-  if (timings.size() < this->seuil_impulsions_) {
+  if (timings.size() < this->pulse_threshold_) {
     this->captures_creuses_++;
   } else {
     this->captures_creuses_ = 0;
@@ -164,7 +164,7 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
     return false;
   }
 
-  // RAIN CONTINUITY — state check on ALL frames (see pluie_plausible in vevor_protocol.h): two
+  // RAIN CONTINUITY — state check on ALL frames (see rain_plausible in vevor_protocol.h): two
   // peaks at 7 634.5 mm under a clear sky went unstopped (the protocol plausibility gate ignores
   // rain). A frame refused here does NOT become the next reference (last_frame_ is updated after).
   {
@@ -178,7 +178,7 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
         derniere = precedente.rain_mm;
         connue = true;
       }
-      if (!vevor::pluie_plausible(f.rain_mm, derniere, connue)) {
+      if (!vevor::rain_plausible(f.rain_mm, derniere, connue)) {
         this->rain_rejected_++;
         // The RAW bytes in the message: without them the frame is blocked with no way to know why,
         // which is exactly what we want to understand.
@@ -236,9 +236,9 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
     ESP_LOGI(TAG, "station: ID learned %u (0x%04x) — it changes with the batteries",
              (unsigned) id_trame, (unsigned) id_trame);
   } else if (id_trame != this->station_id_) {
-    this->id_etrangere_++;
-    if (!this->id_etrangere_signalee_) {
-      this->id_etrangere_signalee_ = true;
+    this->foreign_id_++;
+    if (!this->foreign_id_warned_) {
+      this->foreign_id_warned_ = true;
       ESP_LOGW(TAG, "station: frame from ANOTHER station (ID %u expected, %u received) — ignored; "
                     "set the ID to 0 or press \"Re-learn station ID\" to learn it again",
                (unsigned) this->station_id_, (unsigned) id_trame);
@@ -247,7 +247,7 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   }
 
   this->frames_++;
-  this->maj_fenetre_taux_(raw[18]);   // byte 18 = the station's emission counter (protocol.h:129)
+  this->update_rate_window_(raw[18]);   // byte 18 = the station's emission counter (protocol.h:129)
   // The period is in TENTHS of a microsecond (measured on the burst): we log the value actually
   // kept, not a misleading integer.
   ESP_LOGD(TAG, "frame extracted (measured period %d.%d us, polarity %s, %s%s) → %u bytes",
@@ -275,57 +275,57 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
 // -------------------------------------------------------------------------------------------
 
 // Setting identifiers; the entities live in number/.
-static const uint8_t PARAM_CRENEAUX_AVANT_REARMEMENT = 0;
-static const uint8_t PARAM_DUREE_MAX_AVANT_REDEMARRAGE = 1;
+static const uint8_t PARAM_REARM_AFTER_SLOTS = 0;
+static const uint8_t PARAM_MAX_RESTART_DELAY = 1;
 static const uint8_t PARAM_STATION_ID = 2;
 // Below this many pulses, a capture cannot hold a burst: it is a fragment (70-96 pulses, normal) or
 // silence (2-7, a deaf chip). 40 sits between the two, measured on this hardware.
-static const uint8_t PARAM_SEUIL_IMPULSIONS = 3;
+static const uint8_t PARAM_PULSE_THRESHOLD = 3;
 // Watchdog slot duration: the station's transmission period (see setup() in the .h).
-static const uint32_t VEILLE_CRENEAU_MS = 20000;
+static const uint32_t WATCHDOG_SLOT_MS = 20000;
 
-float Vevor7in1::get_parametre(uint8_t p) const {
-  if (p == PARAM_DUREE_MAX_AVANT_REDEMARRAGE) {
-    return static_cast<float>(this->duree_max_avant_redemarrage_s_);
+float Vevor7in1::get_parameter(uint8_t p) const {
+  if (p == PARAM_MAX_RESTART_DELAY) {
+    return static_cast<float>(this->max_restart_delay_s_);
   }
   if (p == PARAM_STATION_ID) {
     return static_cast<float>(this->station_id_);
   }
-  if (p == PARAM_SEUIL_IMPULSIONS) {
-    return static_cast<float>(this->seuil_impulsions_);
+  if (p == PARAM_PULSE_THRESHOLD) {
+    return static_cast<float>(this->pulse_threshold_);
   }
-  return static_cast<float>(this->creneaux_avant_rearmement_);
+  return static_cast<float>(this->rearm_after_slots_);
 }
 
-void Vevor7in1::set_parametre(uint8_t p, float valeur) {
+void Vevor7in1::set_parameter(uint8_t p, float valeur) {
   if (p == PARAM_STATION_ID) {
     // 0 is legal here and means "learn": the minimum of 1 used for the duration settings does not
     // apply to an identity. A pinned ID is a filter, not a delay.
     const float arrondi = valeur < 0.0f ? 0.0f : valeur + 0.5f;
     const uint32_t id = arrondi > 65535.0f ? 65535u : static_cast<uint32_t>(arrondi);
     this->station_id_ = static_cast<uint16_t>(id);
-    this->id_etrangere_signalee_ = false;  // a new pin deserves its own warning
+    this->foreign_id_warned_ = false;  // a new pin deserves its own warning
     ESP_LOGI(TAG, "station: ID %s", id == 0 ? "back to learning" : "forced");
     return;
   }
   const uint32_t v = valeur < 1.0f ? 1u : static_cast<uint32_t>(valeur + 0.5f);
-  if (p == PARAM_DUREE_MAX_AVANT_REDEMARRAGE) {
-    this->duree_max_avant_redemarrage_s_ = v;
-  } else if (p == PARAM_SEUIL_IMPULSIONS) {
-    this->seuil_impulsions_ = v;
+  if (p == PARAM_MAX_RESTART_DELAY) {
+    this->max_restart_delay_s_ = v;
+  } else if (p == PARAM_PULSE_THRESHOLD) {
+    this->pulse_threshold_ = v;
   } else {
-    this->creneaux_avant_rearmement_ = v;
+    this->rearm_after_slots_ = v;
   }
   ESP_LOGI(TAG, "watchdog: parameter %u = %u", (unsigned) p, (unsigned) v);
 }
 
 void Vevor7in1::reapprendre_station_id() {
   this->station_id_ = 0;
-  this->id_etrangere_signalee_ = false;
+  this->foreign_id_warned_ = false;
   ESP_LOGI(TAG, "station: ID forgotten, the next valid frame will decide");
 }
 
-void Vevor7in1::surveiller_radio_() {
+void Vevor7in1::watch_radio_() {
   // --- Re-arm policy, measured 05/10/2026 (dev/state/CAMPAGNE_20261005.md) --------------------
   // A re-arm is a COMPLETE, register-verified re-initialisation whose ANALOG outcome (VCO/PLL
   // calibration) is a coin flip: over five presses, three cured the chip, one left it deaf for two
@@ -335,7 +335,7 @@ void Vevor7in1::surveiller_radio_() {
   //       per fragment can be broken by one, never helped);
   //   (2) after a re-arm, CHECK IT TOOK: only a capture carrying a full burst proves it, otherwise
   //       try again — bounded, since a dead chip loses nothing by it.
-  const bool capture_saine = this->last_pulse_count_ >= this->seuil_impulsions_;
+  const bool healthy_capture = this->last_pulse_count_ >= this->pulse_threshold_;
 
   // 1. SLOT BOOKKEEPING, THEN THE RESTART — THE LAST RESORT — BEFORE ANYTHING ELSE.
   //    A re-arm is a cheap lottery, NOT a reboot: on 05/10/2026 a chip that came out of a flash deaf
@@ -345,63 +345,63 @@ void Vevor7in1::surveiller_radio_() {
   //    The criterion is the DECODED frame, never a capture: a capture can be pure noise, and it is
   //    deliberately NOT the published frame — a frame dropped by the station filter still proves the
   //    RECEPTION works, and a wrong pin must never send the watchdog hunting a radio fault.
-  const bool trame_decodee = (this->decoded_ != this->trames_veille_);
-  if (trame_decodee) {
-    this->trames_veille_ = this->decoded_;
-    this->creneaux_muets_ = 0;
-    this->rearmements_ = 0;
-    if (this->reboots_veille_ != 0) {
-      this->reboots_veille_ = 0;
-      this->pref_reboots_.save(&this->reboots_veille_);
+  const bool frame_decoded = (this->decoded_ != this->watchdog_frames_);
+  if (frame_decoded) {
+    this->watchdog_frames_ = this->decoded_;
+    this->silent_slots_ = 0;
+    this->rearms_ = 0;
+    if (this->watchdog_reboots_ != 0) {
+      this->watchdog_reboots_ = 0;
+      this->pref_reboots_.save(&this->watchdog_reboots_);
     }
   } else {
-    this->creneaux_muets_++;
+    this->silent_slots_++;
   }
-  const uint32_t muettes_s = this->creneaux_muets_ * (VEILLE_CRENEAU_MS / 1000u);
+  const uint32_t muettes_s = this->silent_slots_ * (WATCHDOG_SLOT_MS / 1000u);
   const bool radio_en_echec = (this->radio_ != nullptr) && this->radio_->is_failed();
 
-  if (muettes_s >= this->duree_max_avant_redemarrage_s_) {
-    this->reboots_veille_++;
-    this->pref_reboots_.save(&this->reboots_veille_);
+  if (muettes_s >= this->max_restart_delay_s_) {
+    this->watchdog_reboots_++;
+    this->pref_reboots_.save(&this->watchdog_reboots_);
     // Brake: past ten restarts, only one slot in 45 (15 min) is used, so a genuinely mute board
     // cannot loop forever.
-    if (this->reboots_veille_ > 10 && (this->creneaux_muets_ % 45u) != 0u) {
+    if (this->watchdog_reboots_ > 10 && (this->silent_slots_ % 45u) != 0u) {
       return;
     }
     ESP_LOGW(TAG, "no frame for %u s (radio %s, captures %u) — restart #%u",
              (unsigned) muettes_s, radio_en_echec ? "EN ECHEC" : "ok", (unsigned) this->captures_,
-             (unsigned) this->reboots_veille_);
+             (unsigned) this->watchdog_reboots_);
     App.safe_reboot();
     return;
   }
 
   // 2. A decoded frame ends the round here: nothing below has anything to fix.
-  if (trame_decodee) {
+  if (frame_decoded) {
     return;
   }
   ESP_LOGD(TAG, "watchdog: no frame for %u s (radio %s, captures %u)", (unsigned) muettes_s,
            radio_en_echec ? "EN ECHEC" : "ok", (unsigned) this->captures_);
 
   // 3. The fast criterion and its verification (see the policy above).
-  if (this->essais_rearmement_ > 0) {
-    if (capture_saine) {
+  if (this->rearm_attempts_ > 0) {
+    if (healthy_capture) {
       ESP_LOGI(TAG, "re-arm VERIFIED after %u attempt(s): healthy capture (%u pulses)",
-               (unsigned) this->essais_rearmement_, (unsigned) this->last_pulse_count_);
-      this->essais_rearmement_ = 0;
-      this->creneaux_depuis_rearmement_ = 0;
-    } else if (++this->creneaux_depuis_rearmement_ >= 2) {
-      this->creneaux_depuis_rearmement_ = 0;
-      if (this->essais_rearmement_ < 3) {
-        this->essais_rearmement_++;
-        this->rearmements_surdite_++;
+               (unsigned) this->rearm_attempts_, (unsigned) this->last_pulse_count_);
+      this->rearm_attempts_ = 0;
+      this->slots_since_rearm_ = 0;
+    } else if (++this->slots_since_rearm_ >= 2) {
+      this->slots_since_rearm_ = 0;
+      if (this->rearm_attempts_ < 3) {
+        this->rearm_attempts_++;
+        this->deaf_rearms_++;
         ESP_LOGW(TAG, "re-arm had no effect (short captures): attempt %u of 3",
-                 (unsigned) this->essais_rearmement_);
+                 (unsigned) this->rearm_attempts_);
         if (this->radio_ != nullptr) {
           this->radio_->reset();
         }
       } else {
         ESP_LOGW(TAG, "re-arm: 3 attempts without a healthy capture, back to the slow criterion");
-        this->essais_rearmement_ = 0;
+        this->rearm_attempts_ = 0;
       }
     }
     return;   // one outstanding attempt at a time: no doubling with the slow criterion
@@ -409,12 +409,12 @@ void Vevor7in1::surveiller_radio_() {
 
   if (this->captures_creuses_ >= 2) {
     this->captures_creuses_ = 0;
-    this->essais_rearmement_ = 1;
-    this->creneaux_depuis_rearmement_ = 0;
-    this->rearmements_surdite_++;
+    this->rearm_attempts_ = 1;
+    this->slots_since_rearm_ = 0;
+    this->deaf_rearms_++;
     ESP_LOGW(TAG, "short captures (%u pulses < threshold %u): radio re-arm #%u",
-             (unsigned) this->last_pulse_count_, (unsigned) this->seuil_impulsions_,
-             (unsigned) this->rearmements_surdite_);
+             (unsigned) this->last_pulse_count_, (unsigned) this->pulse_threshold_,
+             (unsigned) this->deaf_rearms_);
     if (this->radio_ != nullptr) {
       this->radio_->reset();
     }
@@ -423,21 +423,21 @@ void Vevor7in1::surveiller_radio_() {
 
   // 4. The slow criterion (a whole silent slot, gated on the chip delivering nothing).
 
-  const uint32_t pas = this->creneaux_avant_rearmement_ > 0 ? this->creneaux_avant_rearmement_ : 1u;
-  if (this->creneaux_muets_ >= pas && (this->creneaux_muets_ % pas) == 0u) {
+  const uint32_t pas = this->rearm_after_slots_ > 0 ? this->rearm_after_slots_ : 1u;
+  if (this->silent_slots_ >= pas && (this->silent_slots_ % pas) == 0u) {
     // GATED (05/10/2026): no decoded frame for a whole slot while the chip still delivers 70-182
     // pulses is the DECODER's problem (duty asymmetry against the period estimate), not the radio's.
     // Re-arming there re-initialises a working chip and can cost two minutes of reception, measured.
     // When the chip is deaf, the fast criterion above has already taken the case.
-    if (capture_saine) {
+    if (healthy_capture) {
       ESP_LOGD(TAG, "no frame for %u s but the chip is delivering (%u pulses): no "
                     "re-arm (a decoding problem, not a radio one)",
                (unsigned) muettes_s, (unsigned) this->last_pulse_count_);
       return;
     }
-    this->rearmements_++;
+    this->rearms_++;
     ESP_LOGW(TAG, "no frame for %u s — radio re-arm %u (one every %u slots)",
-             (unsigned) muettes_s, (unsigned) this->rearmements_, (unsigned) pas);
+             (unsigned) muettes_s, (unsigned) this->rearms_, (unsigned) pas);
     if (this->radio_ != nullptr) {
       this->radio_->reset();
     }
@@ -454,70 +454,70 @@ void Vevor7in1::surveiller_radio_() {
 // settled by the arrival timestamp — if elapsed time implies more units than the raw gap,
 // then one or more wraps have occurred.
 // -------------------------------------------------------------------------------------------
-void Vevor7in1::maj_fenetre_taux_(uint8_t compteur) {
-  this->compteurs_fenetre_[this->tete_fenetre_] = compteur;
-  this->instants_fenetre_[this->tete_fenetre_] = millis();
-  this->tete_fenetre_ = (this->tete_fenetre_ + 1) % FENETRE_TAUX;
-  if (this->nb_fenetre_ < FENETRE_TAUX) {
-    this->nb_fenetre_++;
+void Vevor7in1::update_rate_window_(uint8_t compteur) {
+  this->window_counters_[this->window_head_] = compteur;
+  this->window_times_[this->window_head_] = millis();
+  this->window_head_ = (this->window_head_ + 1) % RATE_WINDOW;
+  if (this->window_count_ < RATE_WINDOW) {
+    this->window_count_++;
   }
 }
 
-float Vevor7in1::get_taux_reception() const {
-  uint32_t recues = 0;
-  uint32_t emises = 0;
-  this->calculer_fenetre_taux_(recues, emises);
-  if (emises == 0u) {
+float Vevor7in1::get_reception_rate() const {
+  uint32_t decoded = 0;
+  uint32_t emitted = 0;
+  this->compute_rate_window_(decoded, emitted);
+  if (emitted == 0u) {
     return NAN;
   }
-  return 100.0f * (float) recues / (float) emises;
+  return 100.0f * (float) decoded / (float) emitted;
 }
 
-uint32_t Vevor7in1::get_fenetre_recues() const {
-  uint32_t recues = 0;
-  uint32_t emises = 0;
-  this->calculer_fenetre_taux_(recues, emises);
-  return recues;
+uint32_t Vevor7in1::get_window_decoded() const {
+  uint32_t decoded = 0;
+  uint32_t emitted = 0;
+  this->compute_rate_window_(decoded, emitted);
+  return decoded;
 }
 
-uint32_t Vevor7in1::get_fenetre_emises() const {
-  uint32_t recues = 0;
-  uint32_t emises = 0;
-  this->calculer_fenetre_taux_(recues, emises);
-  return emises;
+uint32_t Vevor7in1::get_window_emitted() const {
+  uint32_t decoded = 0;
+  uint32_t emitted = 0;
+  this->compute_rate_window_(decoded, emitted);
+  return emitted;
 }
 
-// Le ratio est calcule ICI et nulle part ailleurs : le pourcentage et ses deux termes ne peuvent
-// diverge. `recues` counts the decoded frames that updated the measurements (they are
-// filtered upstream on duplicates, then on the station ID), `emises` those the station
+// The ratio is computed HERE and nowhere else: the percentage and its two terms cannot
+// diverge. `decoded` counts the decoded frames that updated the measurements (they are
+// filtered upstream on duplicates, then on the station ID), `emitted` those the station
 // produced — heard or not: that is the whole point of the on-board counter.
-void Vevor7in1::calculer_fenetre_taux_(uint32_t &recues, uint32_t &emises) const {
-  recues = 0;
-  emises = 0;
-  if (this->nb_fenetre_ < 2) {
+void Vevor7in1::compute_rate_window_(uint32_t &decoded, uint32_t &emitted) const {
+  decoded = 0;
+  emitted = 0;
+  if (this->window_count_ < 2) {
     return;   // not enough to measure yet: at least two frames are needed, i.e. one interval
   }
-  const size_t premier = (this->tete_fenetre_ + FENETRE_TAUX - this->nb_fenetre_) % FENETRE_TAUX;
-  for (size_t i = 0; i + 1 < this->nb_fenetre_; i++) {
-    const size_t a = (premier + i) % FENETRE_TAUX;
-    const size_t b = (premier + i + 1) % FENETRE_TAUX;
-    const uint32_t ecart = (uint32_t) ((this->compteurs_fenetre_[b] - this->compteurs_fenetre_[a]) & 0xFF);
-    if (ecart == 0u) {
-      continue;   // the same counter twice: a re-log of the journal, not an emission
+  const size_t first = (this->window_head_ + RATE_WINDOW - this->window_count_) % RATE_WINDOW;
+  for (size_t i = 0; i + 1 < this->window_count_; i++) {
+    const size_t a = (first + i) % RATE_WINDOW;
+    const size_t b = (first + i + 1) % RATE_WINDOW;
+    const uint32_t gap = (uint32_t) ((this->window_counters_[b] - this->window_counters_[a]) & 0xFF);
+    if (gap == 0u) {
+      continue;   // the same counter twice: a re-log of the same line, not an emission
     }
-    const uint32_t dt_ms = this->instants_fenetre_[b] - this->instants_fenetre_[a];
-    const uint32_t unites_temps = (uint32_t) ((dt_ms + 256u) / 513u);   // 1 unit = 0.513 s
-    uint32_t tours = 0;
-    if (unites_temps > ecart) {
-      tours = (unites_temps - ecart + 128u) / 256u;
+    const uint32_t dt_ms = this->window_times_[b] - this->window_times_[a];
+    const uint32_t time_units = (uint32_t) ((dt_ms + 256u) / 513u);   // 1 unit = 0.513 s
+    uint32_t wraps = 0;
+    if (time_units > gap) {
+      wraps = (time_units - gap + 128u) / 256u;
     }
-    const uint32_t delta = ecart + 256u * tours;
+    const uint32_t delta = gap + 256u * wraps;
     uint32_t n = (delta + 19u) / 39u;   // 39 units = one emission from the station
     if (n == 0u) {
       n = 1u;
     }
-    recues++;          // the arriving frame of this pair was indeed received
-    emises += n;
+    decoded++;          // the arriving frame of this pair was indeed received
+    emitted += n;
   }
 }
 

@@ -14,21 +14,21 @@ DEPENDENCIES = ["vevor_7in1"]
 
 CONF_TYPE = "type"
 
-VevorBouton = vevor_7in1_ns.class_(
-    "VevorBouton", button.Button, cg.Parented.template(Vevor7in1)
+VevorButton = vevor_7in1_ns.class_(
+    "VevorButton", button.Button, cg.Parented.template(Vevor7in1)
 )
 
-# Component-side identifier (see VevorBouton in vevor_bouton.h).
-BOUTONS = {
+# Component-side identifier (see VevorButton in vevor_button.h).
+BUTTONS = {
     "dump_pulses": 0,
     "reapply_radio": 1,
     "relearn_station_id": 2,
 }
 
-CONFIG_SCHEMA = button.button_schema(VevorBouton).extend(
+CONFIG_SCHEMA = button.button_schema(VevorButton).extend(
     {
         cv.GenerateID(CONF_VEVOR_7IN1_ID): cv.use_id(Vevor7in1),
-        cv.Required(CONF_TYPE): cv.one_of(*BOUTONS, lower=True),
+        cv.Required(CONF_TYPE): cv.one_of(*BUTTONS, lower=True),
     }
 )
 
@@ -37,4 +37,4 @@ async def to_code(config):
     var = await button.new_button(config)
     parent = await cg.get_variable(config[CONF_VEVOR_7IN1_ID])
     cg.add(var.set_parent(parent))
-    cg.add(var.set_type(BOUTONS[config[CONF_TYPE]]))
+    cg.add(var.set_type(BUTTONS[config[CONF_TYPE]]))

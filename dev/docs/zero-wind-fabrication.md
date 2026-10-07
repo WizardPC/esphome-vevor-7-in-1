@@ -53,7 +53,7 @@ i.e. exactly the production symptom, reproduced off-board in a few milliseconds.
 
 ## 4. Cause
 
-`reparer_par_insertion()` (the insertion repair, added to recover bursts that lost a bit) searched
+`repair_by_insertion()` (the insertion repair, added to recover bursts that lost a bit) searched
 an inserted bit of **any value at any position**, and accepted the **first** candidate passing
 header + checksum + counter + plausibility. With a plain-sum checksum, many positions satisfy it: on
 the reference frame, the median number of accepted positions is 4 to 7, and 15 for the loss
@@ -66,7 +66,7 @@ so the recovered bit **extends the run of the preceding bit** — it carries the
 
 ## 5. Fix
 
-`esphome/components/vevor_7in1/vevor_protocol.h`, `reparer_par_insertion()`: the inserted bit now
+`esphome/components/vevor_7in1/vevor_protocol.h`, `repair_by_insertion()`: the inserted bit now
 takes the level of the bit that precedes the insertion point (`bits[payload_bit + q - 1]`, i.e. the
 sync word's last bit for q = 0). One line of physics instead of a value blacklist.
 
@@ -80,7 +80,7 @@ Measured effect (throwaway probe, three real frames, every pulse of two bits or 
 
 The repair recovers *more* true frames and fabricates none of the `46,0 / 102,4` kind. The one
 remaining false frame (reference frame, pulse 78) is stopped by the rain continuity guard
-(`pluie_plausible`: rain 15 270 mm instead of 59,2 mm) and never reaches Home Assistant: the test of
+(`rain_plausible`: rain 15 270 mm instead of 59,2 mm) and never reaches Home Assistant: the test of
 section 15 asserts precisely that — a published frame is either the true frame, or refused by the
 rain guard.
 

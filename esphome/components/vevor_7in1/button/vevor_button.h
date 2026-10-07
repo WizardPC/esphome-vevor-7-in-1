@@ -11,7 +11,7 @@
 namespace esphome {
 namespace vevor_7in1 {
 
-class VevorBouton : public button::Button, public Parented<Vevor7in1> {
+class VevorButton : public button::Button, public Parented<Vevor7in1> {
  public:
   void set_type(uint8_t t) { this->type_ = t; }
 

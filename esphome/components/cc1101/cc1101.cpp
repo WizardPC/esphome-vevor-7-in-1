@@ -183,7 +183,7 @@ void CC1101Component::configure() {
     this->read_(Register::VERSION);
     this->chip_id_ = encode_uint16(this->state_.PARTNUM, this->state_.VERSION);
     if (this->state_.VERSION != 0 && this->state_.PARTNUM != 0xFF) {
-      ESP_LOGI(TAG, "CC1101 found after %u re-read(s) : Chip ID: 0x%04X (status 0x%02X, CHIP_RDYn haut %u fois)",
+      ESP_LOGI(TAG, "CC1101 found after %u re-read(s) : Chip ID: 0x%04X (status 0x%02X, CHIP_RDYn high %u times)",
                (unsigned) tentatives, this->chip_id_, status, (unsigned) chip_rdy_haute);
       break;
     }
@@ -221,12 +221,12 @@ void CC1101Component::configure() {
       continue;
     }
     bool pris = false;
-    for (uint8_t essai = 0; essai < 4 && !pris; essai++) {
+    for (uint8_t attempt = 0; attempt < 4 && !pris; attempt++) {
       this->write_(static_cast<Register>(i));
       this->read_(static_cast<Register>(i));
       if (this->state_.regs()[i] == voulu) {
         pris = true;
-        if (essai > 0) {
+        if (attempt > 0) {
           reprises++;
         }
       } else {

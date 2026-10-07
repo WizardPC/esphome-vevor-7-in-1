@@ -112,7 +112,7 @@ The station transmits a burst every 20 s, day and night (confirmed by the owner)
 minutes therefore always means the receiver is at fault, which allows the watchdog to act
 unconditionally.
 
-**The policy lives in the component** (`vevor_7in1.cpp`, `surveiller_radio_()`), with its two settings
+**The policy lives in the component** (`vevor_7in1.cpp`, `watch_radio_()`), with its two settings
 exposed as Home Assistant `number` entities declared by the component itself. The YAML declares those
 entities and nothing else — see §10.
 
@@ -158,7 +158,7 @@ component itself owns (`number/`, `button/`).
   without this button it takes a reflash, i.e. a new state lottery. Declarative platform, no logic;
 * `number: Watchdog crénaux muets avant re-armement`, `number: Watchdog silence max avant
   redemarrage` — the watchdog's two settings, exposed by the component (defaults: 3 slots, 180 s).
-  The policy itself is `surveiller_radio_()`, see §8;
+  The policy itself is `watch_radio_()`, see §8;
 * `number: CC1101 frequency` — lets a frequency sweep be driven over the API in 25 s steps instead of
   a compile-and-flash per point. `restore_value: false` on purpose: a restored value used to override
   the compiled frequency at boot and made two frequency tests ambiguous;
@@ -195,8 +195,8 @@ component itself owns (`number/`, `button/`).
   other ID, which is how a neighbour's station on the same protocol stays out. The ID changes with
   the batteries, hence the warning plus the re-learn path.
 * **Watchdog defaults.** 3 silent slots (60 s) before a re-arm, 180 s of silence before a restart
-  (`creneaux_avant_rearmement_`, `duree_max_avant_redemarrage_s_` in vevor_7in1.h). The FAST
-  criterion (`seuil_impulsions`: re-arm on a capture too short to hold a burst) is measured but NOT
+  (`rearm_after_slots_`, `max_restart_delay_s_` in vevor_7in1.h). The FAST
+  criterion (`pulse_threshold`: re-arm on a capture too short to hold a burst) is measured but NOT
   shipped — the paired on-board test showed a periodic re-arm does not end the deaf episodes.
 * **Frequency compensation limit is BW/2** in this repo's copy of the driver
   (`esphome/components/cc1101/cc1101.cpp`): the driver exposes no action for it, so it is not

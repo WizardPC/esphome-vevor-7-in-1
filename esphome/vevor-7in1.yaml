@@ -153,9 +153,9 @@ interval:
           id(valid_sensor).publish_state(id(vevor_rx).get_frames());
           id(rejected_sensor).publish_state(id(vevor_rx).get_rejected());
           id(duplicates_sensor).publish_state(id(vevor_rx).get_duplicates());
-          id(taux_reception_sensor).publish_state(id(vevor_rx).get_taux_reception());
-          id(fenetre_recues_sensor).publish_state(id(vevor_rx).get_fenetre_recues());
-          id(fenetre_emises_sensor).publish_state(id(vevor_rx).get_fenetre_emises());
+          id(reception_rate_sensor).publish_state(id(vevor_rx).get_reception_rate());
+          id(window_decoded_sensor).publish_state(id(vevor_rx).get_window_decoded());
+          id(window_emitted_sensor).publish_state(id(vevor_rx).get_window_emitted());
 
 button:
   - platform: vevor_7in1
@@ -176,13 +176,13 @@ number:
   # slots (60 s), a restart after 180 s of silence.
   - platform: vevor_7in1
     vevor_7in1_id: vevor_rx
-    type: creneaux_avant_rearmement
+    type: rearm_after_slots
     name: "Watchdog silent slots before re-arm"
     unit_of_measurement: "x20 s"
     entity_category: config
   - platform: vevor_7in1
     vevor_7in1_id: vevor_rx
-    type: duree_max_avant_redemarrage
+    type: max_restart_delay
     name: "Watchdog max silence before restart"
     unit_of_measurement: "s"
     entity_category: config
@@ -339,7 +339,7 @@ sensor:
   # computed in the component from the station's counter — not from elapsed time.
   - platform: template
     name: "Reception rate"
-    id: taux_reception_sensor
+    id: reception_rate_sensor
     unit_of_measurement: "%"
     state_class: measurement
     accuracy_decimals: 1
@@ -347,12 +347,12 @@ sensor:
   # The two terms of that ratio, so a dashboard can read "29 / 30" instead of trusting a percentage.
   - platform: template
     name: "Reception window decoded"
-    id: fenetre_recues_sensor
+    id: window_decoded_sensor
     accuracy_decimals: 0
     entity_category: diagnostic
   - platform: template
     name: "Reception window emitted"
-    id: fenetre_emises_sensor
+    id: window_emitted_sensor
     accuracy_decimals: 0
     entity_category: diagnostic
 
