@@ -190,7 +190,7 @@ instead of the measured +39). This section therefore keeps only what a newcomer 
   plausibility gate actually applies.
 * **Counters visible in the board's log but not as entities**: frames obtained by repair, frames
   refused by the continuity gate, and rain refusals. The periodic line looks like:
-  `captures=143 (+3), trames=47, rejets=1, réparées=1 (dont 0 refusées), pluie_refusee=0, …`
+  `captures=143 (+3), frames=47, rejects=1, repaired=1 (0 refused), rain_refused=0, last pulses=176, …`
   Raise the log level for a campaign to see them (`logger` substitution, see the root README's
   flashing section and `state/PROGRESS.md`).
 

@@ -1,15 +1,15 @@
-# Dépendances de l'agent / des outils (ce qui tourne sur la machine qui pilote la carte).
-# Le firmware lui-même n'a besoin que d'ESPHome pour compiler.
+# Dependencies of the agent / the tools (what runs on the machine driving the board).
+# The firmware itself only needs ESPHome to compile.
 #
-# Python requis : >= 3.12 (tools/analyze_stream.py utilise les f-strings à guillemets
-# imbriqués, PEP 701 ; les annotations `str | None` imposent déjà >= 3.10).
-# Le venv du projet (.venv) est en 3.13.
+# Python required: >= 3.12 (tools/analyze_stream.py uses nested-quote f-strings,
+# PEP 701; `str | None` annotations already require >= 3.10).
+# The project's venv (.venv) runs 3.13.
 esphome==2026.9.1
-# Version RÉELLEMENT installée dans .venv ; figée car ses renvois « coroutine ou objet »
-# (subscribe_logs/subscribe_states/button_command) sont contournés par _common.maybe_await.
+# Version ACTUALLY installed in .venv; pinned because its "coroutine or object"
+# returns (subscribe_logs/subscribe_states/button_command) are worked around by _common.maybe_await.
 aioesphomeapi==46.3.0
-# Requis par tools/serial_log.py (repli USB quand la carte n'est pas joignable) — 3.5 installé.
+# Required by tools/serial_log.py (USB fallback when the board is unreachable) — 3.5 installed.
 pyserial>=3.5
 
-# Tests hors matériel (C++ compilé sans carte) : compilateur embarqué dans un venv séparé.
+# Off-hardware tests (C++ compiled with no board): compiler inside a separate venv.
 #   python -m venv .venv-dev && .venv-dev/bin/pip install ziglang
