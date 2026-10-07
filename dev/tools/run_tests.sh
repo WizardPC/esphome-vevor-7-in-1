@@ -53,3 +53,14 @@ else
   echo "SKIPPED: $ROOT/.venv/bin/python missing (ESPHome environment) — step not run." >&2
   echo "  Entity consistency was NOT checked." >&2
 fi
+
+echo "=== 6. every template in the card is ACCEPTED by Home Assistant ==="
+# The card's sky icon once used `(elevation | sin)` on a value in DEGREES: HA's `sin` takes radians,
+# the power of a negative number is complex, HA refused the template and the icon vanished from the
+# card. The offline simulation could not see it — it defined `sin` itself. This step simulates
+# nothing: it posts the real templates to HA and fails on any refusal (skipped if HA is unreachable).
+if [ -x "$ROOT/.venv/bin/python" ]; then
+  "$ROOT/.venv/bin/python" "$DEV/tools/check_ha_templates.py" || exit 6
+else
+  echo "SKIPPED: $ROOT/.venv/bin/python missing — card templates NOT verified." >&2
+fi

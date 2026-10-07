@@ -285,8 +285,9 @@ def render(template: str, data: dict) -> str:
     """Render a template with the HA filters and functions the card uses."""
     states = States(data)
     env = Environment(undefined=Undefined)
-    env.filters["sin"] = lambda v, default=0: math.sin(math.radians(float(v)))
+    env.filters["sin"] = lambda v, default=0: math.sin(float(v))
     env.globals.update(
+        pi=math.pi,
         states=states,
         state_attr=lambda entity, attr: {"elevation": data["_sun_elevation"]}.get(attr)
         if entity == "sun.sun" else None,

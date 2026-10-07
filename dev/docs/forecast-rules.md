@@ -111,12 +111,12 @@ template:
       - name: "Vevor forecast (estimate)"
         unique_id: vevor_forecast_estimation
         state: >-
-          {% set t    = states('sensor.temperature_exterieure') | float(none) %}
-          {% set gust = states('sensor.vent_rafale')            | float(0) %}
+          {% set t    = states('sensor.outdoor_temperature') | float(none) %}
+          {% set gust = states('sensor.wind_gust')            | float(0) %}
           {% set rain = states('sensor.vevor_rain_intensity')   | float(0) %}
-          {% set lux  = states('sensor.luminosite')             | float(0) %}
+          {% set lux  = states('sensor.illuminance')             | float(0) %}
           {% set elev = state_attr('sun.sun', 'elevation')      | float(-90) %}
-          {% set clear = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
+          {% set clear = 133800 * ((elev * pi / 180) | sin) ** 1.15 if elev > 0 else 0 %}
           {% set raining = rain > 0 %}
           {% if raining and t is not none and t < 1 %}snowy
           {% elif raining and (rain >= 7.6 or gust >= 40) %}stormy
@@ -134,6 +134,12 @@ Notes on the sketch:
 * the **"not yet"** rule (§4) needs the window's span, which the `statistics` sensor does not expose —
   gate the rate on a template sensor or on `last_changed` of the counter;
 * the **ice alert** is one line: `binary_sensor` on `temperature < 1`, exactly as the manual defines it.
+* **HA's `sin` takes radians, and this Home Assistant has no `radians` filter**: convert with
+  `elev * pi / 180`. Writing `elev | sin` on a value in degrees gives a *negative* sine, and the power
+  of a negative number is a **complex number**: HA then refuses the whole template and the card's icon
+  silently disappears (measured 07/10/2026). A local simulation cannot catch it — a checker that
+  defines `sin` itself agrees with the card, not with HA. `dev/tools/check_ha_templates.py` submits
+  every card template to HA and fails on any refusal; `run_tests.sh` now runs it as a step.
 
 ## 9. What this will never give you
 
