@@ -20,7 +20,7 @@ VevorParameter = vevor_7in1_ns.class_(
 
 # Component-side identifier (see WatchdogParam in vevor_7in1.h) and BOUNDS of each setting.
 # Bounds live here, with the parameter's semantics: the YAML only names the entity.
-#   type: (identifiant, min, max, pas)
+#   type: (slug, min, max, step)
 PARAMETERS = {
     "rearm_after_slots": (0, 1.0, 30.0, 1.0),
     "max_restart_delay": (1, 60.0, 3600.0, 20.0),
@@ -41,8 +41,8 @@ CONFIG_SCHEMA = number.number_schema(VevorParameter).extend(
 
 
 async def to_code(config):
-    identifiant, mini, maxi, pas = PARAMETERS[config[CONF_TYPE]]
-    var = await number.new_number(config, min_value=mini, max_value=maxi, step=pas)
+    slug, low, high, step = PARAMETERS[config[CONF_TYPE]]
+    var = await number.new_number(config, min_value=low, max_value=high, step=step)
     parent = await cg.get_variable(config[CONF_VEVOR_7IN1_ID])
     cg.add(var.set_parent(parent))
-    cg.add(var.set_parameter(identifiant))
+    cg.add(var.set_parameter(slug))

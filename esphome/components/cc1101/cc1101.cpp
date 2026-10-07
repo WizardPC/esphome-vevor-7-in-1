@@ -212,7 +212,7 @@ void CC1101Component::configure() {
     if (i == static_cast<uint8_t>(Register::FSTEST) || i == static_cast<uint8_t>(Register::AGCTEST)) {
       continue;
     }
-    const uint8_t voulu = this->state_.regs()[i];
+    const uint8_t wanted = this->state_.regs()[i];
     // Written once, unchecked, because the read-back cannot match: TEST0/1/2 (0x2C and above) read
     // back unreliably, and FSCAL3/2/1/0 (0x23-0x26) are calibration registers the chip rewrites
     // during VCO calibration — e.g. FSCAL2 0x2C left as 0x0C (21 of 30 write alarms in a day).
@@ -224,19 +224,19 @@ void CC1101Component::configure() {
     for (uint8_t attempt = 0; attempt < 4 && !pris; attempt++) {
       this->write_(static_cast<Register>(i));
       this->read_(static_cast<Register>(i));
-      if (this->state_.regs()[i] == voulu) {
+      if (this->state_.regs()[i] == wanted) {
         pris = true;
         if (attempt > 0) {
           reprises++;
         }
       } else {
-        this->state_.regs()[i] = voulu;  // restart from the wanted value for the next attempt
+        this->state_.regs()[i] = wanted;  // restart from the wanted value for the next attempt
       }
     }
     if (!pris) {
       non_prises++;
-      this->state_.regs()[i] = voulu;
-      ESP_LOGW(TAG, "register 0x%02X NOT TAKEN after 4 attempts (wanted 0x%02X)", i, voulu);
+      this->state_.regs()[i] = wanted;
+      ESP_LOGW(TAG, "register 0x%02X NOT TAKEN after 4 attempts (wanted 0x%02X)", i, wanted);
     }
   }
   ESP_LOGI(TAG, "configuration: %u register(s) re-taken after a re-read, %u definitely not taken",
@@ -249,7 +249,7 @@ void CC1101Component::configure() {
   {
     struct Watched {
       Register reg;
-      const char *nom;
+      const char *name;
     };
     const Watched watched[] = {
         {Register::FREQ2, "FREQ2"},     {Register::FREQ1, "FREQ1"},     {Register::FREQ0, "FREQ0"},
@@ -257,14 +257,14 @@ void CC1101Component::configure() {
         {Register::PKTCTRL0, "PKTCTRL0"}, {Register::IOCFG0, "IOCFG0"}};
     uint8_t ecarts = 0;
     for (const auto &s : watched) {
-      const uint8_t voulu = this->state_.regs()[static_cast<uint8_t>(s.reg)];
+      const uint8_t wanted = this->state_.regs()[static_cast<uint8_t>(s.reg)];
       this->read_(s.reg);
-      const uint8_t lu = this->state_.regs()[static_cast<uint8_t>(s.reg)];
-      if (lu != voulu) {
+      const uint8_t read_back = this->state_.regs()[static_cast<uint8_t>(s.reg)];
+      if (read_back != wanted) {
         ecarts++;
-        ESP_LOGE(TAG, "ECRITURE NON PRISE %s : ecrit 0x%02X, relu 0x%02X", s.nom, voulu, lu);
+        ESP_LOGE(TAG, "WRITE NOT TAKEN %s: wrote 0x%02X, read back 0x%02X", s.name, wanted, read_back);
       } else {
-        ESP_LOGI(TAG, "registre %s : ecrit 0x%02X, relu 0x%02X (conforme)", s.nom, voulu, lu);
+        ESP_LOGI(TAG, "register %s: wrote 0x%02X, read back 0x%02X (conforms)", s.name, wanted, read_back);
       }
     }
     if (ecarts == 0) {
@@ -272,7 +272,7 @@ void CC1101Component::configure() {
                (unsigned) (sizeof(watched) / sizeof(watched[0])));
     } else {
       ESP_LOGE(TAG, "write check: %u register(s) NOT taken — the radio configuration is not "
-                    "pas celle demandee", (unsigned) ecarts);
+                    "the one requested", (unsigned) ecarts);
     }
   }
 
@@ -302,7 +302,7 @@ void CC1101Component::configure() {
                     "MARCSTATE=0x%02X) — chip configured but unable to demodulate",
                fscal2, fscal0, marc);
     } else {
-      ESP_LOGI(TAG, "calibration VCO : FSCAL1=0x%02X (valide), FSCAL2=0x%02X, FSCAL0=0x%02X, "
+      ESP_LOGI(TAG, "VCO calibration: FSCAL1=0x%02X (valid), FSCAL2=0x%02X, FSCAL0=0x%02X, "
                     "MARCSTATE=0x%02X",
                fscal1, fscal2, fscal0, marc);
     }

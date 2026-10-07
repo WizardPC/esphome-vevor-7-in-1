@@ -357,10 +357,10 @@ void Vevor7in1::watch_radio_() {
   } else {
     this->silent_slots_++;
   }
-  const uint32_t muettes_s = this->silent_slots_ * (WATCHDOG_SLOT_MS / 1000u);
-  const bool radio_en_echec = (this->radio_ != nullptr) && this->radio_->is_failed();
+  const uint32_t silent_s = this->silent_slots_ * (WATCHDOG_SLOT_MS / 1000u);
+  const bool radio_failed = (this->radio_ != nullptr) && this->radio_->is_failed();
 
-  if (muettes_s >= this->max_restart_delay_s_) {
+  if (silent_s >= this->max_restart_delay_s_) {
     this->watchdog_reboots_++;
     this->pref_reboots_.save(&this->watchdog_reboots_);
     // Brake: past ten restarts, only one slot in 45 (15 min) is used, so a genuinely mute board
@@ -369,7 +369,7 @@ void Vevor7in1::watch_radio_() {
       return;
     }
     ESP_LOGW(TAG, "no frame for %u s (radio %s, captures %u) — restart #%u",
-             (unsigned) muettes_s, radio_en_echec ? "EN ECHEC" : "ok", (unsigned) this->captures_,
+             (unsigned) silent_s, radio_failed ? "FAILED" : "ok", (unsigned) this->captures_,
              (unsigned) this->watchdog_reboots_);
     App.safe_reboot();
     return;
@@ -379,8 +379,8 @@ void Vevor7in1::watch_radio_() {
   if (frame_decoded) {
     return;
   }
-  ESP_LOGD(TAG, "watchdog: no frame for %u s (radio %s, captures %u)", (unsigned) muettes_s,
-           radio_en_echec ? "EN ECHEC" : "ok", (unsigned) this->captures_);
+  ESP_LOGD(TAG, "watchdog: no frame for %u s (radio %s, captures %u)", (unsigned) silent_s,
+           radio_failed ? "FAILED" : "ok", (unsigned) this->captures_);
 
   // 3. The fast criterion and its verification (see the policy above).
   if (this->rearm_attempts_ > 0) {
@@ -423,8 +423,8 @@ void Vevor7in1::watch_radio_() {
 
   // 4. The slow criterion (a whole silent slot, gated on the chip delivering nothing).
 
-  const uint32_t pas = this->rearm_after_slots_ > 0 ? this->rearm_after_slots_ : 1u;
-  if (this->silent_slots_ >= pas && (this->silent_slots_ % pas) == 0u) {
+  const uint32_t step = this->rearm_after_slots_ > 0 ? this->rearm_after_slots_ : 1u;
+  if (this->silent_slots_ >= step && (this->silent_slots_ % step) == 0u) {
     // GATED (05/10/2026): no decoded frame for a whole slot while the chip still delivers 70-182
     // pulses is the DECODER's problem (duty asymmetry against the period estimate), not the radio's.
     // Re-arming there re-initialises a working chip and can cost two minutes of reception, measured.
@@ -432,12 +432,12 @@ void Vevor7in1::watch_radio_() {
     if (healthy_capture) {
       ESP_LOGD(TAG, "no frame for %u s but the chip is delivering (%u pulses): no "
                     "re-arm (a decoding problem, not a radio one)",
-               (unsigned) muettes_s, (unsigned) this->last_pulse_count_);
+               (unsigned) silent_s, (unsigned) this->last_pulse_count_);
       return;
     }
     this->rearms_++;
     ESP_LOGW(TAG, "no frame for %u s — radio re-arm %u (one every %u slots)",
-             (unsigned) muettes_s, (unsigned) this->rearms_, (unsigned) pas);
+             (unsigned) silent_s, (unsigned) this->rearms_, (unsigned) step);
     if (this->radio_ != nullptr) {
       this->radio_->reset();
     }
