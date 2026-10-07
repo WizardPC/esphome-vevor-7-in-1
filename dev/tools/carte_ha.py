@@ -141,6 +141,23 @@ def lire_liste():
     return ids
 
 
+def _cartes_radio(doc):
+    """Les deux vignettes radio, ou qu'elles soient dans la pile de cartes."""
+    a_voir = list(doc) if isinstance(doc, list) else [doc]
+    while a_voir:
+        carte = a_voir.pop(0)
+        if not isinstance(carte, dict):
+            continue
+        enfants = carte.get("cards") or []
+        if enfants:
+            etat = [c for c in enfants if isinstance(c, dict) and "tx_counter" in str(c.get("entity", ""))]
+            taux = [c for c in enfants if isinstance(c, dict) and "reception_rate" in str(c.get("entity", ""))]
+            if etat and taux:
+                return etat[0], taux[0]
+            a_voir.extend(enfants)
+    raise SystemExit("ECHEC : vignettes radio (tx_counter + reception_rate) introuvables")
+
+
 def ids_de_la_carte(texte: str):
     """Tous les identifiants cites par la carte (y compris ceux des templates)."""
     trouves = set()
@@ -251,10 +268,10 @@ def scenarios(prefixe: str):
     return [
         ("entite absente", etats(tx_e=None), "inconnu", "injoignable", "grey"),
         ("carte muette", etats(tx_e=Etat("unavailable")), "inconnu", "injoignable", "grey"),
-        ("trame fraiche", etats(tx_e=Etat("121", age_s=5), rate_v=100.0), "il y a 5 s", "réception normale", "green"),
-        ("une trame manquee", etats(tx_e=Etat("121", age_s=40), rate_v=100.0), "il y a 40 s", "trame manqu", "amber"),
-        ("re-armement", etats(tx_e=Etat("121", age_s=90), rate_v=64.0), "il y a 2 min", "ré-armement", "orange"),
-        ("redemarrage", etats(tx_e=Etat("121", age_s=400), rate_v=40.0), "il y a 7 min", "redémarre", "red"),
+        ("trame fraiche", etats(tx_e=Etat("121", age_s=5), rate_v=100.0), "il y a 5 s", "Réception normale", "green"),
+        ("une trame manquee", etats(tx_e=Etat("121", age_s=40), rate_v=100.0), "il y a 40 s", "Trame manquée", "amber"),
+        ("re-armement", etats(tx_e=Etat("121", age_s=90), rate_v=64.0), "il y a 2 min", "Silence (ré-armement)", "orange"),
+        ("redemarrage", etats(tx_e=Etat("121", age_s=400), rate_v=40.0), "il y a 7 min", "Silence (reboot)", "red"),
     ]
 
 
@@ -266,7 +283,7 @@ def main() -> int:
     prefixe = _prefixe_commun(mesures)
     texte = CARTE.read_text(encoding="utf8")
     carte = charger_yaml(CARTE)
-    v1, v2 = carte[0]["cards"]
+    v1, v2 = _cartes_radio(carte)
     echecs = []
 
     print("=== 1. identifiants cites par la carte ===")
