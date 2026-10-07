@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fin de nuit : que s'est-il passe entre 05:00 et 06:31 UTC ?"""
+"""End of night: what happened between 05:00 and 06:31 UTC?"""
 import json, os
 D = "/home/hermes/projets/vevor-7in1/dev/state/nuit_20261005"
 P = "jardin_vevor_7_in_1_weather_station_"

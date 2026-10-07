@@ -32,14 +32,14 @@ async def run(host: str, port: int, key: str, mhz: float, seconds: float) -> int
     cli = APIClient(host, port, None, noise_psk=key)
     await cli.connect(login=True)
     entities, _ = await cli.list_entities_services()
-    # ANCHORED entity: do not confuse with "Offset fréquence" (a sensor).
+    # ANCHORED entity: do not confuse it with the "Offset" sensor (a different entity).
     cible = None
     for e in entities:
         if FREQ_RE.search(getattr(e, "name", "") or ""):
             cible = e
             break
     if cible is None:
-        print("!! entité « Fréquence CC1101 » introuvable", file=sys.stderr)
+        print("!! entity \"CC1101 frequency\" not found", file=sys.stderr)
         for e in entities:
             print("   -", getattr(e, "name", "?"), file=sys.stderr)
         await cli.disconnect()
@@ -62,7 +62,7 @@ async def run(host: str, port: int, key: str, mhz: float, seconds: float) -> int
     cli.subscribe_logs(sur_log)
     cli.subscribe_states(sur_etat)
     await asyncio.sleep(2)
-    print(horodate(f"réglage de {cible.name} = {mhz} MHz (écriture fraîche des registres FREQ2/1/0)"))
+    print(horodate(f"setting {cible.name} = {mhz} MHz (fresh write of registers FREQ2/1/0)"))
     await cli.number_command(cible.key, mhz)
     await asyncio.sleep(1.5)
     got = etats.get(cible.key)
@@ -70,16 +70,16 @@ async def run(host: str, port: int, key: str, mhz: float, seconds: float) -> int
         pris = got is not None and abs(float(got) - mhz) <= 0.001
     except (TypeError, ValueError):
         pris = False
-    print(horodate(f"re-read de {cible.name} : {got!r}"))
+    print(horodate(f"re-read of {cible.name}: {got!r}"))
     await asyncio.sleep(seconds)
     await cli.disconnect()
 
     if not pris:
-        print(f"# ERREUR : la carte n'a PAS pris la fréquence {mhz} MHz (relue {got!r})",
+        print(f"# ERROR: the board did NOT take the frequency {mhz} MHz (read back {got!r})",
               file=sys.stderr)
         return RC_ERREUR
     if compteur["logs"] == 0:
-        print("# MESURE NULLE — écriture prise mais aucun log reçu : rien n'a été mesuré",
+        print("# NULL MEASUREMENT — write accepted but no log received: nothing was measured",
               file=sys.stderr)
         return RC_MESURE_NULLE
     return RC_OK
@@ -101,7 +101,7 @@ def main() -> int:
     except SystemExit:
         raise
     except Exception as exc:
-        print(f"# ERREUR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"# ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
         return RC_ERREUR
 
 

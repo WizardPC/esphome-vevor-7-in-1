@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Nombre de redemarrages depuis le reflash (compteur captures, monotone) + etat des 20 dernieres minutes."""
+"""Number of restarts since the reflash (capture counter, monotonic) + state of the last 20 minutes."""
 import json, os, time, urllib.request, urllib.parse, datetime as dt
 D = "/home/hermes/projets/vevor-7in1/dev/state/nuit_20261005"
 P = "jardin_vevor_7_in_1_weather_station_"
@@ -16,14 +16,14 @@ for t, v in h:
     if prev is not None and v < prev and t >= FLASH:
         reb.append(t)
     prev = v
-print("redemarrages depuis le reflash (compteur captures qui retombe) : %d" % len(reb))
-print("  liste :", ", ".join(x[11:] for x in reb))
-# ecarts
+print("restarts since the reflash (capture counter falling back): %d" % len(reb))
+print("  list:", ", ".join(x[11:] for x in reb))
+# gaps
 import datetime
 d = [(dt.datetime.strptime(reb[i+1], "%Y-%m-%dT%H:%M:%S") - dt.datetime.strptime(reb[i], "%Y-%m-%dT%H:%M:%S")).total_seconds() for i in range(len(reb)-1)]
-print("  ecarts (min) :", [round(x/60, 1) for x in d])
+print("  gaps (min):", [round(x/60, 1) for x in d])
 
-# etat actuel
+# current state
 def get(u):
     req = urllib.request.Request(u, headers={"Authorization": "Bearer " + TOKEN})
     with urllib.request.urlopen(req, timeout=120) as r: return json.loads(r.read().decode())
@@ -37,5 +37,5 @@ for e in ("valid_frames", "rejected_frames", "rmt_captures", "outdoor_temperatur
         hh = get(u)[0]
         print("%-22s %s" % (e, [(x["last_changed"][11:19], x["state"]) for x in hh][-8:]))
     except Exception as ex:
-        print(e, "ERREUR", ex)
-print("maintenant (UTC) :", end)
+        print(e, "ERROR", ex)
+print("now (UTC):", end)

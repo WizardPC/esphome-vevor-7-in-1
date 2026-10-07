@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Etat des 35 dernieres minutes (le signal est-il revenu au lever du jour ?)."""
+"""State of the last 35 minutes (has the signal come back at daybreak?)."""
 import json, time, urllib.request, urllib.parse, datetime as dt
 TOKEN = open("/home/hermes/projets/vevor-7in1/.ha_token").read().strip()
 P = "sensor.jardin_vevor_7_in_1_weather_station_"
@@ -16,7 +16,7 @@ def get(u, essais=6):
 now = dt.datetime.now(dt.timezone.utc)
 start = (now - dt.timedelta(minutes=35)).strftime("%Y-%m-%dT%H:%M:%SZ")
 end = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-print("fenetre", start, "->", end)
+print("window", start, "->", end)
 for e in ("valid_frames", "rmt_captures", "last_raw_frame", "last_verdict", "outdoor_temperature", "esp32_weather_illuminance"):
     eid = e if e.startswith("esp32") else P + e
     h = get("http://192.168.2.104/api/history/period/" + start + "?filter_entity_id=" + q(eid) +

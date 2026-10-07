@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""Balayage EN DIRECT d'un réglage radio : quel débit, quelle déviation, quel filtre décode le mieux ?
+"""LIVE sweep of a radio setting: which rate, which deviation, which filter decodes best?
 
-Deux inconnues de la chaîne radio n'ont jamais été tranchées :
-  * le DÉBIT : 11 111 bauds configurés contre 11 312 mesurés sur les trames (88,4 µs de période) ;
-  * la DÉVIATION : 70 kHz chez nous contre 37 kHz dans la référence rtl_433 — contradiction jamais
-    levée, et peut-être sans objet si le registre n'agit pas en réception.
-Le pilote enregistre cc1101.set_symbol_rate / set_fsk_deviation / set_filter_bandwidth : un réglage
-change SANS recompiler, du moment que l'entité correspondante est déclarée dans le YAML.
+Two unknowns of the radio chain were never settled:
+  * the RATE: 11111 baud configured vs 11312 measured on the frames (88.4 µs period);
+  * the DEVIATION: 70 kHz for us vs 37 kHz in the rtl_433 reference — a contradiction never
+    resolved, and possibly moot if the register has no effect on reception.
+The driver registers cc1101.set_symbol_rate / set_fsk_deviation / set_filter_bandwidth: a setting
+changes WITHOUT recompiling, as long as the matching entity is declared in the YAML.
 
-Métrique principale : le RAPPORT DE DÉCODAGE (trames / rafales), continu et insensible à la position
-dans le temps. Secondaires : les rejets, les repairs, l'écart entre trames (la station émet toutes
-les 20 s) et l'état des compteurs internes publiés par la carte.
+Main metric: the DECODE RATIO (frames / bursts), continuous and insensitive to position in
+time. Secondary: rejects, repairs, the gap between frames (the station emits every 20 s) and
+the state of the internal counters published by the board.
 
-Chaque valeur est posée, RELUE (une écriture non prise ne doit pas compter comme un essai), laissée à
-se stabiliser, puis échantillonnée. La valeur de départ est restaurée à la fin, quoi qu'il arrive.
+Each value is set, READ BACK (a write that was not taken must not count as a trial), left to
+settle, then sampled. The starting value is restored at the end, whatever happens.
 
-Sorties : dev/state/balayage_<etiquette>.jsonl et .log
-Usage :
+Outputs: dev/state/balayage_<label>.jsonl and .log
+Usage:
   balayage_reglages.py --reglage "Data rate" --valeurs 11111,11200,11312,11400 --secondes 150
-  balayage_reglages.py --serie            # les trois réglages d'affilée, valeurs par défaut
+  balayage_reglages.py --serie            # the three settings in a row, default values
 """
 from __future__ import annotations
 
@@ -43,11 +43,11 @@ ETAT = DEV / "state"
 RE_TRAME = re.compile(r"V7IN1 OK (\{.*\})")
 RE_COMPTEURS = re.compile(
     r"captures=(\d+) \(\+(\d+)\), frames=(\d+), rejects=(\d+), repaired=(\d+)"
-    r"(?: \(dont (\d+) refusées\))?.*dernières pulses=(\d+), longest=(\d+)")
+    r"(?: \((?:dont )?(\d+) refus(?:ées|ed)\))?.*(?:dernières|last) pulses=(\d+), longest=(\d+)")
 CAPTEURS = {"rmt captures": "captures", "valid frames": "trames",
             "rejected frames": "rejets", "duplicates ignored": "duplicates"}
 
-# (nom d'entité, valeurs à essayer, secondes par valeur, unité)
+# (entity name, values to try, seconds per value, unit)
 SERIE = [
     ("Data rate", [11111, 11200, 11312, 11400, 11000], 150),
     ("FSK deviation", [70, 37, 50, 90, 100], 150),
@@ -108,15 +108,15 @@ async def balayer(reglage: str, valeurs: list[float], secondes: float, etiquette
     cle_api = resolve_key()
 
     async def connecter():
-        """Un client connecté, ou None. Le mode est détecté une fois (clair puis chiffré)."""
-        for psk, nom in ((None, "clair"), (cle_api, "chiffré")):
+        """A connected client, or None. The mode is detected once (plain then encrypted)."""
+        for psk, nom in ((None, "plain"), (cle_api, "encrypted")):
             essai = aioesphomeapi.APIClient(HOTE, PORT, None, noise_psk=psk)
             try:
                 await asyncio.wait_for(essai.connect(login=True), 25)
-                print(f"[mode] API en {nom}", flush=True)
+                print(f"[mode] API as {nom}", flush=True)
                 return essai
             except Exception as exc:
-                print(f"[mode] {nom} refusé : {exc!r}"[:140], flush=True)
+                print(f"[mode] {nom} refused: {exc!r}"[:140], flush=True)
                 try:
                     await asyncio.wait_for(essai.disconnect(force=True), 8)
                 except Exception:
@@ -124,15 +124,15 @@ async def balayer(reglage: str, valeurs: list[float], secondes: float, etiquette
         return None
 
     async def rejoindre():
-        """(re)connexion + abonnements. NE DOIT JAMAIS laisser l'outil mourir : le 05/10 la série
-        s'est arrêtée sur « Not connected » et deux passes entières ont été perdues."""
+        """(re)connection + subscriptions. MUST NEVER let the tool die: on 05/10 the series
+        stopped on "Not connected" and two full runs were lost."""
         essai = await connecter()
         if essai is None:
             return None, None
         try:
             ent, _ = await asyncio.wait_for(essai.list_entities_services(), 25)
         except Exception as exc:
-            print(f"!! liste des entités indisponible : {exc!r}"[:140], flush=True)
+            print(f"!! entity list unavailable: {exc!r}"[:140], flush=True)
             try:
                 await asyncio.wait_for(essai.disconnect(force=True), 8)
             except Exception:
@@ -157,7 +157,7 @@ async def balayer(reglage: str, valeurs: list[float], secondes: float, etiquette
                 niveau = 5
             await maybe_await(essai.subscribe_logs(b.sur_log, log_level=niveau))
         except Exception as exc:
-            print(f"!! abonnements indisponibles : {exc!r}"[:140], flush=True)
+            print(f"!! subscriptions unavailable: {exc!r}"[:140], flush=True)
         return essai, (cible, etats)
 
     cli = None
@@ -167,49 +167,49 @@ async def balayer(reglage: str, valeurs: list[float], secondes: float, etiquette
         if cli is not None and paquet is not None:
             cible, etats = paquet
             break
-        print(f"  connexion {tentative + 1}/12 impossible, nouvelle tentative dans 20 s", flush=True)
+        print(f"  connection {tentative + 1}/12 failed, retry in 20 s", flush=True)
         await asyncio.sleep(20)
     if cli is None or cible is None:
-        print("!! carte injoignable : rien ne peut être mesuré", file=sys.stderr)
+        print("!! board unreachable: nothing can be measured", file=sys.stderr)
         return 2
-    print(f"[cible] {cible.name} (clé {cible.key})", flush=True)
+    print(f"[target] {cible.name} (key {cible.key})", flush=True)
     await asyncio.sleep(3)
     depart = etats.get(cible.key)
     b.note(ev="debut", reglage=reglage, cle=cible.key, depart=depart, valeurs=valeurs,
            secondes=secondes)
-    print(f"[cible] {cible.name} = {depart} (valeur de départ) | {len(valeurs)} valeurs × "
+    print(f"[target] {cible.name} = {depart} (starting value) | {len(valeurs)} values × "
           f"{secondes:.0f} s ≈ {len(valeurs) * (secondes + 15) / 60:.0f} min", flush=True)
 
     resultats = []
-    for valeur in valeurs:
-        # Robustesse : une commande peut bloquer ou tomber sur une socket morte (la carte n'accepte
-        # qu'un nombre limité de clients). Sans ces bornes, la boucle restait bloquée sur la première
-        # valeur — constaté le 05/10 au soir : vingt minutes sans une seule mesure.
+    for value in valeurs:
+        # Robustness: a command can block or hit a dead socket (the board accepts
+        # only a limited number of clients). Without these bounds, the loop stayed stuck on the first
+        # value — observed on the evening of 05/10: twenty minutes without a single measurement.
         try:
-            await asyncio.wait_for(maybe_await(cli.number_command(cible.key, float(valeur))), 20)
+            await asyncio.wait_for(maybe_await(cli.number_command(cible.key, float(value))), 20)
         except Exception as exc:
-            print(f"  !! commande « {valeur} » impossible ({exc!r}) — reconnexion", flush=True)
-            b.note(ev="perte_pendant_valeur", valeur=valeur, detail=repr(exc)[:120])
+            print(f"  !! command \"{value}\" impossible ({exc!r}) — reconnecting", flush=True)
+            b.note(ev="perte_pendant_valeur", value=value, detail=repr(exc)[:120])
             nouveau, paquet = await rejoindre()
             if nouveau is not None and paquet is not None and paquet[0] is not None:
                 cli, (cible, etats) = nouveau, paquet
                 await asyncio.sleep(3)
                 try:
                     await asyncio.wait_for(
-                        maybe_await(cli.number_command(cible.key, float(valeur))), 20)
+                        maybe_await(cli.number_command(cible.key, float(value))), 20)
                 except Exception as exc2:
-                    b.note(ev="valeur_abandonnee", valeur=valeur, detail=repr(exc2)[:120])
-                    print(f"  !! valeur « {valeur} » abandonnée : {exc2!r}"[:140], flush=True)
+                    b.note(ev="valeur_abandonnee", value=value, detail=repr(exc2)[:120])
+                    print(f"  !! value \"{value}\" abandoned: {exc2!r}"[:140], flush=True)
                     continue
             else:
                 continue
         await asyncio.sleep(2)
         relu = etats.get(cible.key)
         try:
-            pris = relu is not None and abs(float(relu) - float(valeur)) <= 0.01
+            pris = relu is not None and abs(float(relu) - float(value)) <= 0.01
         except (TypeError, ValueError):
             pris = False
-        await asyncio.sleep(12)                    # pose de la puce
+        await asyncio.sleep(12)                    # chip settling
         avant, t0 = b.instantane(), time.time()
         tr0, ec0 = b.trames, len(b.ecarts)
         await asyncio.sleep(secondes)
@@ -218,27 +218,27 @@ async def balayer(reglage: str, valeurs: list[float], secondes: float, etiquette
         dt = apres.get("trames_c", 0) - avant.get("trames_c", 0)
         dr = apres.get("rejets", 0) - avant.get("rejets", 0)
         ecarts = b.ecarts[ec0:]
-        res = {"reglage": reglage, "valeur": valeur, "prise": pris, "relu": relu,
+        res = {"reglage": reglage, "value": value, "prise": pris, "relu": relu,
                "dcaptures": dc, "dtrames": dt, "drejets": dr,
                "pulses": apres.get("pulses"),
                "rapport": round(dt / dc, 3) if dc else None,
                "ecarts": ecarts, "secondes": round(time.time() - t0, 1)}
         resultats.append(res)
-        b.note(ev="valeur", **res)
-        print(f"  {reglage} = {valeur} : rafales +{dc}, trames +{dt}, rejets +{dr}, "
-              f"rapport={res['rapport']}, écarts={ecarts}"
-              + ("" if pris else "  [VALEUR NOT TAKENE]"), flush=True)
+        b.note(ev="value", **res)
+        print(f"  {reglage} = {value} : bursts +{dc}, frames +{dt}, rejects +{dr}, "
+              f"ratio={res['rapport']}, gaps={ecarts}"
+              + ("" if pris else "  [VALUE NOT TAKEN]"), flush=True)
 
     await maybe_await(cli.number_command(cible.key, float(depart if depart is not None else valeurs[0])))
     await asyncio.sleep(1.5)
-    b.note(ev="restauration", reglage=reglage, valeur=depart, relu=etats.get(cible.key))
-    print(f"[fin] {reglage} restauré à {depart} (relu {etats.get(cible.key)})", flush=True)
+    b.note(ev="restauration", reglage=reglage, value=depart, relu=etats.get(cible.key))
+    print(f"[end] {reglage} restored to {depart} (read back {etats.get(cible.key)})", flush=True)
 
-    print(f"\n=== bilan {reglage} ===")
+    print(f"\n=== summary {reglage} ===")
     for r in resultats:
         barre = "" if r["rapport"] is None else "█" * int(r["rapport"] * 40)
-        print(f"  {r['valeur']:>9} : rafales {r['dcaptures']:4d}  trames {r['dtrames']:3d}  "
-              f"rejets {r['drejets']:4d}  {barre}")
+        print(f"  {r['value']:>9} : bursts {r['dcaptures']:4d}  frames {r['dtrames']:3d}  "
+              f"rejects {r['drejets']:4d}  {barre}")
     b.note(ev="fin", reglage=reglage, resultats=resultats)
     try:
         await asyncio.wait_for(cli.disconnect(force=True), 10)
@@ -258,30 +258,30 @@ def serie() -> int:
         commande = [python, script, "--reglage", reglage,
                     "--valeurs", ",".join(str(v) for v in valeurs),
                     "--secondes", str(secondes), "--etiquette", etiquette]
-        print(f"\n===== BALAYAGE « {reglage} » : {valeurs} =====", flush=True)
+        print(f"\n===== SWEEP \"{reglage}\" : {valeurs} =====", flush=True)
         try:
             subprocess.run(commande, timeout=int(secondes * len(valeurs) + 600), check=False,
                            cwd=str(ROOT), env={**os.environ, "VEVOR_HOST": HOTE})
         except subprocess.TimeoutExpired:
-            print(f"[{reglage}] balayage tué par le délai de sécurité", flush=True)
+            print(f"[{reglage}] sweep killed by the safety timeout", flush=True)
         time.sleep(10)
-    print("\n===== SÉRIE TERMINÉE =====", flush=True)
+    print("\n===== SERIES DONE =====", flush=True)
     return 0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--serie", action="store_true", help="les trois réglages d'affilée")
-    ap.add_argument("--reglage", help="nom EXACT de l'entité, ex. \"Data rate\"")
-    ap.add_argument("--valeurs", help="valeurs séparées par des virgules")
+    ap.add_argument("--serie", action="store_true", help="the three settings in a row")
+    ap.add_argument("--reglage", help="EXACT entity name, e.g. \"Data rate\"")
+    ap.add_argument("--valeurs", help="comma-separated values")
     ap.add_argument("--secondes", type=float, default=150.0)
-    ap.add_argument("--etiquette", default="reglage")
+    ap.add_argument("--etiquette", default="setting")
     a = ap.parse_args()
     ETAT.mkdir(parents=True, exist_ok=True)
     if a.serie:
         return serie()
     if not a.reglage or not a.valeurs:
-        ap.error("--reglage et --valeurs sont requis (ou --serie)")
+        ap.error("--reglage and --valeurs are required (or --serie)")
     return asyncio.run(balayer(a.reglage, [float(x) for x in a.valeurs.split(",")],
                                a.secondes, a.etiquette))
 

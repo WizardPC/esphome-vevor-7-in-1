@@ -17,7 +17,7 @@ cd "$RACINE"
 VARIANTE="${1:-}"
 case "$VARIANTE" in
   prod|origine) ;;
-  *) echo "usage : tools/build_variant.sh <prod|origine> [sortie.ota.bin]" >&2; exit 2 ;;
+  *) echo "usage: tools/build_variant.sh <prod|origine> [output.ota.bin]" >&2; exit 2 ;;
 esac
 
 PILOTE="$RACINE/esphome/components/cc1101"
@@ -29,13 +29,13 @@ remettre_notre_pilote() {
   if [ -d "$SAUVEGARDE" ]; then
     rm -rf "$PILOTE"
     mv "$SAUVEGARDE" "$PILOTE"
-    echo "pilote local rétabli"
+    echo "local driver restored"
   fi
 }
 trap remettre_notre_pilote EXIT
 
 if [ "$VARIANTE" = origine ]; then
-  [ -d "$OFFICIEL" ] || { echo "pilote officiel introuvable : $OFFICIEL" >&2; exit 2; }
+  [ -d "$OFFICIEL" ] || { echo "official driver not found: $OFFICIEL" >&2; exit 2; }
   rm -rf "$SAUVEGARDE"
   cp -r "$PILOTE" "$SAUVEGARDE"
   # Copies the official driver WITHOUT __pycache__ (otherwise stale bytecode lingers).
@@ -43,18 +43,18 @@ if [ "$VARIANTE" = origine ]; then
   mkdir -p "$PILOTE"
   cp -r "$OFFICIEL"/. "$PILOTE"/
   rm -rf "$PILOTE/__pycache__"
-  echo "pilote d'origine ESPHome installé (depuis $OFFICIEL)"
+  echo "original ESPHome driver installed (from $OFFICIEL)"
 else
-  echo "pilote local (esphome/components/cc1101) conservé"
+  echo "local driver (esphome/components/cc1101) kept"
 fi
 
-echo "=== compilation ($VARIANTE) ==="
+echo "=== build ($VARIANTE) ==="
 tools/build.sh > "build/last_build_$VARIANTE.log" 2>&1
 grep -aE "BUILD OK|BUILD FAIL" "build/last_build_$VARIANTE.log" | tail -1
 
 BIN="esphome/.esphome/build/vevor-7in1/build/firmware.ota.bin"
 mkdir -p "$(dirname "$SORTIE")"
 cp -f "$BIN" "$SORTIE"
-echo "binaire figé : $SORTIE"
-echo "taille       : $(stat -c%s "$SORTIE") octets"
+echo "frozen binary: $SORTIE"
+echo "size         : $(stat -c%s "$SORTIE") bytes"
 echo "md5          : $(md5sum "$SORTIE" | cut -c1-8)"

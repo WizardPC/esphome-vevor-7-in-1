@@ -44,19 +44,19 @@ def main() -> int:
         except OSError as exc:
             fail += 1
             streak = 0
-            print("[%s] ECHEC %s" % (time.strftime("%H:%M:%S"), exc), flush=True)
-            results.append("ECHEC")
+            print("[%s] FAIL %s" % (time.strftime("%H:%M:%S"), exc), flush=True)
+            results.append("FAIL")
         time.sleep(max(0.0, args.interval - (time.monotonic() - t0)))
 
     total = ok + fail
-    print("# bilan: %d/%d OK, %d echecs, longest serie OK=%d" % (ok, total, fail, best),
+    print("# summary: %d/%d OK, %d failures, longest OK streak=%d" % (ok, total, fail, best),
           flush=True)
     if fail and ok:
-        print("# lien INSTABLE (joignable par intermittence)", flush=True)
+        print("# UNSTABLE link (intermittently reachable)", flush=True)
     elif fail:
-        print("# carte INJOIGNABLE sur toute la fenetre", flush=True)
+        print("# board UNREACHABLE over the whole window", flush=True)
     else:
-        print("# lien STABLE sur toute la fenetre", flush=True)
+        print("# STABLE link over the whole window", flush=True)
     return 0 if ok and not fail else 2
 
 

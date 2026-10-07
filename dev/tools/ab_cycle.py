@@ -41,7 +41,7 @@ def summarize(variant: str, log: pathlib.Path) -> dict:
         out["v7in1_rej"] = len(re.findall(r"V7IN1 REJ", text))
         caps = [int(m) for m in re.findall(r"captures=(\d+)", text)]
         out["captures_max"] = max(caps) if caps else 0
-        last = [int(m) for m in re.findall(r"dernières pulses=(\d+)", text)]
+        last = [int(m) for m in re.findall(r"(?:dernières|last) pulses=(\d+)", text)]
         out["dernieres_pulses"] = last[-1] if last else 0
         out["gdo0_statique"] = len(re.findall(r"GDO0 STATIQUE", text))
         out["inventaire"] = (re.findall(r"INVENTAIRE[^\n]*", text) or [""])[0][:120]
@@ -70,7 +70,7 @@ def main() -> int:
             flash_log = log.with_suffix(".flash")
             started = dt.datetime.now(dt.timezone.utc)
             if not binary.exists():
-                raise SystemExit(f"binaire absent pour {name} : {binary}")
+                raise SystemExit(f"binary missing for {name}: {binary}")
             proc = subprocess.run(
                 [str(ESPHOME), "upload", yaml, "--device", DEFAULT_HOST, "--file", str(binary)],
                 cwd=workdir, capture_output=True, text=True, timeout=300)
@@ -97,7 +97,7 @@ def main() -> int:
             # measurement, never "no frame received".
             capture_ok = cap.returncode in (0, RC_CAPTURE_VIDE)
             if not capture_ok:
-                print(f"  !! capture en échec (code {cap.returncode}) : mesure à JETER — "
+                print(f"  !! failed capture (code {cap.returncode}): measurement to DISCARD — "
                       f"{(cap.stderr or cap.stdout)[-200:]}", flush=True)
             summary = summarize(name, log)
             # Unusable: failed flash, failed capture, or near-empty capture (< 2 lines).
@@ -115,16 +115,16 @@ def main() -> int:
             key = "trames_decodees" if name == "temoin" else "v7in1_ok"
             print(f"[{row['debut_utc']}] {name:8s} flash={'OK' if flash_ok else 'FAIL'} "
                   f"{key}={row.get(key)} captures_max={row.get('captures_max', '-')} "
-                  f"rafales={row.get('rafales_rf_raw', '-')} "
-                  f"lignes={row['lignes']}{' (MESURE NULLE)' if mesure_nulle else ''}", flush=True)
+                  f"bursts={row.get('rafales_rf_raw', '-')} "
+                  f"lines={row['lignes']}{' (NULL MEASUREMENT)' if mesure_nulle else ''}", flush=True)
 
-    print("\n=== récapitulatif ===")
+    print("\n=== summary ===")
     for row in results:
         print(json.dumps(row, ensure_ascii=False))
     nulles = [row for row in results if row["mesure_nulle"]]
     if nulles:
-        print(f"\n# MESURE NULLE : {len(nulles)} variante(s) sur {len(results)} sans mesure "
-              "exploitable — rien n'a été mesuré pour elles (code 3)", file=sys.stderr)
+        print(f"\n# NULL MEASUREMENT: {len(nulles)} variant(s) out of {len(results)} with no usable "
+              "measurement — nothing was measured for them (code 3)", file=sys.stderr)
         return RC_MESURE_NULLE
     return RC_OK
 

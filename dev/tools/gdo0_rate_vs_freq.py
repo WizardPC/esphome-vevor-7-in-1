@@ -22,7 +22,7 @@ import sys
 
 TRANS_RE = re.compile(r"sonde GDO0 : (\d+) transition\(s\) en (\d+) us")
 CAP_RE = re.compile(r"captures=(\d+) \(\+(\d+)\), frames=(\d+), dernières pulses=(\d+), longest=(\d+)")
-NOIMP_RE = re.compile(r"aucune impulsion depuis (\d+) s \(captures=(\d+), frames=(\d+)\)")
+NOIMP_RE = re.compile(r"(?:aucune impulsion|no pulse) (\d+) s \(captures=(\d+), frames=(\d+)\)")
 EXTRACT_RE = re.compile(r"trame extraite")
 FREQ_RE = re.compile(r"gdo0_freq_([0-9.]+)\.log$")
 
@@ -62,8 +62,8 @@ def main() -> int:
                 rows.append(analyse(p))
     rows.sort(key=lambda r: (r["freq_mhz"] is None, r["freq_mhz"]))
 
-    print(f"{'fréquence':>10}  {'sondes':>6}  {'trans/s moy':>11}  {'min':>7}  {'max':>7}  "
-          f"{'captures':>8}  {'impuls.max':>10}  {'extractions':>11}")
+    print(f"{'frequency':>10}  {'probes':>6}  {'trans/s mean':>11}  {'min':>7}  {'max':>7}  "
+          f"{'captures':>8}  {'pulses.max':>10}  {'extractions':>11}")
     for r in rows:
         print(f"{r['freq_mhz'] if r['freq_mhz'] is not None else '-':>10}  {r['sondes']:>6}  "
               f"{r['transitions_moy'] if r['transitions_moy'] is not None else '-':>11}  "
@@ -76,19 +76,19 @@ def main() -> int:
     verdict = None
     if len(moyennes) >= 2:
         mini, maxi = min(moyennes), max(moyennes)
-        verdict = ("activité GDO0 INDÉPENDANTE de la fréquence (écart < 20 %) : sortie non "
-                   "discriminante, inutilisable comme détecteur de signal"
+        verdict = ("GDO0 activity INDEPENDENT of frequency (spread < 20%): output not "
+                   "discriminating, unusable as a signal detector"
                    if mini and (maxi - mini) / mini < 0.20 else
-                   "activité GDO0 DÉPENDANTE de la fréquence : la chaîne passe bien la bande "
-                   "et la sonde reste exploitable")
+                   "GDO0 activity DEPENDENT on frequency: the chain does pass the band "
+                   "and the probe remains usable")
         print("\nVERDICT : " + verdict)
     else:
-        print("\nVERDICT : pas assez de paliers exploitables pour trancher")
+        print("\nVERDICT: not enough usable steps to decide")
 
     if args.out:
         pathlib.Path(args.out).write_text(
             json.dumps({"rows": rows, "verdict": verdict}, indent=1, ensure_ascii=False), encoding="utf-8")
-        print(f"# rapport écrit: {args.out}")
+        print(f"# report written: {args.out}")
     return 0
 
 

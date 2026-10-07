@@ -126,7 +126,7 @@ entities and nothing else — see §10.
   NON PRIS`, wanted 0xB1) — the watchdog then *maintains* the fault instead of curing it;
 * defaults: a re-arm after **3 silent slots (60 s)**, then one every 3 slots, and a **reboot at 180 s**
   (the only remedy measured so far). Both are runtime-tunable entities:
-  `Watchdog crénaux muets avant re-armement` and `Watchdog silence max avant redemarrage`;
+  `Watchdog silent slots before re-arm` and `Watchdog max silence before restart`;
 * the reboot rate is bounded (past ten consecutive reboots, one slot in 45) and the counter is
   persisted, so a genuinely dead board cannot loop forever;
 * the re-arm is **one single `cc1101.reset`**. Never a chain of `cc1101.set_*`: inside the component
@@ -147,7 +147,7 @@ tools (`tools/capture_logs.py`, `tools/eval_frames.py`, the A/B harness) parse i
 ## 10. What is kept in the YAML, and why
 
 **Rule: the YAML carries no business logic — only logs and declarations.** The owner's words:
-« Le YAML ne doit JAMAIS contenir de code métier, seulement des logs. » Anything that *decides* lives
+"The YAML must NEVER contain business logic, only logs." Anything that *decides* lives
 in the component (`esphome/components/vevor_7in1/`), and every runtime setting is an entity the
 component itself owns (`number/`, `button/`).
 
@@ -156,8 +156,8 @@ component itself owns (`number/`, `button/`).
   same method (`reapply_radio()`), so they can no longer drift apart;
 * `button: Restart board` — a reboot is the only remedy measured against a mute chip, and
   without this button it takes a reflash, i.e. a new state lottery. Declarative platform, no logic;
-* `number: Watchdog crénaux muets avant re-armement`, `number: Watchdog silence max avant
-  redemarrage` — the watchdog's two settings, exposed by the component (defaults: 3 slots, 180 s).
+* `number: Watchdog silent slots before re-arm`, `number: Watchdog max silence before
+  restart` — the watchdog's two settings, exposed by the component (defaults: 3 slots, 180 s).
   The policy itself is `watch_radio_()`, see §8;
 * `number: CC1101 frequency` — lets a frequency sweep be driven over the API in 25 s steps instead of
   a compile-and-flash per point. `restore_value: false` on purpose: a restored value used to override

@@ -14,4 +14,4 @@ for end in ["2026-10-04T06:00:00Z", "2026-10-04T12:00:00Z", "2026-10-04T18:00:00
     print(end, raw(u))
 u = ("http://192.168.2.104/api/history/period/2026-10-04T00:00:00Z?filter_entity_id=" + q(P+"last_raw_frame") +
      "&minimal_response&no_attributes")
-print("sans end_time", raw(u))
+print("without end_time", raw(u))

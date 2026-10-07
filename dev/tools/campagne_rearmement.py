@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""Campagne « seuils du garde-fou » : attendre x2, x5, x10 capte-t-il encore des trames valides ?
+"""Campaign "guard thresholds": waiting x2, x5, x10, does it still catch valid frames?
 
-Une phase règle les DEUX seuils du chien de garde — créneaux muets avant ré-armement radio, et
-silence maximal avant redémarrage — puis écoute la carte et archive tout, sans rien interpréter :
-trames, compteurs internes, avertissements du garde-fou, états des capteurs, connexions/déconnexions.
-Les fichiers produits sont la matière première de l'analyse.
+One phase sets BOTH watchdog thresholds — silent slots before radio re-arm, and
+max silence before restart — then listens to the board and archives everything, without
+interpreting anything: frames, internal counters, guard warnings, sensor states, connections/
+disconnections. The files produced are the raw material of the analysis.
 
-Robustesse (apprise à la dure) :
-  * chaque phase est un PROCESSUS séparé, borné par un délai : rien ne peut rester bloqué ;
-  * la socket morte est détectée (le rappel de fermeture ET un chien de garde de 90 s) et refaite ;
-  * les seuils sont RÉAPPLIQUÉS à chaque reconnexion — la carte les remet à leurs valeurs
-    compilées quand elle redémarre, sinon une phase mesurerait silencieusement autre chose.
+Robustness (learned the hard way):
+  * each phase is a separate PROCESS, bounded by a timeout: nothing can stay stuck;
+  * the dead socket is detected (the close callback AND a 90 s watchdog) and rebuilt;
+  * the thresholds are RE-APPLIED on each reconnection — the board resets them to their
+    compiled values when it restarts, otherwise a phase would silently measure something else.
 
-Sorties (dev/state/) :
-  campagne_<etiquette>.jsonl   un événement par ligne (t = epoch, h = heure locale)
-  campagne_<etiquette>.log     le journal brut de la carte, tel quel
+Outputs (dev/state/):
+  campagne_<label>.jsonl   one event per line (t = epoch, h = local time)
+  campagne_<label>.log     the board's raw log, as-is
 
-Usage :
-  campagne_rearmement.py --campagne          # les quatre phases d'affilée, bornées
+Usage:
+  campagne_rearmement.py --campagne          # the four phases in a row, bounded
   campagne_rearmement.py --etiquette x5 --creneaux 15 --redemarrage 900 --duree 2100
 """
 from __future__ import annotations
@@ -46,24 +46,24 @@ NOM_REDEMARRAGE = re.compile(r"watchdog\s+max\s+silence", re.I)
 RE_TRAME = re.compile(r"V7IN1 OK (\{.*\})")
 RE_COMPTEURS = re.compile(
     r"captures=(\d+) \(\+(\d+)\), frames=(\d+), rejects=(\d+), repaired=(\d+)"
-    r"(?: \(dont (\d+) refusées\))?.*dernières pulses=(\d+), longest=(\d+)")
-RE_REARMEMENT = re.compile(r"ré-armement radio (\d+) \(un tous les (\d+) créneaux\)")
-RE_REDEMARRAGE = re.compile(r"redémarrage n°(\d+)")
-RE_MUET = re.compile(r"aucune trame depuis (\d+) s")
+    r"(?: \((?:dont )?(\d+) refus(?:ées|ed)\))?.*(?:dernières|last) pulses=(\d+), longest=(\d+)")
+RE_REARMEMENT = re.compile(r"(?:ré-armement|re-arm) radio (\d+) \((?:un tous les|one every) (\d+) (?:créneaux|slots)\)")
+RE_REDEMARRAGE = re.compile(r"(?:redémarrage|restart) #?(\d+)")
+RE_MUET = re.compile(r"(?:aucune trame depuis|no frame for) (\d+) s")
 
 CAPTEURS = ("rmt captures", "valid frames", "rejected frames",
             "duplicates ignored", "tx counter", "station id")
 
 
 class Phase:
-    """Un fichier JSONL d'événements + le journal brut, tous deux écrits ligne par ligne."""
+    """A JSONL file of events + the raw log, both written line by line."""
 
     def __init__(self, etiquette: str, creneaux: int, redemarrage: int, duree: int,
                  appui_periode: int = 0):
         self.etiquette, self.creneaux, self.redemarrage, self.duree = \
             etiquette, creneaux, redemarrage, duree
-        # Ré-appui périodique sur « Re-apply radio config » : teste si c'est l'ÉTAT de la puce qui
-        # lâche (un ré-armement régulier l'empêcherait de durer) ou autre chose.
+        # Periodic re-press of "Re-apply radio config": tests whether it is the chip's STATE that
+        # gives up (a regular re-arm would prevent it from lasting) or something else.
         self.appui_periode = appui_periode
         self.dernier_appui = 0.0
         self.jsonl = open(ETAT / f"campagne_{etiquette}.jsonl", "a", buffering=1)
@@ -76,7 +76,7 @@ class Phase:
         self.cles: dict[str, int] = {}
         self.noms_cles: dict[int, str] = {}
 
-    # --- écriture -----------------------------------------------------------
+    # --- writing ------------------------------------------------------------
     def note(self, ev: str, **kw) -> None:
         kw = {"ev": ev, "t": round(time.time(), 3),
               "h": datetime.datetime.now().strftime("%H:%M:%S"), **kw}
@@ -87,7 +87,7 @@ class Phase:
         self.log.write(ligne + "\n")
         self.derniere_activite = time.time()
 
-    # --- rappels aioesphomeapi ---------------------------------------------
+    # --- aioesphomeapi callbacks --------------------------------------------
     def sur_log(self, reponse) -> None:
         try:
             brut = reponse.message.decode("utf8", "replace") if isinstance(
@@ -129,17 +129,17 @@ class Phase:
                 self.note("muet_composant", secondes=int(m.group(1)))
 
     def sur_etat(self, etat) -> None:
-        # Les objets d'état de l'API ne portent PAS leur nom : la table clé→nom vient de la liste
-        # des entités (sans elle, le rappel levait une AttributeError à chaque état).
+        # The API state objects do NOT carry their name: the key→name table comes from the entity
+        # list (without it, the callback raised an AttributeError on every state).
         nom = self.noms_cles.get(etat.key, "")
         cle = nom.strip().lower()
-        valeur = getattr(etat, "state", None)
+        value = getattr(etat, "state", None)
         if cle in CAPTEURS or NOM_CRENEAUX.search(nom) or NOM_REDEMARRAGE.search(nom):
-            self.note("etat", nom=nom, valeur=valeur)
-            if NOM_CRENEAUX.search(nom) and float(valeur or 0) == self.creneaux:
-                self.regles_confirmes["creneaux"] = valeur
-            if NOM_REDEMARRAGE.search(nom) and float(valeur or 0) == self.redemarrage:
-                self.regles_confirmes["redemarrage"] = valeur
+            self.note("etat", nom=nom, value=value)
+            if NOM_CRENEAUX.search(nom) and float(value or 0) == self.creneaux:
+                self.regles_confirmes["creneaux"] = value
+            if NOM_REDEMARRAGE.search(nom) and float(value or 0) == self.redemarrage:
+                self.regles_confirmes["redemarrage"] = value
 
     async def sur_arret(self, attendu: bool) -> None:
         self.note("socket_fermee", attendu=attendu)
@@ -149,14 +149,14 @@ class Phase:
 async def regler_et_ecouter(cli, phase: Phase, entites) -> None:
     phase.cles = {getattr(e, "name", "") or "": e.key for e in entites}
     phase.noms_cles = {e.key: (getattr(e, "name", "") or "") for e in entites}
-    for motif, valeur, nom in ((NOM_CRENEAUX, phase.creneaux, "creneaux_avant_rearmement"),
-                               (NOM_REDEMARRAGE, phase.redemarrage, "duree_max_avant_redemarrage")):
+    for motif, value, nom in ((NOM_CRENEAUX, phase.creneaux, "rearm_after_slots"),
+                               (NOM_REDEMARRAGE, phase.redemarrage, "max_restart_delay")):
         cle = next((k for n, k in phase.cles.items() if motif.search(n)), None)
         if cle is None:
             phase.note("entite_absente", parametre=nom)
             continue
-        await maybe_await(cli.number_command(cle, float(valeur)))
-        phase.note("reglage_envoye", parametre=nom, valeur=valeur)
+        await maybe_await(cli.number_command(cle, float(value)))
+        phase.note("reglage_envoye", parametre=nom, value=value)
     await maybe_await(cli.subscribe_states(phase.sur_etat))
     phase.note("abonnement_capteurs", noms=[n for n in phase.cles if n.strip().lower() in CAPTEURS])
     try:
@@ -176,25 +176,25 @@ async def couper(cli) -> None:
 
 
 async def choisir_psk(cle_api):
-    """Le mode d'authentification réel de la carte : clair d'abord, clé du YAML en secours.
+    """The board's real authentication mode: plain first, YAML key as a fallback.
 
-    La carte a été reflashée SANS chiffrement (l'intégration Home Assistant s'en plaint) alors que
-    le YAML du dépôt déclare encore une clé : se tromper de mode donne une erreur de connexion
-    immédiate, pas une mesure fausse — mais autant le détecter une fois pour toutes.
+    The board was reflashed WITHOUT encryption (the Home Assistant integration complains about it)
+    while the repo YAML still declares a key: getting the mode wrong gives an immediate connection
+    error, not a false measurement — but might as well detect it once and for all.
     """
     import aioesphomeapi
-    for psk, nom in ((None, "clair"), (cle_api, "chiffré (clé du YAML)")):
+    for psk, nom in ((None, "plain"), (cle_api, "encrypted (YAML key)")):
         cli = aioesphomeapi.APIClient(HOTE, PORT, None, noise_psk=psk)
         try:
             await asyncio.wait_for(cli.connect(login=True), 20)
             await asyncio.wait_for(cli.device_info(), 20)
-            print(f"[mode] API ESPHome en {nom}", flush=True)
+            print(f"[mode] API ESPHome as {nom}", flush=True)
             return psk
         except Exception as exc:
-            print(f"[mode] {nom} refusé : {exc!r}"[:170], flush=True)
+            print(f"[mode] {nom} refused: {exc!r}"[:170], flush=True)
         finally:
             await couper(cli)
-    print("[mode] aucun mode accepté — la carte répond-elle ?", flush=True)
+    print("[mode] no mode accepted — is the board answering?", flush=True)
     return None
 
 
@@ -208,8 +208,8 @@ async def phase_async(a) -> None:
     phase.note("phase_debut", creneaux=a.creneaux, redemarrage_s=a.redemarrage,
                duree_s=a.duree, mode="clair" if psk is None else "chiffre",
                appui_periode_s=phase.appui_periode)
-    print(f"[{phase.etiquette}] début : créneaux={a.creneaux} ({a.creneaux * 20} s), "
-          f"redémarrage={a.redemarrage} s, durée={a.duree // 60} min", flush=True)
+    print(f"[{phase.etiquette}] start: slots={a.creneaux} ({a.creneaux * 20} s), "
+          f"restart={a.redemarrage} s, duration={a.duree // 60} min", flush=True)
 
     while time.time() < fin:
         cli = aioesphomeapi.APIClient(HOTE, PORT, None,
@@ -220,10 +220,10 @@ async def phase_async(a) -> None:
             phase.cles = {}
             await regler_et_ecouter(cli, phase, entites)
             phase.note("connecte", entites=len(entites))
-            print(f"[{phase.etiquette}] connecté — {len(entites)} entités, seuils envoyés", flush=True)
+            print(f"[{phase.etiquette}] connected — {len(entites)} entities, thresholds sent", flush=True)
         except Exception as exc:
             phase.note("erreur_connexion", detail=repr(exc)[:200])
-            print(f"[{phase.etiquette}] connexion impossible : {exc!r}"[:160], flush=True)
+            print(f"[{phase.etiquette}] connection failed: {exc!r}"[:160], flush=True)
             await couper(cli)
             await asyncio.sleep(15)
             continue
@@ -233,9 +233,9 @@ async def phase_async(a) -> None:
         dernier_bilan = time.time()
         try:
             while time.time() < fin and not phase.arret_demande:
-                # Chien de garde local : une socket morte ne prévient pas toujours.
+                # Local watchdog: a dead socket does not always warn.
                 if time.time() - phase.derniere_activite > 90:
-                    raise TimeoutError("aucune ligne ni état depuis 90 s")
+                    raise TimeoutError("no line nor state for 90 s")
                 if phase.appui_periode and time.time() - phase.dernier_appui >= phase.appui_periode:
                     phase.dernier_appui = time.time()
                     cle = next((k for n, k in phase.cles.items()
@@ -243,7 +243,7 @@ async def phase_async(a) -> None:
                     if cle is None:
                         phase.note("appui_impossible", raison="bouton absent")
                     else:
-                        # thread : button_command est synchrone et peut bloquer la boucle asyncio
+                        # thread: button_command is synchronous and can block the asyncio loop
                         try:
                             await asyncio.wait_for(
                                 asyncio.to_thread(cli.button_command, cle), 15)
@@ -255,13 +255,13 @@ async def phase_async(a) -> None:
                     dernier_bilan = time.time()
                     ecart = (round(time.time() - phase.derniere_trame, 1)
                              if phase.derniere_trame else None)
-                    print(f"[{phase.etiquette}] {phase.trames} trames, dernier écart={ecart} s, "
-                          f"seuils confirmés={phase.regles_confirmes or 'en attente'}", flush=True)
+                    print(f"[{phase.etiquette}] {phase.trames} frames, last gap={ecart} s, "
+                          f"confirmed thresholds={phase.regles_confirmes or 'pending'}", flush=True)
                     phase.note("bilan", frames=phase.trames, ecart_s=ecart)
                 await asyncio.sleep(2)
         except Exception as exc:
             phase.note("flux_perdu", detail=repr(exc)[:200])
-            print(f"[{phase.etiquette}] flux perdu : {exc!r}"[:160], flush=True)
+            print(f"[{phase.etiquette}] stream lost: {exc!r}"[:160], flush=True)
         finally:
             await couper(cli)
         if not phase.arret_demande:
@@ -269,8 +269,8 @@ async def phase_async(a) -> None:
 
     phase.note("phase_fin", frames=phase.trames,
                seuils_confirmes=phase.regles_confirmes)
-    print(f"[{phase.etiquette}] FIN — {phase.trames} trames, "
-          f"seuils confirmés={phase.regles_confirmes}", flush=True)
+    print(f"[{phase.etiquette}] END — {phase.trames} frames, "
+          f"confirmed thresholds={phase.regles_confirmes}", flush=True)
     for f in (phase.jsonl, phase.log):
         f.flush()
         os.fsync(f.fileno())
@@ -278,23 +278,23 @@ async def phase_async(a) -> None:
     phase.log.close()
 
 
-# --- Les quatre phases de la campagne --------------------------------------
-# (étiquette, créneaux avant ré-armement, silence max avant redémarrage en s, minutes)
+# --- The four campaign phases ----------------------------------------------
+# (label, slots before re-arm, max silence before restart in s, minutes)
 PHASES = [
-    ("x1", 3, 180, 20),      # référence : ce que fait le firmware actuellement (60 s / 180 s)
-    ("x2", 6, 360, 20),      # x2 : ré-armement à 120 s, redémarrage à 360 s
+    ("x1", 3, 180, 20),      # reference: what the firmware does now (60 s / 180 s)
+    ("x2", 6, 360, 20),      # x2: re-arm at 120 s, restart at 360 s
     ("x5", 15, 900, 35),     # x5 : 300 s / 900 s
     ("x10", 30, 1800, 40),   # x10 : 600 s / 1800 s
 ]
 
 
-# --- Test apparié : bras alternés ------------------------------------------
-# Pourquoi alterner : la réception varie d'un quart d'heure à l'autre (4 trous en 20 min, puis
-# 0 rejet pendant 16 min). Un plan séquentiel confondrait ce lent changement avec l'effet testé.
-# Chaque bras dure 10 min, et on alterne sans/avec le ré-appui périodique. Les seuils du firmware
-# sont repoussés (600 s / 3600 s) pour que le garde-fou NE puisse PAS intervenir : la seule
-# variable est l'appui. Pourquoi 120 s : les épisodes de surdité naturels durent 3 à 15 min.
-BRAS = [("sans1", 0), ("avec1", 120), ("sans2", 0), ("avec2", 120), ("sans3", 0)]
+# --- Paired test: alternating arms -----------------------------------------
+# Why alternate: reception varies from one quarter-hour to the next (4 gaps in 20 min, then
+# 0 reject for 16 min). A sequential plan would confuse this slow change with the effect tested.
+# Each arm lasts 10 min, and we alternate without/with the periodic re-press. The firmware
+# thresholds are pushed back (600 s / 3600 s) so that the guard CANNOT step in: the only
+# variable is the press. Why 120 s: natural deafness episodes last 3 to 15 min.
+BRAS = [("without1", 0), ("with1", 120), ("without2", 0), ("with2", 120), ("without3", 0)]
 DUREE_BRAS_S = 600
 
 
@@ -305,15 +305,15 @@ def alternance() -> int:
         etiquette = f"pair_{nom}"
         commande = [python, script, "--etiquette", etiquette, "--creneaux", "30",
                     "--redemarrage", "3600", "--duree", str(DUREE_BRAS_S), "--appui", str(appui)]
-        print(f"\n===== BRAS {nom} : ré-appui {'toutes les 120 s' if appui else 'AUCUN'} "
+        print(f"\n===== ARM {nom}: re-press {'every 120 s' if appui else 'NONE'} "
               f"({DUREE_BRAS_S // 60} min) =====", flush=True)
         try:
             subprocess.run(commande, timeout=DUREE_BRAS_S + 180, check=False,
                            cwd=str(ROOT), env={**os.environ, "VEVOR_HOST": HOTE})
         except subprocess.TimeoutExpired:
-            print(f"[{nom}] bras tué par le délai de sécurité", flush=True)
+            print(f"[{nom}] arm killed by the safety timeout", flush=True)
         time.sleep(15)
-    print("\n===== ALTERNANCE TERMINÉE =====", flush=True)
+    print("\n===== ALTERNATION DONE =====", flush=True)
     return 0
 
 
@@ -324,29 +324,29 @@ def campagne() -> int:
         duree = minutes * 60
         commande = [python, script, "--etiquette", etiquette, "--creneaux", str(creneaux),
                     "--redemarrage", str(redemarrage), "--duree", str(duree)]
-        print(f"\n===== PHASE {etiquette} : {minutes} min, créneaux={creneaux} "
-              f"({creneaux * 20} s), redémarrage={redemarrage} s =====", flush=True)
+        print(f"\n===== PHASE {etiquette}: {minutes} min, slots={creneaux} "
+              f"({creneaux * 20} s), restart={redemarrage} s =====", flush=True)
         try:
             subprocess.run(commande, timeout=duree + 180, check=False,
                            cwd=str(ROOT), env={**os.environ, "VEVOR_HOST": HOTE})
         except subprocess.TimeoutExpired:
-            print(f"[{etiquette}] phase tuée par le délai de sécurité", flush=True)
+            print(f"[{etiquette}] phase killed by the safety timeout", flush=True)
         time.sleep(20)
-    print("\n===== CAMPAGNE TERMINÉE =====", flush=True)
+    print("\n===== CAMPAIGN DONE =====", flush=True)
     return 0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--campagne", action="store_true", help="les quatre phases d'affilée")
+    ap.add_argument("--campagne", action="store_true", help="the four phases in a row")
     ap.add_argument("--alternance", action="store_true",
-                    help="test apparié : bras sans/avec ré-appui périodique, alternés (10 min chacun)")
+                    help="paired test: arms without/with periodic re-press, alternated (10 min each)")
     ap.add_argument("--etiquette")
     ap.add_argument("--creneaux", type=int)
     ap.add_argument("--redemarrage", type=int)
-    ap.add_argument("--duree", type=int, help="secondes")
+    ap.add_argument("--duree", type=int, help="seconds")
     ap.add_argument("--appui", type=int, default=0,
-                    help="ré-appui périodique sur « Re-apply radio config », en secondes (0 = jamais)")
+                    help="periodic re-press of \"Re-apply radio config\", in seconds (0 = never)")
     a = ap.parse_args()
     ETAT.mkdir(parents=True, exist_ok=True)
     if a.campagne:
@@ -354,7 +354,7 @@ def main() -> int:
     if a.alternance:
         return alternance()
     if None in (a.etiquette, a.creneaux, a.redemarrage, a.duree):
-        ap.error("--etiquette, --creneaux, --redemarrage et --duree sont requis (ou --campagne)")
+        ap.error("--etiquette, --creneaux, --redemarrage and --duree are required (or --campagne)")
     asyncio.run(phase_async(a))
     return 0
 

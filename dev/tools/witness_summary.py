@@ -31,25 +31,25 @@ def main() -> int:
     decodes = [m.group(0).strip() for m in DECODE.finditer(text) if "[" in m.group(0)]
     cuts = [(int(m.group(1)), int(m.group(2)), int(m.group(3))) for m in CUT.finditer(text)]
 
-    print(f"fichier            : {path}")
-    print(f"rafales RF         : {len(bursts)}")
+    print(f"file               : {path}")
+    print(f"RF bursts          : {len(bursts)}")
     if bursts:
         lengths = [b[0] for b in bursts]
         print(f"  pulses       : min={min(lengths)} max={max(lengths)} "
-              f"med={statistics.median(lengths):.0f} (rafale utile mesurée le 30/09 à 18:41 : 166-174)")
-        print(f"  premières rafales: ")
+              f"med={statistics.median(lengths):.0f} (useful burst measured on 30/09 at 18:41: 166-174)")
+        print(f"  first bursts: ")
         for n, head in bursts[:6]:
-            print(f"    {n:4d} imp — {head}")
-    print(f"trames décodées    : {len(decodes)}")
+            print(f"    {n:4d} pulses — {head}")
+    print(f"decoded frames     : {len(decodes)}")
     for d in decodes[-8:]:
         print(f"  {d}")
     # Witness log lines carry an internal pulse length in the form (x[0]=..).
     gaps = [m.group(1) for m in re.finditer(r"x\[0\]=(-?\d+)", text)]
     if gaps:
         g = sorted(int(v) for v in gaps)
-        print(f"x[0] (1re durée)   : min={g[0]} us med={statistics.median(g):.0f} max={g[-1]} us "
-              f"(témoin sain du 18:41 : +92 / −84 us)")
-    print(f"trames recollées   : {len(cuts)} (témoin : capture coupée puis recollée)")
+        print(f"x[0] (1st duration): min={g[0]} us med={statistics.median(g):.0f} max={g[-1]} us "
+              f"(healthy witness of 18:41: +92 / -84 us)")
+    print(f"stitched frames    : {len(cuts)} (witness: capture cut then stitched back)")
     return 0
 
 

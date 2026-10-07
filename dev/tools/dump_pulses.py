@@ -55,19 +55,19 @@ async def main() -> int:
 
     button = by_name.get("Dump pulses")
     if button is None:
-        raise SystemExit("bouton « Dump pulses » introuvable (firmware à reflasher ?)")
+        raise SystemExit("button \"Dump pulses\" not found (firmware to reflash?)")
     await maybe_await(client.button_command(button.key))
-    print("bouton « Dump pulses » appuyé — attente de la prochaine capture…")
+    print("button \"Dump pulses\" pressed — waiting for the next capture…")
 
     await asyncio.sleep(args.seconds)
 
     out = atomic_write_text(args.out, "\n".join(lines))
 
-    for name in ("Fréquence CC1101", "Captures RMT", "Trames valides", "Trames rejetées",
-                 "Doublons ignorés"):
+    for name in ("CC1101 frequency", "RMT captures", "Valid frames", "Rejected frames",
+                 "Duplicates ignored"):
         ent = by_name.get(name)
         st = latest.get(ent.key) if ent is not None else None
-        print(f"  {name:20s} = {getattr(st, 'state', '(jamais publié)')}")
+        print(f"  {name:20s} = {getattr(st, 'state', '(never published)')}")
 
     for text in lines:
         if any(k in text for k in ("capture #", "pulses", "trame extraite", "V7IN1",

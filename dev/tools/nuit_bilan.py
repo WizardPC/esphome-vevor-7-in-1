@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bilan chiffre par segment (entre redemarrages) + journee complete du 04/10."""
+"""Per-segment figures (between restarts) + full day of 04/10."""
 import json, os, re, urllib.request, urllib.parse, collections
 BASE = "http://192.168.2.104"
 TOKEN = open("/home/hermes/projets/vevor-7in1/.ha_token").read().strip()
@@ -18,10 +18,10 @@ def fetch(url, essais=4):
             with urllib.request.urlopen(req, timeout=180) as r:
                 return json.loads(r.read().decode())
         except Exception as ex:
-            print("   (essai %d: %s)" % (k, ex)); time.sleep(6)
-    raise SystemExit("echec")
+            print("   (attempt %d: %s)" % (k, ex)); time.sleep(6)
+    raise SystemExit("failure")
 
-# --- journee complete : comptage des 02 80 80 ---
+# --- full day: counting the 02 80 80 ---
 url = (BASE + "/api/history/period/2026-10-04T00:00:00Z?filter_entity_id=" +
        urllib.parse.quote(P + "last_raw_frame", safe="") +
        "&end_time=2026-10-04T22:24:00Z&minimal_response&no_attributes")
@@ -29,16 +29,16 @@ h = fetch(url)[0]
 h = [(s["last_changed"][:19], s["state"]) for s in h]
 h = [(t, s) for t, s in h if re.match(r"^[0-9a-f]{2}( [0-9a-f]{2}){20}$", str(s))]
 bad = [t for t, s in h if s.split()[8:11] == ["02", "80", "80"]]
-print("JOURNEE 04/10 (00:00 -> 22:24 UTC) : %d trames brutes, %d trames 02 80 80" % (len(h), len(bad)))
-print("  premiere :", bad[0] if bad else "-", "| derniere :", bad[-1] if bad else "-")
-print("  par heure UTC :", dict(sorted(collections.Counter(t[:13] for t in bad).items())))
-# autres valeurs anormales notables
+print("DAY 04/10 (00:00 -> 22:24 UTC): %d raw frames, %d frames 02 80 80" % (len(h), len(bad)))
+print("  first  :", bad[0] if bad else "-", "| last:", bad[-1] if bad else "-")
+print("  per hour UTC:", dict(sorted(collections.Counter(t[:13] for t in bad).items())))
+# other notable abnormal values
 for trio in ("01 01 80", "01 80 80", "02 80 80"):
     n = sum(1 for t, s in h if " ".join(s.split()[8:11]) == trio)
     print("   b[8..10] == %s : %d" % (trio, n))
 
 # --- segments post-flash ---
-print("\n=== SEGMENTS post-reflash (22:25:04 UTC = 00:25 Paris) ===")
+print("\n=== Post-reflash SEGMENTS (22:25:04 UTC = 00:25 Paris) ===")
 def serie(n):
     hh = [(s["last_changed"][:19], num(s.get("state"))) for s in load(P + n)]
     return [(t, v) for t, v in hh if v is not None]
@@ -52,7 +52,7 @@ for t, v in vs:
     seg.append((t, v)); prev = v
 segs.append(seg)
 tval = trej = trmt = 0
-print("  %-21s %-21s %6s %6s %6s" % ("debut", "fin", "val", "rej", "rmt"))
+print("  %-21s %-21s %6s %6s %6s" % ("start", "end", "val", "rej", "rmt"))
 for s in segs:
     t0, t1 = s[0][0], s[-1][0]
     if t1 < FLASH: continue
@@ -61,7 +61,7 @@ for s in segs:
     mc = max([v for t, v in cs if t0 <= t <= t1] or [0])
     tval += mv; trej += mr; trmt += mc
     print("  %-21s %-21s %6g %6g %6g" % (t0, t1, mv, mr, mc))
-print("  TOTAL : valides=%g rejetees=%g captures=%g  -> rejets/captures = %.2f" % (tval, trej, trmt, trej/trmt if trmt else 0))
-print("  (reference avant correctif, journee 04/10 00:00->22:24 : a calculer ci-dessous)")
+print("  TOTAL: valid=%g rejected=%g captures=%g  -> rejects/captures = %.2f" % (tval, trej, trmt, trej/trmt if trmt else 0))
+print("  (reference before the fix, day 04/10 00:00->22:24: computed below)")
 b = serie("valid_frames"); r = serie("rejected_frames"); c = serie("rmt_captures")
-print("  avant reflash : valid_frames %g -> %g" % (b[0][1], b[-1][1] if b[-1][0] < FLASH else 0))
+print("  before reflash: valid_frames %g -> %g" % (b[0][1], b[-1][1] if b[-1][0] < FLASH else 0))

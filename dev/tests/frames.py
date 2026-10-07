@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Vevor 7-in-1 frame encoder — independent of the decoder, for host-side tests.
 
-Inverse of `esphome/components/vevor_7in1/vevor_7in1.h`: from physical values to the 21 raw bytes
+Inverted of `esphome/components/vevor_7in1/vevor_7in1.h`: from physical values to the 21 raw bytes
 per the spec (references/PROTOCOL.md): +1 offset on bytes 8, 9, 11-14, 16, 17, checksum =
 sum(b[0..18]) & 0xFF, b[20] = (b[18]+1) & 0xFF. Independent reference: byte-level agreement with
 the C++ decoder and the rtl_433 sample frame proves both read the same spec.
@@ -63,7 +63,7 @@ def encode(
     for name, value, vmax in limits:
         if value < 0 or value > vmax:
             raise ValueError(
-                f"{name}: valeur {value} hors de ce que la trame peut porter (max 0x{vmax:X})"
+                f"{name}: value {value} outside what the frame can carry (max 0x{vmax:X})"
             )
 
     b = [0] * FRAME_BYTES
@@ -143,20 +143,20 @@ def _scenarios() -> list[tuple[str, list[int], bool, str]]:
     # Each BRANCH of the gate, exercised by a test frame: well formed (header + checksum +
     # counter) but physically impossible → rejected WITH the matching reason. Previously only
     # the "direction" branch had a frame (review round 2, §4).
-    out.append(("humidity_101_rejetee", encode(humidity=101), False, "humidity"))
-    out.append(("temperature_70_rejetee", encode(temp_c=70.0), False, "temperature"))
-    out.append(("temperature_moins45_rejetee", encode(temp_c=-45.0), False, "temperature"))
-    out.append(("vent_200_rejete", encode(wind_kmh=200.0), False, "wind"))
+    out.append(("humidity_101_rejected", encode(humidity=101), False, "humidity"))
+    out.append(("temperature_70_rejected", encode(temp_c=70.0), False, "temperature"))
+    out.append(("temperature_minus45_rejected", encode(temp_c=-45.0), False, "temperature"))
+    out.append(("wind_200_rejected", encode(wind_kmh=200.0), False, "wind"))
     # Smallest encodable step above the bound: 1501 ticks / 8.333 = 180.13 > 180.01 (bound +
     # margin) → rejected. Tight counter-check of the false rejection fixed above.
-    out.append(("vent_premier_cran_au_dessus_rejete", encode(wind_kmh=180.13), False, "wind"))
-    out.append(("rafale_200_rejetee", encode(gust_kmh=200.0), False, "wind"))
-    out.append(("uv_20_rejete", encode(uv=20), False, "uv"))
-    out.append(("uv_negatif_rejete", encode(uv=-1), False, "uv"))
+    out.append(("wind_first_step_above_rejected", encode(wind_kmh=180.13), False, "wind"))
+    out.append(("burst_200_rejected", encode(gust_kmh=200.0), False, "wind"))
+    out.append(("uv_20_rejected", encode(uv=20), False, "uv"))
+    out.append(("uv_negative_rejected", encode(uv=-1), False, "uv"))
     # WARNING: the rtl_433 decoder — and ours — requires `b[1] == 0` exactly. Stations of this
     # family emit sensor type = 0 and channel = 0, so requiring 0 is a deliberate noise filter.
     # A non-zero-channel frame must be REJECTED; this scenario locks that in, not to be relaxed.
-    out.append(("canal_non_nul_rejete", encode(channel=1, sensor_id=0x7C41), False, "header"))
+    out.append(("channel_nonzero_rejected", encode(channel=1, sensor_id=0x7C41), False, "header"))
     out.append(("checksum_corrompu", encode(corrupt_checksum=True), False, "checksum"))
     out.append(("compteur_incoherent", encode(bad_counter=True), False, "tx_counter"))
     out.append(("en_tete_invalide", encode(bad_header=True), False, "header"))
@@ -227,20 +227,20 @@ def _pulse_scenarios() -> list[tuple[str, list[int], bool, dict, int]]:
     bits = bits_from_bytes(list(PULSE_PREAMBLE) + frame)
     out: list[tuple[str, list[int], bool, dict, int]] = []
 
-    out.append(("pulses_nominales", timings_from_bits(bits, 90), True, values, 90))
-    out.append(("pulses_polarite_inversee", timings_from_bits(bits, 90, invert=True), True,
+    out.append(("pulses_nominal", timings_from_bits(bits, 90), True, values, 90))
+    out.append(("pulses_inverted_polarity", timings_from_bits(bits, 90, invert=True), True,
                 values, 90))
     # Each CANDIDATE period gets a burst at ITS period: the decoder must decode it as the only
     # candidate (real run at 88, 89 AND 87 — see test_period_selection). One 88 µs burst was not
     # enough: the decoder fell back to 90 and "== 90" only tested list order.
-    out.append(("pulses_periode_88us", timings_from_bits(bits, 88), True, values, 88))
-    out.append(("pulses_periode_89us", timings_from_bits(bits, 89), True, values, 89))
-    out.append(("pulses_periode_87us", timings_from_bits(bits, 87), True, values, 87))
+    out.append(("pulses_period_88us", timings_from_bits(bits, 88), True, values, 88))
+    out.append(("pulses_period_89us", timings_from_bits(bits, 89), True, values, 89))
+    out.append(("pulses_period_87us", timings_from_bits(bits, 87), True, values, 87))
     # Capture starting MID-preamble: common case, RMT starts after the burst has begun. The
     # decoder must not require the whole preamble.
-    out.append(("pulses_capture_tronquee", timings_from_bits(bits[13:], 90), True, values, 90))
+    out.append(("pulses_truncated_capture", timings_from_bits(bits[13:], 90), True, values, 90))
     # Inter-burst hole in the capture: SKIP it, do not treat it as a lost capture.
-    out.append(("pulses_trou_inter_rafales", timings_from_bits(bits, 90, gap_us=PULSE_GAP_US),
+    out.append(("pulses_gap_between_bursts", timings_from_bits(bits, 90, gap_us=PULSE_GAP_US),
                 True, values, 90))
     # ±2 % jitter per pulse: two independent clocks (transmitter + 1 MHz RMT). Per-pulse rounding
     # tolerance is ABSOLUTE (±45 µs = half a period), so a proportional error stays under ~5 %
@@ -248,34 +248,34 @@ def _pulse_scenarios() -> list[tuple[str, list[int], bool, dict, int]]:
     rnd = random.Random(20260930)
     jittered = [round(t * (1.0 + rnd.uniform(-0.02, 0.02)))
                 for t in timings_from_bits(bits, 90)]
-    out.append(("pulses_gigue_2pct", jittered, True, values, 90))
+    out.append(("pulses_jitter_2pct", jittered, True, values, 90))
     # ABSOLUTE bias on all pulses (off-centre receiver): ±30 µs, within half a period. The
     # observed error on this rig (pulses at 86 and 267 µs instead of 90 and 270 → −4 and −3 µs),
     # which the reference project fixes with a shift list; per-pulse rounding absorbs it directly.
-    out.append(("pulses_biais_bas_30us", _biased(timings_from_bits(bits, 90), -30), True,
+    out.append(("pulses_bias_low_30us", _biased(timings_from_bits(bits, 90), -30), True,
                 values, 90))
-    out.append(("pulses_biais_haut_30us", _biased(timings_from_bits(bits, 90), 30), True,
+    out.append(("pulses_bias_high_30us", _biased(timings_from_bits(bits, 90), 30), True,
                 values, 90))
     # Frame with a LONG run of identical bits (id = 0, negative temp, zero humidity → 28 bits):
     # the only PERIOD-SENSITIVE shape (a short run decodes the same at 87-90 µs). Proves candidate
     # scanning CONTINUES after a failure (test_period_selection): at 88 µs no decode, at 90 µs yes.
-    longue = encode(sensor_id=0x0000, temp_c=-30.0, humidity=0, wind_kmh=0.0, gust_kmh=0.0,
+    long_frame = encode(sensor_id=0x0000, temp_c=-30.0, humidity=0, wind_kmh=0.0, gust_kmh=0.0,
                     wind_dir_deg=0, rain_mm=0.0, uv=0, lux=0, tx_counter=0)
-    out.append(("pulses_trame_longue",
-                timings_from_bits(bits_from_bytes(list(PULSE_PREAMBLE) + longue), 90), True,
-                decode_reference(longue), 90))
+    out.append(("pulses_long_frame",
+                timings_from_bits(bits_from_bytes(list(PULSE_PREAMBLE) + long_frame), 90), True,
+                decode_reference(long_frame), 90))
     # Too short to carry a frame (MIN_TIMINGS threshold = 40 pulses).
-    out.append(("pulses_trop_courtes", timings_from_bits(bits, 90)[:20], False, {}, 0))
+    out.append(("pulses_too_short", timings_from_bits(bits, 90)[:20], False, {}, 0))
     # Sync found but frame corrupted: the checksum must reject.
     bad = encode(sensor_id=0x84CB, temp_c=14.2, corrupt_checksum=True)
-    out.append(("pulses_checksum_invalide",
+    out.append(("pulses_bad_checksum",
                 timings_from_bits(bits_from_bytes(list(PULSE_PREAMBLE) + bad), 90), False, {}, 0))
     # Pure noise: no frame must come out (noise does not fabricate a valid checksum).
     for seed in (1, 2, 3):
         noise = random.Random(seed)
         durations = [noise.randint(-600, 600) for _ in range(200)]
         durations[0] = PULSE_LEAD_GAP_US
-        out.append((f"pulses_bruit_{seed}", durations, False, {}, 0))
+        out.append((f"pulses_noise_{seed}", durations, False, {}, 0))
     return out
 
 
@@ -291,8 +291,8 @@ def emit_captures(path: pathlib.Path, source: pathlib.Path) -> int:
             continue
         captures.append([int(v) for v in line.split()])
     lines = [
-        "// GÉNÉRÉ par tests/frames.py --captures — ne pas éditer à la main.",
-        "// Source : tests/data/captures_reelles.txt (rafales réelles du 03/10).",
+        "// GENERATED by tests/frames.py --captures — do not edit by hand.",
+        "// Source: tests/data/captures_reelles.txt (real bursts from 03/10).",
         "#pragma once",
         "#include <cstdint>",
         "#include <cstddef>",
@@ -315,31 +315,31 @@ def emit_captures(path: pathlib.Path, source: pathlib.Path) -> int:
         "};",
         "",
         f"static const int VEVOR_REAL_CAPTURE_COUNT = {len(captures)};",
-        "// Les rafales décodables portent la MÊME mesure (même station, même température, même",
-        "// humidité, même direction) : leur préfixe est identique. Le compteur TX et la somme",
-        "// diffèrent d'une rafale à l'autre — c'est normal, elles viennent d'émissions différentes.",
+        "// The decodable bursts carry the SAME measurement (same station, same temperature, same",
+        "// humidity, same direction): their prefix is identical. The TX counter and the sum",
+        "// differ from one burst to another — that is normal, they come from different transmissions.",
         "static const uint8_t VEVOR_CAPTURE_PREFIX[11] = {0xAA, 0x00, 0x84, 0xCB, 0x16,",
         "                                                0x02, 0x90, 0x50, 0x01, 0x01, 0x00};",
         "static const int VEVOR_CAPTURE_PREFIX_LEN = 11;",
-        "// 2 des 6 rafales ne sont pas décodables — et ne doivent PAS l'être : la seule solution",
-        "// que trouvait l'ancienne repairation par insertion était une FABRICATION. Pour la rafale 3",
-        "// (mesurée le 04/10) elle publiait pluie 536,4 mm contre 59,2 mm dans les rafales voisines,",
-        "// avec un bit inséré au niveau opposé à l'impulsion — physiquement impossible ; le garde-fou",
-        "// de pluie la refusait, elle n'est jamais arrivée dans Home Assistant.",
-        "// Voir docs/zero-wind-fabrication.md. Critère : 4 rafales décodables sur 6.",
+        "// 2 of the 6 bursts are not decodable — and must NOT be: the only solution the old",
+        "// insertion repair found was a FABRICATION. For burst 3 (measured on 04/10) it published",
+        "// rain 536.4 mm against 59.2 mm in neighbouring bursts, with a bit inserted at the level",
+        "// opposite to the pulse — physically impossible; the rain guard rejected it, it never",
+        "// reached Home Assistant.",
+        "// See docs/zero-wind-fabrication.md. Criterion: 4 decodable bursts out of 6.",
         "static const int VEVOR_CAPTURE_ATTENDUES = 4;",
-        "static const int VEVOR_CAPTURE_CONTRE_EXEMPLES[] = {2, 3};",
-        "static const int VEVOR_CAPTURE_CONTRE_EXEMPLE_COUNT = 2;",
+        "static const int VEVOR_CAPTURE_COUNTER_EXAMPLES[] = {2, 3};",
+        "static const int VEVOR_CAPTURE_COUNTER_EXAMPLE_COUNT = 2;",
         "",
     ]
     path.write_text("\n".join(lines), encoding="utf-8")
-    print(f"captures.h écrit : {len(captures)} rafales réelles")
+    print(f"captures.h written: {len(captures)} real bursts")
     return len(captures)
 
 
 def emit_pulses(path: pathlib.Path) -> int:
     lines = [
-        "// GÉNÉRÉ par tests/frames.py — ne pas éditer à la main.",
+        "// GENERATED by tests/frames.py — do not edit by hand.",
         "#pragma once",
         "#include <cstdint>",
         "#include <cstddef>",
@@ -380,7 +380,7 @@ def emit_pulses(path: pathlib.Path) -> int:
         "",
     ]
     path.write_text("\n".join(lines), encoding="utf-8")
-    print(f"pulses.h écrit : {len(rows)} scénarios d'pulses")
+    print(f"pulses.h written: {len(rows)} pulse scenarios")
     return 0
 
 
@@ -398,17 +398,17 @@ def selfcheck() -> int:
     got = " ".join(f"{x:02x}" for x in produced)
     want = " ".join(f"{x:02x}" for x in expected)
     if got != want:
-        print("SELFCHECK ÉCHEC — l'encodeur ne reproduit pas la trame de rtl_433")
-        print(f"  attendu : {want}")
-        print(f"  obtenu  : {got}")
+        print("SELFCHECK FAIL — the encoder does not reproduce the rtl_433 frame")
+        print(f"  expected: {want}")
+        print(f"  got     : {got}")
         return 1
-    print(f"SELFCHECK OK — trame de rtl_433 reproduite octet pour octet : {got}")
+    print(f"SELFCHECK OK — rtl_433 frame reproduced byte for byte: {got}")
     return 0
 
 
 def emit_vectors(path: pathlib.Path) -> int:
     lines = [
-        "// GÉNÉRÉ par tests/frames.py — ne pas éditer à la main.",
+        "// GENERATED by tests/frames.py — do not edit by hand.",
         "#pragma once",
         "#include <cstdint>",
         "",
@@ -452,7 +452,7 @@ def emit_vectors(path: pathlib.Path) -> int:
         count += 1
     lines += ["};", "", f"static const int VEVOR_VECTOR_COUNT = {count};", ""]
     path.write_text("\n".join(lines), encoding="utf-8")
-    print(f"vectors.h écrit : {count} scénarios")
+    print(f"vectors.h written: {count} scenarios")
     return 0
 
 

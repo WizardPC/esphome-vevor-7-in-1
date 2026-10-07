@@ -247,16 +247,16 @@ void CC1101Component::configure() {
   // identity read (0x0014) and declare ready (CHIP_RDYn low) yet receive nothing; a ±100 kHz sweep
   // catches a crystal offset, so failing that points to the config writes (firmware-design-notes.md).
   {
-    struct Surveille {
+    struct Watched {
       Register reg;
       const char *nom;
     };
-    const Surveille surveilles[] = {
+    const Watched watched[] = {
         {Register::FREQ2, "FREQ2"},     {Register::FREQ1, "FREQ1"},     {Register::FREQ0, "FREQ0"},
         {Register::MDMCFG4, "MDMCFG4"}, {Register::MDMCFG3, "MDMCFG3"}, {Register::MDMCFG2, "MDMCFG2"},
         {Register::PKTCTRL0, "PKTCTRL0"}, {Register::IOCFG0, "IOCFG0"}};
     uint8_t ecarts = 0;
-    for (const auto &s : surveilles) {
+    for (const auto &s : watched) {
       const uint8_t voulu = this->state_.regs()[static_cast<uint8_t>(s.reg)];
       this->read_(s.reg);
       const uint8_t lu = this->state_.regs()[static_cast<uint8_t>(s.reg)];
@@ -269,7 +269,7 @@ void CC1101Component::configure() {
     }
     if (ecarts == 0) {
       ESP_LOGI(TAG, "write check: the %u watched registers conform",
-               (unsigned) (sizeof(surveilles) / sizeof(surveilles[0])));
+               (unsigned) (sizeof(watched) / sizeof(watched[0])));
     } else {
       ESP_LOGE(TAG, "write check: %u register(s) NOT taken — the radio configuration is not "
                     "pas celle demandee", (unsigned) ecarts);

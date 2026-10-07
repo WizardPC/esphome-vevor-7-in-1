@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evolution des compteurs carte pendant les longs trous (le recepteur entend-il quelque chose ?)."""
+"""Evolution of the board counters during the long gaps (does the receiver hear anything?)."""
 import json, os
 D = "/home/hermes/projets/vevor-7in1/dev/state/nuit_20261005"
 P = "jardin_vevor_7_in_1_weather_station_"
@@ -33,6 +33,6 @@ def report(t0, t1, lab):
                 "rej": j.get(t, prev.get("rej") if prev else None),
                 "val": v.get(t, prev.get("val") if prev else None)}
 
-report("2026-10-05T02:38:00", "2026-10-05T03:00:30", "trou 02:40 -> 02:50")
-report("2026-10-05T04:05:00", "2026-10-05T04:40:00", "apres reboot 04:09")
-report("2026-10-05T05:00:00", "2026-10-05T06:31:30", "fin de nuit (reboot 05:15)")
+report("2026-10-05T02:38:00", "2026-10-05T03:00:30", "gap 02:40 -> 02:50")
+report("2026-10-05T04:05:00", "2026-10-05T04:40:00", "after reboot 04:09")
+report("2026-10-05T05:00:00", "2026-10-05T06:31:30", "end of night (reboot 05:15)")

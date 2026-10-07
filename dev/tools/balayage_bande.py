@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""Cartographie de la bande passante UTILE : jusqu'à quelle distance du centre la carte décode-t-elle ?
+"""Mapping of the USEFUL bandwidth: up to what distance from the centre does the board decode?
 
-Notre filtre de réception — 100 kHz demandés, 101,6 kHz réellement écrits dans MDMCFG4 — est plus
-étroit que la bande qu'occupe le signal : 2-FSK à ±70 kHz de déviation, soit ~151-163 kHz au total.
-Les deux tons tombent donc hors du filtre, et c'est l'asymétrie marque/espace mesurée (118/58 µs).
+Our receive filter — 100 kHz requested, 101.6 kHz actually written to MDMCFG4 — is narrower
+than the band the signal occupies: 2-FSK at ±70 kHz deviation, i.e. ~151-163 kHz in total.
+Both tones therefore fall outside the filter, and that is the measured mark/space asymmetry
+(118/58 µs).
 
-Cet outil mesure la conséquence DIRECTE, sans reflasher : « CC1101 frequency » est une entité et le
-pilote expose cc1101.set_frequency (une écriture fraîche de FREQ2/1/0). On décale la fréquence du
-récepteur pas à pas, des DEUX côtés du centre, et on relève à chaque pas le nombre de rafales
-reçues, de trames décodées et de rejets. Le rapport trames/rafales trace la forme de la bande.
+This tool measures the DIRECT consequence, without reflashing: "CC1101 frequency" is an entity
+and the driver exposes cc1101.set_frequency (a fresh write of FREQ2/1/0). The receiver frequency
+is shifted step by step, on BOTH sides of the centre, and at each step the number of bursts
+received, frames decoded and rejects is recorded. The frames/bursts ratio traces the shape of
+the band.
 
-Ce n'est PAS un test de calage de quartz (on balaie symétriquement). L'ordre est entrelacé
-(centre, +pas, -pas, +2pas, -2pas…) pour qu'une dérive temporelle ne se confonde pas avec la
-fréquence. La fréquence de départ est restaurée à la fin.
+This is NOT a crystal-calibration test (we sweep symmetrically). The order is interleaved
+(centre, +step, -step, +2step, -2step…) so that a time drift cannot be confused with the
+frequency. The starting frequency is restored at the end.
 
-Sorties : dev/state/balayage_bande_<etiquette>.jsonl (un pas par ligne) et .log (journal brut).
+Outputs: dev/state/balayage_bande_<label>.jsonl (one step per line) and .log (raw log).
 """
 from __future__ import annotations
 
@@ -35,9 +37,9 @@ HOTE = os.environ.get("VEVOR_HOST") or "172.16.0.205"
 PORT = 6053
 ETAT = DEV / "state"
 
-# Nom exact attendu, ET un repli qui évite les pièges : « Offset fréquence » ne doit jamais matcher.
+# Exact name expected, AND a fallback that avoids the traps: the "Offset" sensor must never match.
 FREQ_EXACTE = re.compile(r"^\s*cc1101\s+frequency\s*$", re.I)
-FREQ_REPLI = re.compile(r"fr[ée]quence|frequency", re.I)
+FREQ_REPLI = re.compile(r"cc1101 frequency|frequency", re.I)
 FREQ_EXCLU = re.compile(r"offset", re.I)
 
 RE_TRAME = re.compile(r"V7IN1 OK (\{.*\})")
@@ -91,28 +93,28 @@ async def balayer(a) -> int:
     m = Mesure(a.etiquette)
     cle = resolve_key()
 
-    # Le centre, puis les écarts entrelacés : +pas, -pas, +2pas, -2pas…
+    # The centre, then the interleaved offsets: +step, -step, +2step, -2step…
     ecarts = [0.0]
     for k in range(1, int(a.demi_largeur // a.pas) + 1):
         ecarts += [+k * a.pas, -k * a.pas]
     frequences = [round(a.centre + e / 1000.0, 4) for e in ecarts]
 
     cli = None
-    for psk, nom in ((None, "clair"), (cle, "chiffré")):
+    for psk, nom in ((None, "plain"), (cle, "encrypted")):
         essai = aioesphomeapi.APIClient(HOTE, PORT, None, noise_psk=psk)
         try:
             await asyncio.wait_for(essai.connect(login=True), 25)
             cli = essai
-            print(f"[mode] API en {nom}", flush=True)
+            print(f"[mode] API as {nom}", flush=True)
             break
         except Exception as exc:
-            print(f"[mode] {nom} refusé : {exc!r}"[:140], flush=True)
+            print(f"[mode] {nom} refused: {exc!r}"[:140], flush=True)
             try:
                 await asyncio.wait_for(essai.disconnect(force=True), 8)
             except Exception:
                 pass
     if cli is None:
-        print("!! aucun mode de connexion accepté", file=sys.stderr)
+        print("!! no connection mode accepted", file=sys.stderr)
         return 2
 
     entites, _ = await asyncio.wait_for(cli.list_entities_services(), 25)
@@ -130,10 +132,10 @@ async def balayer(a) -> int:
                 cible = e
                 break
     if cible is None:
-        print("!! entité de fréquence introuvable (ni « CC1101 frequency » ni repli) "
+        print("!! frequency entity not found (neither \"CC1101 frequency\" nor fallback) "
               + str([n for n in m.noms_cles.values() if FREQ_REPLI.search(n)]), file=sys.stderr)
         return 2
-    print(f"[cible] {cible.name} (clé {cible.key})", flush=True)
+    print(f"[target] {cible.name} (key {cible.key})", flush=True)
 
     etats: dict[int, float] = {e.key: getattr(e, "state", None) for e in entites if hasattr(e, "state")}
     m.noms_cles = {e.key: (getattr(e, "name", "") or "") for e in entites}
@@ -145,7 +147,7 @@ async def balayer(a) -> int:
     await maybe_await(cli.subscribe_states(sur_etat))
     await maybe_await(cli.subscribe_logs(m.sur_log))
     await asyncio.sleep(2)
-    # Premiers compteurs : lus depuis les états poussés par la carte.
+    # First counters: read from the states pushed by the board.
     for cle_e, nom in m.noms_cles.items():
         if nom.strip().lower() in CAPTEURS and etats.get(cle_e) is not None:
             try:
@@ -154,8 +156,8 @@ async def balayer(a) -> int:
                 pass
     m.note(ev="debut", centre=a.centre, pas_khz=a.pas, demi_largeur_khz=a.demi_largeur,
            secondes=a.secondes, compteurs_initial=m.instantane(), frequences=frequences)
-    print(f"cible={cible.name} | {len(frequences)} pas de {a.pas} kHz sur ±{a.demi_largeur} kHz, "
-          f"{a.secondes:.0f} s par pas ({len(frequences) * (a.secondes + 14) / 60:.0f} min)", flush=True)
+    print(f"target={cible.name} | {len(frequences)} steps of {a.pas} kHz over ±{a.demi_largeur} kHz, "
+          f"{a.secondes:.0f} s per step ({len(frequences) * (a.secondes + 14) / 60:.0f} min)", flush=True)
 
     resultats = []
     for mhz in frequences:
@@ -166,7 +168,7 @@ async def balayer(a) -> int:
             pris = relu is not None and abs(float(relu) - mhz) <= 0.001
         except (TypeError, ValueError):
             pris = False
-        await asyncio.sleep(12)                  # pose de la puce : la 1re rafale peut être un fragment
+        await asyncio.sleep(12)                  # chip settling: the 1st burst may be a fragment
         avant = m.instantane()
         trames_avant = m.trames
         await asyncio.sleep(a.secondes)
@@ -186,22 +188,22 @@ async def balayer(a) -> int:
         resultats.append(lignes)
         m.note(ev="pas", **lignes)
         print(f"  {mhz:.4f} MHz ({lignes['ecart_khz']:+5d} kHz) : "
-              f"rafales +{lignes['dcaptures']}, trames +{lignes['dtrames']}, "
-              f"rejets +{lignes['drejets']}, rapport={lignes['rapport']}"
-              + ("" if pris else "  [FRÉQUENCE NOT TAKENE]"), flush=True)
+              f"bursts +{lignes['dcaptures']}, frames +{lignes['dtrames']}, "
+              f"rejects +{lignes['drejets']}, ratio={lignes['rapport']}"
+              + ("" if pris else "  [FREQUENCY NOT TAKEN]"), flush=True)
 
-    # On rend la fréquence de départ : l'outil ne doit pas laisser la carte décalée.
+    # Restore the starting frequency: the tool must not leave the board detuned.
     await maybe_await(cli.number_command(cible.key, a.centre))
     await asyncio.sleep(1.0)
     relu = etats.get(cible.key)
     m.note(ev="restauration", freq_mhz=a.centre, relu=relu)
-    print(f"[fin] fréquence restaurée à {a.centre} MHz (relu {relu})", flush=True)
+    print(f"[end] frequency restored to {a.centre} MHz (read back {relu})", flush=True)
 
-    print("\n=== bande utile (rapport trames/rafales par écart) ===")
+    print("\n=== useful band (frames/bursts ratio per offset) ===")
     for r in resultats:
         barre = "" if r["rapport"] is None else "█" * int(r["rapport"] * 60)
-        print(f"  {r['ecart_khz']:+5d} kHz : rafales {r['dcaptures']:4d}  trames {r['dtrames']:3d} "
-              f" rejets {r['drejets']:4d}  {barre}")
+        print(f"  {r['ecart_khz']:+5d} kHz : bursts {r['dcaptures']:4d}  frames {r['dtrames']:3d} "
+              f" rejects {r['drejets']:4d}  {barre}")
     m.note(ev="fin", resultats=resultats)
     try:
         await asyncio.wait_for(cli.disconnect(force=True), 10)
@@ -214,12 +216,12 @@ async def balayer(a) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="cartographie de la bande passante utile")
-    ap.add_argument("--etiquette", default="jour1")
+    ap = argparse.ArgumentParser(description="mapping of the useful bandwidth")
+    ap.add_argument("--etiquette", default="day1")
     ap.add_argument("--centre", type=float, default=868.35)
     ap.add_argument("--pas", type=float, default=20.0, help="kHz")
     ap.add_argument("--demi-largeur", type=float, default=120.0, help="kHz")
-    ap.add_argument("--secondes", type=float, default=120.0, help="durée d'échantillonnage par pas")
+    ap.add_argument("--secondes", type=float, default=120.0, help="sampling duration per step")
     a = ap.parse_args()
     ETAT.mkdir(parents=True, exist_ok=True)
     return asyncio.run(balayer(a))

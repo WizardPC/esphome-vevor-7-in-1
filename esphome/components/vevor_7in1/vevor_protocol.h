@@ -300,13 +300,13 @@ inline size_t timings_to_bits_fin(const int32_t *timings, size_t count, int32_t 
 // Consolidation, three passes: mean of d / round(d / T) over durations >= 0.55·T. Shorter ones are
 // parasites (a bit cannot be shorter than half a period); the division rescales 2-, 3-bit pulses.
 // No allocation: the histogram is static (one task, single-threaded host test).
-static constexpr int32_t PERIODE_MIN_X10 = 500;    // 50 µs: shorter is not a plausible bit
-static constexpr int32_t PERIODE_MAX_X10 = 1500;   // 150 µs: neither is longer
+static constexpr int32_t PERIOD_MIN_X10 = 500;    // 50 µs: shorter is not a plausible bit
+static constexpr int32_t PERIOD_MAX_X10 = 1500;   // 150 µs: neither is longer
 static constexpr int32_t WINDOW_LOW_US = 45;      // low bound of the protocol window
 static constexpr int32_t WINDOW_HIGH_US = 115;    // high bound
 static constexpr int HIST_MAX_US = 400;
 
-inline int32_t estimer_periode_x10(const int32_t *timings, size_t count) {
+inline int32_t estimate_period_x10(const int32_t *timings, size_t count) {
   static uint16_t histo[HIST_MAX_US];
   for (int i = 0; i < HIST_MAX_US; i++) {
     histo[i] = 0;
@@ -351,7 +351,7 @@ inline int32_t estimer_periode_x10(const int32_t *timings, size_t count) {
   int32_t T = (int32_t) base;
   for (int passe = 0; passe < 3; passe++) {
     const int32_t threshold = (T * 55) / 100;
-    int64_t somme = 0;
+    int64_t sum_bytes = 0;
     size_t n = 0;
     for (size_t i = 0; i < count; i++) {
       const int32_t d = timings[i] > 0 ? timings[i] : -timings[i];
@@ -362,19 +362,19 @@ inline int32_t estimer_periode_x10(const int32_t *timings, size_t count) {
       if (k < 1) {
         k = 1;
       }
-      somme += (int64_t)(d * 10) / k;     // duration rescaled to one bit
+      sum_bytes += (int64_t)(d * 10) / k;     // duration rescaled to one bit
       n++;
     }
     if (n < 5) {
       return 0;
     }
-    const int32_t nouveau = (int32_t)(somme / (int64_t) n);
+    const int32_t nouveau = (int32_t)(sum_bytes / (int64_t) n);
     if (nouveau == T) {
       break;
     }
     T = nouveau;
   }
-  if (T < PERIODE_MIN_X10 || T > PERIODE_MAX_X10) {
+  if (T < PERIOD_MIN_X10 || T > PERIOD_MAX_X10) {
     return 0;   // implausible estimate: prefer the fallback grid
   }
   return T;
@@ -474,7 +474,7 @@ inline bool repair_by_insertion(const uint8_t *bits, size_t payload_bit, uint8_t
 // Try ONE period (tenths of µs) and both polarities, with the two bounded repairs. `repaired_out`
 // flags a frame that came out of a repair: the caller can submit it to an extra check
 // (see vevor_7in1.cpp, guard on the TX counter).
-inline bool essayer_periode(const int32_t *timings, size_t count, int32_t period_x10,
+inline bool try_period(const int32_t *timings, size_t count, int32_t period_x10,
                             uint8_t *bits, size_t max_bits, uint8_t *raw_out,
                             bool *inverted_used, size_t *rejected_out, bool *repaired_out) {
   const size_t needed = SYNC_BYTES * 8 + FRAME_BYTES * 8;
@@ -567,9 +567,9 @@ inline bool decode_timings(const int32_t *timings, size_t count, const int32_t *
   bool repaired = false;
 
   // 1. MEASURED PERIOD (normal path, and the only one valid for an unknown board).
-  const int32_t mesuree = estimer_periode_x10(timings, count);
+  const int32_t mesuree = estimate_period_x10(timings, count);
   if (mesuree != 0 &&
-      essayer_periode(timings, count, mesuree, bits, max_bits, raw_out, inverted_used, rejected_out,
+      try_period(timings, count, mesuree, bits, max_bits, raw_out, inverted_used, rejected_out,
                       &repaired)) {
     if (period_used != nullptr) {
       *period_used = mesuree;
@@ -582,7 +582,7 @@ inline bool decode_timings(const int32_t *timings, size_t count, const int32_t *
 
   // 2. FALLBACK: the fixed grid, for when the estimate is refused (noise) or off.
   for (size_t p = 0; p < period_count; p++) {
-    if (essayer_periode(timings, count, periods[p] * 10, bits, max_bits, raw_out, inverted_used,
+    if (try_period(timings, count, periods[p] * 10, bits, max_bits, raw_out, inverted_used,
                         rejected_out, &repaired)) {
       if (period_used != nullptr) {
         *period_used = periods[p] * 10;

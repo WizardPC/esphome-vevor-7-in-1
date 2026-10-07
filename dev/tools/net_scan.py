@@ -18,8 +18,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 LABELS = {
     8123: "Home Assistant",
-    6052: "dashboard ESPHome",
-    6053: "ESP32 ESPHome (API native)",
+    6052: "ESPHome dashboard",
+    6053: "ESP32 ESPHome (native API)",
     80: "HTTP",
     443: "HTTPS",
     22: "SSH",
@@ -45,7 +45,7 @@ def main() -> int:
     ports = [int(p) for p in args.ports.split(",")]
     net = ipaddress.ip_network(f"{args.subnet}.0/24", strict=False)
     hosts = [str(h) for h in net.hosts()]
-    print(f"# scan de {net} sur les ports {ports} (timeout {args.timeout}s)")
+    print(f"# scanning {net} on ports {ports} (timeout {args.timeout}s)")
 
     found: dict[str, list[int]] = {}
     with ThreadPoolExecutor(max_workers=128) as pool:
@@ -59,8 +59,8 @@ def main() -> int:
                 pass
 
     if not found:
-        print("# rien trouvé. Pistes : autre sous-réseau, pare-feu sur l'hôte, machine éteinte,")
-        print("#   ou service non démarré. Vérifier aussi la table ARP de ce conteneur (ip neigh).")
+        print("# nothing found. Leads: another subnet, firewall on the host, machine powered off,")
+        print("#   or service not started. Also check this container's ARP table (ip neigh).")
         return 1
 
     for ip in sorted(found, key=lambda x: tuple(int(o) for o in x.split("."))):

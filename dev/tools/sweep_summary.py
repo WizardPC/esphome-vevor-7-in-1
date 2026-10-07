@@ -50,7 +50,7 @@ def main() -> int:
     rows = [analyse(p) for p in sorted(pathlib.Path(".").glob(args.glob))]
     rows.sort(key=lambda r: (r["freq_mhz"] is None, r["freq_mhz"]))
 
-    print(f"{'MHz':>8}  {'extraites':>9}  {'capt.delta':>10}  {'imp.max':>8}  {'debut':>8}  {'fin':>8}")
+    print(f"{'MHz':>8}  {'extracted':>9}  {'capt.delta':>10}  {'pulses.max':>8}  {'start':>8}  {'end':>8}")
     for r in rows:
         print(f"{r['freq_mhz'] if r['freq_mhz'] is not None else '-':>8}  {r['extraites']:>9}  "
               f"{r['captures_delta']:>10}  {r['pulses_max'] if r['pulses_max'] is not None else '-':>8}  "
@@ -59,18 +59,18 @@ def main() -> int:
     total_ext = sum(r["extraites"] for r in rows)
     total_cap = sum(r["captures_delta"] for r in rows)
     avec_captures = [r["freq_mhz"] for r in rows if r["captures_delta"]]
-    print(f"\nTOTAL extraites={total_ext} sur {len(rows)} paliers ; captures RMT cumulées={total_cap}")
-    print(f"paliers avec au moins une capture RMT : {len(avec_captures)}/{len(rows)} "
+    print(f"\nTOTAL extracted={total_ext} over {len(rows)} steps ; cumulative RMT captures={total_cap}")
+    print(f"steps with at least one RMT capture: {len(avec_captures)}/{len(rows)} "
           f"({', '.join(str(f) for f in avec_captures if f is not None)})")
-    print("VERDICT : " + ("AUCUNE trame extraite sur toute la plage balayée"
-                          if total_ext == 0 else f"{total_ext} trame(s) extraite(s) — à examiner"))
+    print("VERDICT: " + ("NO frame extracted over the whole swept range"
+                          if total_ext == 0 else f"{total_ext} frame(s) extracted — to examine"))
 
     if args.out:
         pathlib.Path(args.out).write_text(
             json.dumps({"rows": rows, "total_extraites": total_ext,
                         "captures_rmt_cumulees": total_cap}, indent=1, ensure_ascii=False),
             encoding="utf-8")
-        print(f"# rapport écrit: {args.out}")
+        print(f"# report written: {args.out}")
     return 0
 
 

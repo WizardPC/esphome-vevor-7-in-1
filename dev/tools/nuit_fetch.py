@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Recupere l'historique Home Assistant (04/10 18:00 UTC -> maintenant)."""
+"""Fetch the Home Assistant history (04/10 18:00 UTC -> now)."""
 import json, os, sys, time, urllib.request, urllib.error, urllib.parse, datetime
 
 BASE = "http://192.168.2.104"
@@ -30,11 +30,11 @@ for e in ENTS:
         try:
             data = fetch(url); break
         except Exception as ex:
-            print("  essai", essai, eid, ex); time.sleep(5); data = None
+            print("  attempt", essai, eid, ex); time.sleep(5); data = None
     if data is None:
-        print("ECHEC", eid); continue
+        print("FAIL", eid); continue
     with open(fn, "w") as f:
         json.dump(data, f)
-    print("ok", eid.split(".")[-1], len(data[0]) if data else 0, "etats")
+    print("ok", eid.split(".")[-1], len(data[0]) if data else 0, "states")
     time.sleep(0.2)
-print("fenetre", start, "->", end, "| fichiers dans", OUT)
+print("window", start, "->", end, "| files in", OUT)

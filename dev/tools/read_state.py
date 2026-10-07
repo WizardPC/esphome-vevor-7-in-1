@@ -2,9 +2,9 @@
 """Reads and prints the state of ALL board entities through the native API.
 
 Unlike `scan_freq.py --list`, which only gives entity names, several diagnostics need state
-values: "Fréquence CC1101" (the `number` entity has `restore_value: true`, so its restored boot
-value competes with the YAML frequency) and the "Captures RMT" / "Trames valides" / "Doublons
-ignorés" counters.
+values: "CC1101 frequency" (the `number` entity has `restore_value: true`, so its restored boot
+value competes with the YAML frequency) and the "RMT captures" / "Valid frames" / "Duplicates ignored"
+counters.
 
 Note: `subscribe_states` does not deliver states immediately, so wait for the first one
 before concluding.
@@ -60,15 +60,15 @@ def main() -> int:
     except SystemExit:
         raise
     except Exception as exc:
-        print(f"# ERREUR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"# ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
         return RC_ERREUR
-    print(f"# {rep['recues']}/{rep['entites']} entités avec une valeur")
+    print(f"# {rep['recues']}/{rep['entites']} entities with a value")
     for name, v in rep["valeurs"].items():
         print(f"  {name:24s} = {v}")
     if a.json:
         print(f"-> {atomic_write_json(a.json, rep)}")
     if not rep["recues"]:
-        print("# MESURE NULLE — aucun état d'entité reçu : rien n'a été mesuré", file=sys.stderr)
+        print("# NULL MEASUREMENT — no entity state received: nothing was measured", file=sys.stderr)
         return RC_MESURE_NULLE
     return RC_OK
 

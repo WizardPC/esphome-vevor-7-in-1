@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Analyse de la nuit 04/10 22:26 UTC -> 05/10 06:31 UTC (heure de Paris : 00:26 -> 08:31)."""
+"""Analysis of the night 04/10 22:26 UTC -> 05/10 06:31 UTC (Paris time: 00:26 -> 08:31)."""
 import json, os, re
 D = "/home/hermes/projets/vevor-7in1/dev/state/nuit_20261005"
 P = "jardin_vevor_7_in_1_weather_station_"
@@ -43,7 +43,7 @@ def parse(hexs):
 raw = [(ts(s), s["state"]) for s in load(P + "last_raw_frame")
        if re.match(r"^[0-9a-f]{2}( [0-9a-f]{2}){20}$", str(s["state"]))]
 
-# Etat initial (premier point = etat au debut de fenetre) : l'ignorer pour les comptes
+# Initial state (first point = state at window start): ignore it for the counts
 frames = []
 for t, s in raw:
     f = parse(s)
@@ -51,7 +51,7 @@ for t, s in raw:
 
 # ---- 1. Fabrications ------------------------------------------------
 bad = [f for f in frames if f["w3"] == "02 80 80"]
-# incoherence avec voisins : vent ou rafale non nul alors qu'avant ET apres sont a 0/0
+# incoherence with neighbours: non-zero wind or gust while both before AND after are 0/0
 inc = []
 for i, f in enumerate(frames):
     if f["wind"] == 0 and f["gust"] == 0: continue
@@ -61,30 +61,30 @@ for i, f in enumerate(frames):
         inc.append((f["t"], f["b"]))
 
 # ---- 2. Reception ---------------------------------------------------
-print("FENETRE ANALYSEE :", frames[0]["t"], "->", frames[-1]["t"], "(%d trames brutes)" % len(frames))
+print("ANALYSED WINDOW:", frames[0]["t"], "->", frames[-1]["t"], "(%d raw frames)" % len(frames))
 import datetime as dt
 def T(s): return dt.datetime.strptime(s, "%Y-%m-%dT%H:%M:%S")
 ivs = [(T(frames[i+1]["t"]) - T(frames[i]["t"])).total_seconds() for i in range(len(frames)-1)]
 seuil = 20
 print("\n-- Cadence --")
-print("intervalles : median %.1f s ; <=40 s : %d ; >60 s : %d" %
+print("intervals: median %.1f s ; <=40 s: %d ; >60 s: %d" %
       (sorted(ivs)[len(ivs)//2], sum(1 for x in ivs if x <= 40), sum(1 for x in ivs if x > 60)))
 gaps = sorted(((ivs[i], frames[i]["t"], frames[i+1]["t"]) for i in range(len(ivs)) if ivs[i] > 60), reverse=True)
-print("plus longs trous :")
+print("longest gaps:")
 for g in gaps[:8]: print("   %6.0f s  %s -> %s" % g)
 
-# ---- 3. Anomalies de champ -----------------------------------------
+# ---- 3. Field anomalies --------------------------------------------
 print("\n-- Fabrications --")
-print("trames b[8..10]==02 80 80 :", len(bad))
+print("frames b[8..10]==02 80 80:", len(bad))
 for f in bad[:6]: print("   ", f["t"], f["b"])
-print("vent/rafale non nuls encadres par 0/0 :", len(inc))
+print("wind/gust non-zero framed by 0/0:", len(inc))
 for x in inc[:10]: print("   ", x)
 
-print("\n-- Etendues des champs (trames brutes) --")
+print("\n-- Field ranges (raw frames) --")
 for k in ("temp", "hum", "dir", "rain", "uv", "lux", "id"):
     vals = [f[k] for f in frames]
     print("  %-5s min %s max %s" % (k, min(vals), max(vals)))
-# sauts en arriere
+# backward jumps
 prev = None
 sauts = []
 for f in frames:
@@ -93,6 +93,6 @@ for f in frames:
         if f["rain"] < prev["rain"] - 0.001: sauts.append((f["t"], "rain", prev["rain"], f["rain"]))
         if abs(f["dir"] - prev["dir"]) > 60: sauts.append((f["t"], "dir", prev["dir"], f["dir"]))
     prev = f
-print("\n-- Sauts (temp change, pluie en baisse, direction >60 deg) : %d --" % len(sauts))
+print("\n-- Jumps (temp change, rain decrease, direction >60 deg): %d --" % len(sauts))
 for x in sauts[:25]: print("   ", x)
 print("   ... total", len(sauts))

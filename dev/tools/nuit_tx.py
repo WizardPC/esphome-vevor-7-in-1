@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Le compteur TX avance-t-il de +39 par emission ? Et que dit-il aux re-takenes apres un trou ?"""
+"""Does the TX counter advance by +39 per emission? And what does it say after a gap?"""
 import json, os, re, datetime as dt, collections
 D = "/home/hermes/projets/vevor-7in1/dev/state/nuit_20261005"
 P = "jardin_vevor_7_in_1_weather_station_"
@@ -15,13 +15,13 @@ for i in range(1, len(post)):
     dt_s = (T(post[i][0]) - T(post[i-1][0])).total_seconds()
     delta = (int(post[i][1][18], 16) - int(post[i-1][1][18], 16)) & 0xFF
     d[(round(dt_s), delta)] += 1
-print("== (intervalle s, delta compteur TX) les plus frequents ==")
+print("== (interval s, TX counter delta) most frequent ==")
 for k, v in d.most_common(12): print("   %s : %d" % (k, v))
-print("\n== re-takenes apres un trou > 300 s ==")
+print("\n== re-reads after a gap > 300 s ==")
 for i in range(1, len(post)):
     dt_s = (T(post[i][0]) - T(post[i-1][0])).total_seconds()
     if dt_s > 300:
         delta = (int(post[i][1][18], 16) - int(post[i-1][1][18], 16)) & 0xFF
-        print("   %s -> %s (%5.0f s) : delta=%3d -> emissions entieres plausibles : %s" %
+        print("   %s -> %s (%5.0f s): delta=%3d -> plausible whole emissions: %s" %
               (post[i-1][0][11:], post[i][0][11:], dt_s, delta,
                [k for k in range(1, 40) if abs((39*k) % 256 - delta) <= 2]))

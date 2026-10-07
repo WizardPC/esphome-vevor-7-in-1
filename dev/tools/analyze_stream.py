@@ -96,7 +96,7 @@ def main() -> int:
     path = pathlib.Path(args.log)
     packets, stamps = parse(path)
     if not packets:
-        print("AUCUNE ligne V7IN1 RAW dans ce fichier.")
+        print("NO V7IN1 RAW line in this file.")
         return 1
 
     rssis = [r for _, r in packets]
@@ -151,24 +151,24 @@ def main() -> int:
         ],
     }
 
-    print(f"paquets 21 o : {len(packets)}  (fenêtre {window} s -> "
-          f"{report['cadence_paquet_par_s']} paquet/s)")
-    print(f"RSSI         : min {report['rssi_min']} / moy {report['rssi_moyenne']} / "
+    print(f"packets 21 B : {len(packets)}  (window {window} s -> "
+          f"{report['cadence_paquet_par_s']} packet/s)")
+    print(f"RSSI         : min {report['rssi_min']} / mean {report['rssi_moyenne']} / "
           f"max {report['rssi_max']} dBm ; >= {args.min_rssi} dBm : {len(strong)}")
-    print(f"préambule AA AA CA CA 54 : {len(pre_hits)} occurrence(s) ; "
-          f"complément : {len(inv_hits)}")
-    print(f"trames candidates AA 00  : {len(candidates)} ; valides (checksum+compteur) : "
+    print(f"preamble AA AA CA CA 54 : {len(pre_hits)} occurrence(s) ; "
+          f"complement: {len(inv_hits)}")
+    print(f"candidate frames AA 00  : {len(candidates)} ; valid (checksum+counter) : "
           f"{len(valid)}")
     for v in valid[:5]:
-        print(f"  VALIDE decalage={v['shift']} {" ".join(v['hex'].split()[:21])}")
+        print(f"  VALID shift={v['shift']} {" ".join(v['hex'].split()[:21])}")
     for t in report["top_rssi"][:5]:
-        print(f"  fort {t['rssi']:>7.1f} dBm  {t['hex']}")
+        print(f"  strong {t['rssi']:>7.1f} dBm  {t['hex']}")
 
     if args.json:
         out = pathlib.Path(args.json)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-        print(f"rapport écrit : {out}")
+        print(f"report written: {out}")
     return 0
 
 

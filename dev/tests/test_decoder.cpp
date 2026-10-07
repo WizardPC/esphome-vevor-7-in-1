@@ -21,7 +21,7 @@ static int g_failures = 0;
 static int g_checks = 0;
 
 static const char *CHECK = "\033[32mOK\033[0m";
-static const char *FAIL = "\033[31mÉCHEC\033[0m";
+static const char *FAIL = "\033[31mFAIL\033[0m";
 
 static void expect(bool condition, const std::string &label) {
   g_checks++;
@@ -35,13 +35,13 @@ static void expect_near(float got, float want, float tol, const std::string &lab
   g_checks++;
   if (std::fabs(got - want) > tol) {
     g_failures++;
-    printf("  [%s] %s : obtenu %.3f, attendu %.3f (±%.3f)\n", FAIL, label.c_str(), got, want, tol);
+    printf("  [%s] %s : got %.3f, wanted %.3f (±%.3f)\n", FAIL, label.c_str(), got, want, tol);
   }
 }
 
 // --- 1. Valid frames decode exactly as the encoder announces ------------------
 static void test_vectors() {
-  printf("Valid frames et invalides (%d scénarios)\n", VEVOR_VECTOR_COUNT);
+  printf("Valid and invalid frames (%d scenarios)\n", VEVOR_VECTOR_COUNT);
   for (int i = 0; i < VEVOR_VECTOR_COUNT; i++) {
     const VevorVector &v = VEVOR_VECTORS[i];
     vevor::Frame f;
@@ -49,31 +49,31 @@ static void test_vectors() {
     bool ok = vevor::decode(v.raw, f, &reason);
 
     std::string name(v.name);
-    expect(ok == v.valid, name + " : verdict " + (ok ? "valide" : "rejeté") +
-                                (v.valid ? " (attendu valide)" : " (attendu rejeté, motif " +
+    expect(ok == v.valid, name + " : verdict " + (ok ? "valid" : "rejected") +
+                                (v.valid ? " (expected valid)" : " (expected rejected, reason " +
                                                                     std::string(reason) + ")"));
     if (!v.valid) {
-      expect(std::strlen(reason) > 0, name + " : un motif de rejet doit être renseigné");
+      expect(std::strlen(reason) > 0, name + " : a reject reason must be provided");
       // The exact reason matters: blaming the wrong plausibility branch ("direction" instead
       // of "wind", e.g.) would otherwise go unnoticed.
       expect(std::strcmp(reason, v.reject_reason) == 0,
-             name + " : motif attendu « " + std::string(v.reject_reason) + " », obtenu « " +
-                 std::string(reason) + " »");
+             name + " : expected reason '" + std::string(v.reject_reason) + "', got '" +
+                 std::string(reason) + "'");
       continue;
     }
 
     expect(f.id == v.id, name + " : id");
-    expect(f.channel == v.channel, name + " : canal");
-    expect(f.battery_low == v.battery_low, name + " : batterie");
-    expect_near(f.temp_c, v.temp_c, 0.06f, name + " : température");
-    expect(f.humidity == v.humidity, name + " : humidité");
-    expect_near(f.wind_kmh, v.wind_kmh, 0.06f, name + " : vent");
-    expect_near(f.gust_kmh, v.gust_kmh, 0.06f, name + " : rafale");
+    expect(f.channel == v.channel, name + " : channel");
+    expect(f.battery_low == v.battery_low, name + " : battery");
+    expect_near(f.temp_c, v.temp_c, 0.06f, name + " : temperature");
+    expect(f.humidity == v.humidity, name + " : humidity");
+    expect_near(f.wind_kmh, v.wind_kmh, 0.06f, name + " : wind");
+    expect_near(f.gust_kmh, v.gust_kmh, 0.06f, name + " : gust");
     expect(f.wind_dir_deg == v.wind_dir_deg, name + " : direction");
-    expect_near(f.rain_mm, v.rain_mm, 0.06f, name + " : pluie");
+    expect_near(f.rain_mm, v.rain_mm, 0.06f, name + " : rain");
     expect(f.uv_index == v.uv, name + " : UV");
-    expect(f.lux == v.lux, name + " : luminosité");
-    expect(f.tx_counter == v.tx_counter, name + " : compteur TX");
+    expect(f.lux == v.lux, name + " : lux");
+    expect(f.tx_counter == v.tx_counter, name + " : TX counter");
   }
 }
 
@@ -88,23 +88,23 @@ static void test_vectors() {
 //   rain = ((b13<<8)|b14)*0.233f = 55*0.233 = 12.8 mm
 //   lux  = (b16<<8)|b17, ×10 if bit 15 set = 14457 lx
 static void test_rtl433_reference() {
-  printf("Trame de référence rtl_433 (valeurs calculées à la main depuis la source rtl_433)\n");
+  printf("rtl_433 reference frame (values computed by hand from the rtl_433 source)\n");
   const uint8_t raw[21] = {0xaa, 0x00, 0xf8, 0xf7, 0x9d, 0x02, 0xe3, 0x32, 0x01, 0x0e, 0x03,
                            0x02, 0x0b, 0x01, 0x38, 0x02, 0x39, 0x7a, 0x86, 0xe0, 0x87};
   vevor::Frame f;
   const char *reason = "";
-  expect(vevor::decode(raw, f, &reason), "la trame de référence doit être acceptée");
+  expect(vevor::decode(raw, f, &reason), "the reference frame must be accepted");
   expect(f.id == 0xf8f7, "id = 0xf8f7");
-  expect(f.temp_c > 23.8f && f.temp_c < 24.0f, "température = 23,9 °C");
-  expect(f.humidity == 50, "humidité = 50 %");
-  expect_near(f.wind_kmh, 1.6f, 0.06f, "vent = 1,6 km/h (13 ticks / 8,333f)");
-  expect_near(f.gust_kmh, 2.4f, 0.06f, "rafale = 2,4 km/h (3 ticks / 1,25f)");
+  expect(f.temp_c > 23.8f && f.temp_c < 24.0f, "temperature = 23.9 °C");
+  expect(f.humidity == 50, "humidity = 50 %");
+  expect_near(f.wind_kmh, 1.6f, 0.06f, "wind = 1.6 km/h (13 ticks / 8.333f)");
+  expect_near(f.gust_kmh, 2.4f, 0.06f, "gust = 2.4 km/h (3 ticks / 1.25f)");
   expect(f.wind_dir_deg == 266, "direction = 266°");
-  expect_near(f.rain_mm, 12.8f, 0.06f, "pluie = 12,8 mm (55 ticks × 0,233f)");
+  expect_near(f.rain_mm, 12.8f, 0.06f, "rain = 12.8 mm (55 ticks × 0.233f)");
   expect(f.uv_index == 1, "UV = 1");
-  expect(f.lux == 14457, "luminosité = 14 457 lx");
-  expect(f.tx_counter == 0x86, "compteur TX = 0x86");
-  expect(f.battery_low, "batterie faible (0x9d)");
+  expect(f.lux == 14457, "lux = 14457 lx");
+  expect(f.tx_counter == 0x86, "TX counter = 0x86");
+  expect(f.battery_low, "low battery (0x9d)");
 }
 
 // --- 2ter. EXTERNAL ANCHOR of the "lux ×10" branch (bit 15 set) -----------------
@@ -117,13 +117,13 @@ static void test_rtl433_reference() {
 //   encode b[16]=((0xA648>>8)+1)&0xFF=0xA7 ; b[17]=((0xA648&0xFF)+1)&0xFF=0x49
 //   decode (0xA7-1)=0xA6, (0x49-1)=0x48 → 0xA648, bit 15 set → 0x2648×10 = 98000 lx
 static void test_lux_x10_anchor() {
-  printf("Ancrage externe de la branche lux ×10 (valeur calculée à la main)\n");
+  printf("External anchor of the lux ×10 branch (value computed by hand)\n");
   const uint8_t raw[21] = {0xaa, 0x00, 0x1a, 0x2b, 0x1d, 0x02, 0xac, 0x48, 0x01, 0x1c, 0x07,
                            0x01, 0xd7, 0x01, 0x37, 0x0c, 0xa7, 0x49, 0x40, 0x72, 0x41};
   vevor::Frame f;
   const char *reason = "";
-  expect(vevor::decode(raw, f, &reason), "la trame lux ×10 doit être acceptée");
-  expect(f.lux == 98000, "lux = 98 000 lx ((0xA648 & 0x7FFF) × 10 = 9 800 × 10, à la main)");
+  expect(vevor::decode(raw, f, &reason), "the lux ×10 frame must be accepted");
+  expect(f.lux == 98000, "lux = 98000 lx ((0xA648 & 0x7FFF) × 10 = 9800 × 10, by hand)");
 }
 
 // --- 2bis. Plausibility gate: a "well-formed" but false frame ------------------
@@ -132,57 +132,57 @@ static void test_lux_x10_anchor() {
 
 // They must be REJECTED, not published — the only guard between "coherent" and "correct".
 static void test_plausibility() {
-  printf("Porte de plausibilité (trames fausses mais bien formées)\n");
+  printf("Plausibility gate (false but well-formed frames)\n");
   vevor::Frame f;
   const char *reason = "";
 
   // Healthy frame from the same window, just before the first faulty frame.
-  const uint8_t bonne[21] = {0xaa, 0x00, 0x84, 0xcb, 0x16, 0x02, 0xb9, 0x38, 0x01, 0x3a, 0x0e,
+  const uint8_t good[21] = {0xaa, 0x00, 0x84, 0xcb, 0x16, 0x02, 0xb9, 0x38, 0x01, 0x3a, 0x0e,
                              0x02, 0x22, 0x01, 0xff, 0x06, 0x9a, 0x2d, 0x95, 0xd1, 0x96};
-  expect(vevor::decode(bonne, f, &reason), "trame saine acceptée");
-  expect(f.wind_dir_deg == 289, "trame saine : direction 289°");
-  expect_near(f.rain_mm, 59.2f, 0.06f, "trame saine : pluie 59,2 mm");
+  expect(vevor::decode(good, f, &reason), "healthy frame accepted");
+  expect(f.wind_dir_deg == 289, "healthy frame: direction 289°");
+  expect_near(f.rain_mm, 59.2f, 0.06f, "healthy frame: rain 59.2 mm");
 
   // Faulty frame #1: direction 779°, rain 178.2 mm, wind 34.2 km/h.
-  const uint8_t fausse1[21] = {0xaa, 0x00, 0x84, 0xcb, 0x16, 0x02, 0xbb, 0x38, 0x02, 0x1e, 0x10,
+  const uint8_t bogus1[21] = {0xaa, 0x00, 0x84, 0xcb, 0x16, 0x02, 0xbb, 0x38, 0x02, 0x1e, 0x10,
                                0x04, 0x44, 0x03, 0xfe, 0x0b, 0x2f, 0x6e, 0x09, 0x2e, 0x0a};
-  expect(!vevor::decode(fausse1, f, &reason),
-         "trame à décalage de bits n° 1 refusée (direction 779° impossible)");
-  expect(std::strcmp(reason, "direction") == 0, "motif de refus = direction, pas un rejet muet");
+  expect(!vevor::decode(bogus1, f, &reason),
+         "one-bit-shift frame #1 rejected (direction 779° impossible)");
+  expect(std::strcmp(reason, "direction") == 0, "reject reason = direction, not a silent rejection");
   // `f` was just filled by a VALID frame above: a rejected frame must NOT stay marked
   // valid (`out.valid` used to be set BEFORE the plausibility gate).
-  expect(!f.valid, "trame refusée : `valid` reste faux (aucun marquage résiduel)");
+  expect(!f.valid, "rejected frame: `valid` stays false (no residual marking)");
 
   // Faulty frame #2: direction 835°, same signature.
-  const uint8_t fausse2[21] = {0xaa, 0x00, 0x84, 0xcb, 0x16, 0x02, 0xba, 0x38, 0x02, 0x62, 0x24,
+  const uint8_t bogus2[21] = {0xaa, 0x00, 0x84, 0xcb, 0x16, 0x02, 0xba, 0x38, 0x02, 0x62, 0x24,
                                0x04, 0x0c, 0x03, 0xfe, 0x0d, 0x32, 0x3f, 0xad, 0xc7, 0xae};
-  expect(!vevor::decode(fausse2, f, &reason), "trame à décalage de bits n° 2 refusée (direction 835°)");
+  expect(!vevor::decode(bogus2, f, &reason), "one-bit-shift frame #2 rejected (direction 835°)");
 }
 
 // --- 3. Robustness: degenerate inputs ------------------------------------------
 static void test_robustness() {
-  printf("Robustesse\n");
+  printf("Robustness\n");
   vevor::Frame f;
   const char *reason = "";
 
   // All bytes 0xAA: the decoder must not accept garbage.
   uint8_t garbage[21];
   std::memset(garbage, 0xAA, sizeof(garbage));
-  expect(!vevor::decode(garbage, f, &reason), "21 octets 0xAA rejetés");
+  expect(!vevor::decode(garbage, f, &reason), "21 bytes 0xAA rejected");
 
   std::memset(garbage, 0x00, sizeof(garbage));
-  expect(!vevor::decode(garbage, f, &reason), "21 octets 0x00 rejetés");
+  expect(!vevor::decode(garbage, f, &reason), "21 bytes 0x00 rejected");
 
   // A single flipped checksum bit must invalidate the frame.
   uint8_t raw[21] = {0xaa, 0x00, 0xf8, 0xf7, 0x9d, 0x02, 0xe3, 0x32, 0x01, 0x0e, 0x03,
                      0x02, 0x0b, 0x01, 0x38, 0x02, 0x39, 0x7a, 0x86, 0xe0, 0x87};
   raw[7] ^= 0x01;  // humidity altered, checksum unchanged
-  expect(!vevor::decode(raw, f, &reason), "bit modifié → checksum détecte la corruption");
+  expect(!vevor::decode(raw, f, &reason), "flipped bit → checksum detects the corruption");
 }
 
 // --- 4. The reject reason must be usable in logs -------------------------------
 static void test_reasons() {
-  printf("Motifs de rejet (exploitables par la boucle et par eval_frames.py)\n");
+  printf("Reject reasons (usable by the loop and by eval_frames.py)\n");
   vevor::Frame f;
   const char *reason = "";
 
@@ -190,7 +190,7 @@ static void test_reasons() {
   std::memset(bad_header, 0, sizeof(bad_header));
   bad_header[0] = 0xAB;
   expect(!vevor::decode(bad_header, f, &reason) && std::strcmp(reason, "header") == 0,
-         "en-tête invalide → motif « header »");
+         "invalid header -> reason 'header'");
 
   const uint8_t good[21] = {0xaa, 0x00, 0xf8, 0xf7, 0x9d, 0x02, 0xe3, 0x32, 0x01, 0x0e, 0x03,
                             0x02, 0x0b, 0x01, 0x38, 0x02, 0x39, 0x7a, 0x86, 0xe0, 0x87};
@@ -198,19 +198,19 @@ static void test_reasons() {
   std::memcpy(broken, good, sizeof(good));
   broken[19] ^= 0xFF;
   expect(!vevor::decode(broken, f, &reason) && std::strcmp(reason, "checksum") == 0,
-         "checksum invalide → motif « checksum »");
+         "invalid checksum -> reason 'checksum'");
 
   std::memcpy(broken, good, sizeof(good));
   broken[20] = 0x00;
   expect(!vevor::decode(broken, f, &reason) && std::strcmp(reason, "tx_counter") == 0,
-         "compteur incohérent → motif « tx_counter »");
+         "inconsistent counter -> reason 'tx_counter'");
 }
 
 // --- 5. Full chain pulses → bits → frame (async path, no hardware) ---------------
 // The real on-board chain: `remote_receiver` delivers signed pulse durations and the decoder
 // must recover the frame; durations come from the Python encoder (tests/frames.py --pulses).
 static void test_pulse_chain() {
-  printf("Chaîne pulses → trame (%d scénarios, périodes essayées par le firmware)\n",
+  printf("Pulse chain -> frame (%d scenarios, periods tried by the firmware)\n",
          VEVOR_PULSE_COUNT);
   std::vector<uint8_t> bits(vevor::MAX_BITS);
   for (int i = 0; i < VEVOR_PULSE_COUNT; i++) {
@@ -223,29 +223,29 @@ static void test_pulse_chain() {
                               vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(), raw,
                               &period_used, &inverted);
     std::string name(s.name);
-    expect(ok == s.valid, name + " : extraction " + (ok ? "réussie" : "vide") +
-                                (s.valid ? " (attendue réussie)" : " (attendue vide)"));
+    expect(ok == s.valid, name + " : extraction " + (ok ? "successful" : "empty") +
+                                (s.valid ? " (expected successful)" : " (expected empty)"));
     if (!ok || !s.valid) {
       continue;
     }
     vevor::Frame f;
     const char *reason = "";
-    expect(vevor::decode(raw, f, &reason), name + " : la trame extraite doit être valide");
+    expect(vevor::decode(raw, f, &reason), name + " : the extracted frame must be valid");
     expect(f.id == s.id, name + " : id");
-    expect_near(f.temp_c, s.temp_c, 0.06f, name + " : température");
-    expect_near(f.rain_mm, s.rain_mm, 0.06f, name + " : pluie");
+    expect_near(f.temp_c, s.temp_c, 0.06f, name + " : temperature");
+    expect_near(f.rain_mm, s.rain_mm, 0.06f, name + " : rain");
     // Polarity retained: printing it proves nothing, it must be exercised — the inverted-
     // polarity scenario must really come out inverted, otherwise the polarity flip is untested.
 
     // Period retained: NOT required to be "== 90", it comes from the MEASUREMENT on the burst
-    // (estimer_periode_x10): a plausible 50-150 µs value is required, not a grid member — an
+    // (estimate_period_x10): a plausible 50-150 µs value is required, not a grid member — an
     // unknown board is measured, never assumed. Grid selection: test_period_selection().
-    expect(period_used >= vevor::PERIODE_MIN_X10 && period_used <= vevor::PERIODE_MAX_X10,
-           name + " : période retenue plausible (mesurée sur la rafale)");
-    const bool want_inverted = name.find("polarite_inversee") != std::string::npos;
+    expect(period_used >= vevor::PERIOD_MIN_X10 && period_used <= vevor::PERIOD_MAX_X10,
+           name + " : retained period plausible (measured on the burst)");
+    const bool want_inverted = name.find("inverted_polarity") != std::string::npos;
     expect(inverted == want_inverted,
-           name + " : polarity retenue " + (inverted ? "inverted" : "normal"));
-    printf("    %-30s période retenue %d.%d us, polarity %s\n", s.name,
+           name + " : retained polarity " + (inverted ? "inverted" : "normal"));
+    printf("    %-30s retained period %d.%d us, polarity %s\n", s.name,
            (int) (period_used / 10), (int) (period_used % 10),
            inverted ? "inverted" : "normal");
   }
@@ -258,14 +258,14 @@ static void test_pulse_chain() {
 // Stitching a WHOLE burst in front of the next one published 60 frames for 31 distinct
 // measurements (each TX counter twice): hence MAX_FRAGMENT_TIMINGS, also tested here.
 static void test_stitching() {
-  printf("Recollage de deux morceaux de rafale (coupure du RMT)\n");
+  printf("Stitching of two burst fragments (RMT cut)\n");
   const VevorPulseScenario *nominal = nullptr;
   for (int i = 0; i < VEVOR_PULSE_COUNT; i++) {
-    if (std::strcmp(VEVOR_PULSE_VECTORS[i].name, "pulses_nominales") == 0) {
+    if (std::strcmp(VEVOR_PULSE_VECTORS[i].name, "pulses_nominal") == 0) {
       nominal = &VEVOR_PULSE_VECTORS[i];
     }
   }
-  expect(nominal != nullptr, "le scénario nominal de référence existe");
+  expect(nominal != nullptr, "the reference nominal scenario exists");
   if (nominal == nullptr) {
     return;
   }
@@ -285,10 +285,10 @@ static void test_stitching() {
   }
   size_t m = vevor::stitch_fragments(full, k, full + k, n - k, out, 512);
   expect(m == n && std::memcmp(out, full, n * sizeof(int32_t)) == 0,
-         "coupure nette : le recollage redonne exactement la rafale d'origine");
+         "clean cut: stitching gives back exactly the original burst");
   expect(vevor::decode_timings(out, m, vevor::PERIOD_CANDIDATES, vevor::PERIOD_CANDIDATE_COUNT,
                                bits.data(), bits.size(), raw, &period_used, &inverted),
-         "coupure nette : la trame est retrouvée après recollage");
+         "clean cut: the frame is recovered after stitching");
 
   // (2) cut MID-PULSE: both halves share the same sign and are merged
   size_t j = 0;
@@ -298,7 +298,7 @@ static void test_stitching() {
       break;
     }
   }
-  expect(j != 0, "une impulsion de plusieurs bits a été trouvée pour la couper en deux");
+  expect(j != 0, "a multi-bit pulse was found to cut it in two");
   if (j == 0) {
     return;
   }
@@ -309,17 +309,17 @@ static void test_stitching() {
   b.insert(b.end(), full + j + 1, full + n);
   m = vevor::stitch_fragments(a.data(), a.size(), b.data(), b.size(), out, 512);
   expect(m == n && std::memcmp(out, full, n * sizeof(int32_t)) == 0,
-         "coupure au milieu d'une impulsion : les deux moitiés sont réunies");
+         "mid-pulse cut: the two halves are merged");
   expect(vevor::decode_timings(out, m, vevor::PERIOD_CANDIDATES, vevor::PERIOD_CANDIDATE_COUNT,
                                bits.data(), bits.size(), raw, &period_used, &inverted),
-         "coupure au milieu d'une impulsion : la trame est retrouvée après recollage");
+         "mid-pulse cut: the frame is recovered after stitching");
 
   // (3) a lone fragment (without its twin) must NOT produce a frame — matching the component,
   //     which only stitches a SHORT capture (MAX_FRAGMENT_TIMINGS)
   expect(!vevor::decode_timings(a.data(), a.size(), vevor::PERIOD_CANDIDATES,
                                 vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(), raw,
                                 &period_used, &inverted),
-         "un morceau seul ne produit pas de trame (d'où le recollage)");
+         "a lone fragment produces no frame (hence the stitching)");
 }
 
 // --- 7. Inter-burst hole: the SKIP must really be exercised ---------------------
@@ -328,35 +328,35 @@ static void test_stitching() {
 
 // The hole must add NO bit: converting WITH and WITHOUT it must give the same bits.
 static void test_hole_skip() {
-  printf("Trou inter-rafales : saut réellement exercé\n");
-  const VevorPulseScenario *trou = nullptr;
+  printf("Inter-burst hole: the skip is really exercised\n");
+  const VevorPulseScenario *hole = nullptr;
   for (int i = 0; i < VEVOR_PULSE_COUNT; i++) {
-    if (std::strcmp(VEVOR_PULSE_VECTORS[i].name, "pulses_trou_inter_rafales") == 0) {
-      trou = &VEVOR_PULSE_VECTORS[i];
+    if (std::strcmp(VEVOR_PULSE_VECTORS[i].name, "pulses_gap_between_bursts") == 0) {
+      hole = &VEVOR_PULSE_VECTORS[i];
     }
   }
-  expect(trou != nullptr, "le scénario « trou inter-rafales » existe");
-  if (trou == nullptr) {
+  expect(hole != nullptr, "the 'inter-burst hole' scenario exists");
+  if (hole == nullptr) {
     return;
   }
-  std::vector<int32_t> avec(trou->timings, trou->timings + trou->count);
-  std::vector<int32_t> sans;
-  for (int32_t t : avec) {
+  std::vector<int32_t> with(hole->timings, hole->timings + hole->count);
+  std::vector<int32_t> without;
+  for (int32_t t : with) {
     if (t >= -4000 && t <= 4000) {  // the hole measures -8000: removed for comparison
-      sans.push_back(t);
+      without.push_back(t);
     }
   }
-  expect(sans.size() + 1 == avec.size(), "exactement une impulsion de trou a été retirée");
-  std::vector<uint8_t> bits_avec(vevor::MAX_BITS);
-  std::vector<uint8_t> bits_sans(vevor::MAX_BITS);
-  const size_t n_avec = vevor::timings_to_bits(avec.data(), avec.size(), 90, false,
-                                               bits_avec.data(), bits_avec.size());
-  const size_t n_sans = vevor::timings_to_bits(sans.data(), sans.size(), 90, false,
-                                               bits_sans.data(), bits_sans.size());
-  expect(n_avec == n_sans,
-         "le trou n'ajoute aucun bit (sauté, et non converti en ~88 bits de zéro)");
-  expect(n_avec == n_sans && std::memcmp(bits_avec.data(), bits_sans.data(), n_avec) == 0,
-         "les bits obtenus sont identiques avec et sans le trou");
+  expect(without.size() + 1 == with.size(), "exactly one hole pulse was removed");
+  std::vector<uint8_t> bits_with(vevor::MAX_BITS);
+  std::vector<uint8_t> bits_without(vevor::MAX_BITS);
+  const size_t n_with = vevor::timings_to_bits(with.data(), with.size(), 90, false,
+                                               bits_with.data(), bits_with.size());
+  const size_t n_without = vevor::timings_to_bits(without.data(), without.size(), 90, false,
+                                               bits_without.data(), bits_without.size());
+  expect(n_with == n_without,
+         "the hole adds no bit (skipped, not converted to ~88 zero bits)");
+  expect(n_with == n_without && std::memcmp(bits_with.data(), bits_without.data(), n_with) == 0,
+         "the bits obtained are identical with and without the hole");
 }
 
 // --- 8. Bit-period selection: candidate scan continues after a failure -----------
@@ -364,18 +364,18 @@ static void test_hole_skip() {
 //  (1) EACH candidate decodes a burst emitted at ITS period → 88, 89 AND 87 are exercised;
 
 //  (2) the scan CONTINUES after a failing candidate: the long-run burst
-//      (pulses_trame_longue) is period-sensitive and NOT decodable at 88 µs, so the
+//      (pulses_long_frame) is period-sensitive and NOT decodable at 88 µs, so the
 //      decoder must reach 90 and succeed.
 static void test_period_selection() {
-  printf("Sélection de la bit period (balayage des candidats)\n");
+  printf("Bit-period selection (candidate scan)\n");
   std::vector<uint8_t> bits(vevor::MAX_BITS);
   uint8_t raw[vevor::FRAME_BYTES];
   int32_t period_used = 0;
   bool inverted = false;
 
-  // (1) each candidate, ALONE, decodes a burst emitted at its period: we call `essayer_periode`
+  // (1) each candidate, ALONE, decodes a burst emitted at its period: we call `try_period`
   // (the "given period" layer), not `decode_timings`, which MEASURES the period first — the fixed
-  // grid is now only a fallback, and this test exercises that fallback (test_periode_mesuree).
+  // grid is now only a fallback, and this test exercises that fallback (test_period_measured).
   int exerces = 0;
   for (int i = 0; i < VEVOR_PULSE_COUNT; i++) {
     const VevorPulseScenario &s = VEVOR_PULSE_VECTORS[i];
@@ -383,57 +383,57 @@ static void test_period_selection() {
       continue;
     }
     period_used = s.period_us * 10;
-    const bool ok = vevor::essayer_periode(s.timings, s.count, s.period_us * 10, bits.data(),
+    const bool ok = vevor::try_period(s.timings, s.count, s.period_us * 10, bits.data(),
                                            bits.size(), raw, &inverted, nullptr, nullptr);
-    expect(ok, std::string(s.name) + " : décodable avec le SEUL candidat " +
+    expect(ok, std::string(s.name) + " : decodable with the ONLY candidate " +
                    std::to_string(s.period_us) + " us");
     if (s.period_us == 88 || s.period_us == 89 || s.period_us == 87) {
       exerces++;
     }
   }
-  expect(exerces >= 3, "les candidats 88, 89 ET 87 ont tous été réellement exercés");
+  expect(exerces >= 3, "candidates 88, 89 AND 87 were all really exercised");
 
   // (2) scan after failure, on the period-sensitive burst.
-  const VevorPulseScenario *longue = nullptr;
+  const VevorPulseScenario *long_frame = nullptr;
   for (int i = 0; i < VEVOR_PULSE_COUNT; i++) {
-    if (std::strcmp(VEVOR_PULSE_VECTORS[i].name, "pulses_trame_longue") == 0) {
-      longue = &VEVOR_PULSE_VECTORS[i];
+    if (std::strcmp(VEVOR_PULSE_VECTORS[i].name, "pulses_long_frame") == 0) {
+      long_frame = &VEVOR_PULSE_VECTORS[i];
     }
   }
-  expect(longue != nullptr, "le scénario à longue suite de bits existe");
-  if (longue == nullptr) {
+  expect(long_frame != nullptr, "the long-bit-run scenario exists");
+  if (long_frame == nullptr) {
     return;
   }
   const int32_t seul88[1] = {88};
-  const int32_t sans90[2] = {88, 87};
+  const int32_t without90[2] = {88, 87};
   const int32_t recherche[2] = {88, 90};
-  // We exercise the "given period" layer (`essayer_periode`), which carries the scan;
+  // We exercise the "given period" layer (`try_period`), which carries the scan;
   // `decode_timings` measures the period first, so using it here would test the measurement,
   // not the fallback.
   period_used = 0;
-  expect(!vevor::essayer_periode(longue->timings, longue->count, seul88[0] * 10, bits.data(),
+  expect(!vevor::try_period(long_frame->timings, long_frame->count, seul88[0] * 10, bits.data(),
                                  bits.size(), raw, &inverted, nullptr, nullptr),
-         "rafale longue : le candidat 88 SEUL échoue (elle est vraiment sensible à la période)");
+         "long burst: candidate 88 ALONE fails (it is really period-sensitive)");
   bool reussi = false;
-  for (int32_t p : sans90) {
-    if (vevor::essayer_periode(longue->timings, longue->count, p * 10, bits.data(), bits.size(),
+  for (int32_t p : without90) {
+    if (vevor::try_period(long_frame->timings, long_frame->count, p * 10, bits.data(), bits.size(),
                                raw, &inverted, nullptr, nullptr)) {
       reussi = true;
     }
   }
-  expect(!reussi, "rafale longue : sans le candidat 90, aucun candidat ne décode (88 et 87 échouent)");
+  expect(!reussi, "long burst: without candidate 90, no candidate decodes (88 and 87 fail)");
   period_used = 0;
-  expect(vevor::essayer_periode(longue->timings, longue->count, 90 * 10, bits.data(), bits.size(),
+  expect(vevor::try_period(long_frame->timings, long_frame->count, 90 * 10, bits.data(), bits.size(),
                                 raw, &inverted, nullptr, nullptr),
-         "rafale longue : le balayage CONTINUE après l'échec de 88 et atteint 90 (le candidat 90 la "
-         "décode)");
+         "long burst: the scan CONTINUES after 88 fails and reaches 90 (candidate 90 "
+         "decodes it)");
   // The production path decodes it by the MEASURED period: the fixed grid is now only a
   // fallback.
   period_used = 0;
-  expect(vevor::decode_timings(longue->timings, longue->count, recherche, 2, bits.data(),
+  expect(vevor::decode_timings(long_frame->timings, long_frame->count, recherche, 2, bits.data(),
                                bits.size(), raw, &period_used, &inverted) &&
-             period_used >= vevor::PERIODE_MIN_X10 && period_used <= vevor::PERIODE_MAX_X10,
-         "rafale longue : décodée par la période mesurée sur la rafale");
+             period_used >= vevor::PERIOD_MIN_X10 && period_used <= vevor::PERIOD_MAX_X10,
+         "long burst: decoded by the period measured on the burst");
 }
 
 // --- 9. Stitching policy: a FRAGMENT stitches, a COMPLETE burst does not ---------
@@ -442,35 +442,35 @@ static void test_period_selection() {
 
 // Stitching a COMPLETE burst re-read the PREVIOUS one (60 frames for 31 distinct measurements).
 static void test_fragment_policy() {
-  printf("Politique de recollage (morceau vs rafale complète)\n");
+  printf("Stitching policy (fragment vs complete burst)\n");
   // predicate bounds: 40 included, 160 included, beyond not.
-  expect(!vevor::is_fragment(39), "39 pulses : trop court, pas un morceau");
-  expect(vevor::is_fragment(40), "40 pulses : morceau (borne basse incluse)");
-  expect(vevor::is_fragment(160), "160 pulses : morceau (borne haute incluse)");
-  expect(!vevor::is_fragment(161), "161 pulses : n'est plus un morceau");
+  expect(!vevor::is_fragment(39), "39 pulses: too short, not a fragment");
+  expect(vevor::is_fragment(40), "40 pulses: fragment (lower bound included)");
+  expect(vevor::is_fragment(160), "160 pulses: fragment (upper bound included)");
+  expect(!vevor::is_fragment(161), "161 pulses: no longer a fragment");
   // REAL sizes measured on this setup: fragments 96 and 82; complete burst 176-184.
   expect(vevor::is_fragment(96) && vevor::is_fragment(82),
-         "les deux morceaux mesurés (96 + 82) seront recollés");
+         "the two measured fragments (96 + 82) will be stitched");
   expect(!vevor::is_fragment(184),
-         "une rafale complète mesurée (184) n'est PAS un morceau : jamais recollée");
-  expect(!vevor::is_fragment(204), "204 pulses : capture complète, jamais recollée");
+         "a measured complete burst (184) is NOT a fragment: never stitched");
+  expect(!vevor::is_fragment(204), "204 pulses: complete capture, never stitched");
 
   // "TWO FRAGMENTS" case: the nominal burst cut in two, each half a fragment, then stitched
   // — exactly the component's decision (fragment AND previous fragment).
   const VevorPulseScenario *nominal = nullptr;
   for (int i = 0; i < VEVOR_PULSE_COUNT; i++) {
-    if (std::strcmp(VEVOR_PULSE_VECTORS[i].name, "pulses_nominales") == 0) {
+    if (std::strcmp(VEVOR_PULSE_VECTORS[i].name, "pulses_nominal") == 0) {
       nominal = &VEVOR_PULSE_VECTORS[i];
     }
   }
-  expect(nominal != nullptr, "le scénario nominal de référence existe");
+  expect(nominal != nullptr, "the reference nominal scenario exists");
   if (nominal == nullptr) {
     return;
   }
   const size_t n = nominal->count;
   const size_t k = n / 2;
   expect(vevor::is_fragment(k) && vevor::is_fragment(n - k),
-         "les deux moitiés de la rafale nominale sont des morceaux");
+         "the two halves of the nominal burst are fragments");
   std::vector<int32_t> out(n);
   const size_t m = vevor::stitch_fragments(nominal->timings, k, nominal->timings + k, n - k,
                                            out.data(), out.size());
@@ -481,7 +481,7 @@ static void test_fragment_policy() {
   expect(m == n && vevor::decode_timings(out.data(), m, vevor::PERIOD_CANDIDATES,
                                          vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(),
                                          raw, &period_used, &inverted),
-         "deux morceaux recollés : la trame est retrouvée");
+         "two stitched fragments: the frame is recovered");
 }
 
 // --- 12. One-bit tolerance on the header byte ----------------------------------
@@ -490,172 +490,172 @@ static void test_fragment_policy() {
 
 // `decode_timings` corrects that constant bit — but ONLY if sum, counter and plausibility
 // gate then pass. Tolerance is bounded: one bit passes, two fail.
-static void pulses_depuis_octets(const uint8_t *octets, size_t n, int32_t periode,
+static void pulses_from_bytes(const uint8_t *bytes, size_t n, int32_t period,
                                  std::vector<int32_t> &out) {
   static const uint8_t PRE[5] = {0xAA, 0xAA, 0xAA, 0xCA, 0x54};
   out.clear();
-  int niveau = 1;
-  int32_t courant = 0;
-  auto pousser = [&](int bit) {
+  int level = 1;
+  int32_t current = 0;
+  auto push = [&](int bit) {
     const int b = bit & 1;
-    if (b == niveau) {
-      courant += periode;
+    if (b == level) {
+      current += period;
     } else {
-      out.push_back(niveau ? courant : -courant);
-      niveau = b;
-      courant = periode;
+      out.push_back(level ? current : -current);
+      level = b;
+      current = period;
     }
   };
   for (size_t i = 0; i < sizeof(PRE); i++) {
     for (int k = 7; k >= 0; k--) {
-      pousser((PRE[i] >> k) & 1);
+      push((PRE[i] >> k) & 1);
     }
   }
   for (size_t i = 0; i < n; i++) {
     for (int k = 7; k >= 0; k--) {
-      pousser((octets[i] >> k) & 1);
+      push((bytes[i] >> k) & 1);
     }
   }
-  if (courant > 0) {
-    out.push_back(niveau ? courant : -courant);
+  if (current > 0) {
+    out.push_back(level ? current : -current);
   }
 }
 
-static bool decode_une_trame(const uint8_t *octets) {
+static bool decode_one_frame(const uint8_t *bytes) {
   static std::vector<uint8_t> bits(vevor::MAX_BITS);
   std::vector<int32_t> pulses;
-  uint8_t sortie[vevor::FRAME_BYTES];
-  int32_t periode = 0;
-  bool inverse = false;
-  size_t rejets = 0;
-  pulses_depuis_octets(octets, vevor::FRAME_BYTES, 90, pulses);
+  uint8_t output[vevor::FRAME_BYTES];
+  int32_t period = 0;
+  bool inverted = false;
+  size_t rejected = 0;
+  pulses_from_bytes(bytes, vevor::FRAME_BYTES, 90, pulses);
   return vevor::decode_timings(pulses.data(), pulses.size(), vevor::PERIOD_CANDIDATES,
-                               vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(), sortie,
-                               &periode, &inverse, &rejets);
+                               vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(), output,
+                               &period, &inverted, &rejected);
 }
 
 static void test_header_tolerance() {
-  printf("Tolérance d'un bit sur l'octet d'en-tête\n");
+  printf("One-bit tolerance on the header byte\n");
   // Frame recorded from the station (ID 33995, 15.6 °C, 80 %, 289°).
-  uint8_t intacte[vevor::FRAME_BYTES] = {0xAA, 0x00, 0x84, 0xCB, 0x16, 0x02, 0x90,
+  uint8_t intact[vevor::FRAME_BYTES] = {0xAA, 0x00, 0x84, 0xCB, 0x16, 0x02, 0x90,
                                          0x50, 0x01, 0x01, 0x00, 0x02, 0x22, 0x01,
                                          0xFF, 0x02, 0x31, 0xDF, 0x33, 0x5C, 0x34};
-  expect(decode_une_trame(intacte), "trame intacte : décodée");
+  expect(decode_one_frame(intact), "intact frame: decoded");
 
-  uint8_t un_bit[vevor::FRAME_BYTES];
-  std::memcpy(un_bit, intacte, vevor::FRAME_BYTES);
-  un_bit[0] = 0xAB;   // seen in the dump: one single header bit wrong
-  expect(decode_une_trame(un_bit), "en-tête à UN bit faux : corrigé et décodé");
+  uint8_t one_bit[vevor::FRAME_BYTES];
+  std::memcpy(one_bit, intact, vevor::FRAME_BYTES);
+  one_bit[0] = 0xAB;   // seen in the dump: one single header bit wrong
+  expect(decode_one_frame(one_bit), "header with ONE wrong bit: corrected and decoded");
 
-  uint8_t deux_bits[vevor::FRAME_BYTES];
-  std::memcpy(deux_bits, intacte, vevor::FRAME_BYTES);
-  deux_bits[0] = 0xA9;   // two wrong bits: out of tolerance
-  expect(!decode_une_trame(deux_bits), "en-tête à DEUX bits faux : refusé (tolérance bornée)");
+  uint8_t two_bits[vevor::FRAME_BYTES];
+  std::memcpy(two_bits, intact, vevor::FRAME_BYTES);
+  two_bits[0] = 0xA9;   // two wrong bits: out of tolerance
+  expect(!decode_one_frame(two_bits), "header with TWO wrong bits: rejected (bounded tolerance)");
 }
 
 // --- 13. Bit period MEASURED on the burst, and repair by inserting a bit ---------
 // A new user only flashes, on an unknown board, and the code must make the station work
-// with no analysis: the decoder MEASURES the bit rate per burst (estimer_periode_x10).
+// with no analysis: the decoder MEASURES the bit rate per burst (estimate_period_x10).
 
 // Four points: (a) the estimate is right on a synthetic burst at the station rate (88.5 µs);
 // (b) bursts at a DIFFERENT rate decode with no tuning (another board); (c) a MISSING bit
 // in the payload is repaired; (d) an invalid frame stays rejected, repair included.
 
-// Like pulses_depuis_octets, but a TWO-bit pulse can be SHORTENED to one bit (measured on the
+// Like pulses_from_bytes, but a TWO-bit pulse can be SHORTENED to one bit (measured on the
 // dump bursts: a two-period pulse seen as one). The decoded stream then counts one bit less
 // and everything after is shifted — exactly what insertion repair must recover.
-static bool raccourcir_une_impulsion(std::vector<int32_t> &pulses, int32_t periode) {
+static bool shorten_one_pulse(std::vector<int32_t> &pulses, int32_t period) {
   for (size_t i = pulses.size() / 2; i < pulses.size(); i++) {
-    if (pulses[i] == 2 * periode || pulses[i] == -2 * periode) {
-      pulses[i] = (pulses[i] > 0) ? periode : -periode;
+    if (pulses[i] == 2 * period || pulses[i] == -2 * period) {
+      pulses[i] = (pulses[i] > 0) ? period : -period;
       return true;
     }
   }
   return false;
 }
 
-static void test_periode_mesuree() {
-  printf("Période mesurée sur la rafale, et repairation par insertion d'un bit\n");
-  const uint8_t trame[vevor::FRAME_BYTES] = {0xAA, 0x00, 0x84, 0xCB, 0x16, 0x02, 0x90, 0x50,
+static void test_period_measured() {
+  printf("Period measured on the burst, and repair by bit insertion\n");
+  const uint8_t frame[vevor::FRAME_BYTES] = {0xAA, 0x00, 0x84, 0xCB, 0x16, 0x02, 0x90, 0x50,
                                              0x01, 0x01, 0x00, 0x02, 0x22, 0x01, 0xFF, 0x02,
                                              0x31, 0xDF, 0x33, 0x5C, 0x34};
   std::vector<uint8_t> bits(vevor::MAX_BITS);
   std::vector<int32_t> pulses;
   uint8_t raw[vevor::FRAME_BYTES];
-  int32_t periode = 0;
-  bool inverse = false;
+  int32_t period = 0;
+  bool inverted = false;
   bool repare = false;
-  size_t rejets = 0;
+  size_t rejected = 0;
 
   // (a) the estimator recovers the station rate, with no station constant.
-  pulses_depuis_octets(trame, vevor::FRAME_BYTES, 88, pulses);
-  const int32_t mesuree = vevor::estimer_periode_x10(pulses.data(), pulses.size());
-  expect(mesuree >= 875 && mesuree <= 895,
-         "estimation du rythme bit : " + std::to_string(mesuree / 10) + "," +
-             std::to_string(mesuree % 10) + " us (attendu 88,3-88,9)");
+  pulses_from_bytes(frame, vevor::FRAME_BYTES, 88, pulses);
+  const int32_t measured = vevor::estimate_period_x10(pulses.data(), pulses.size());
+  expect(measured >= 875 && measured <= 895,
+         "bit-rate estimate: " + std::to_string(measured / 10) + "," +
+             std::to_string(measured % 10) + " us (expected 88.3-88.9)");
 
   // (b) DIFFERENT rates: the unknown-board case, decoded with no tuning.
-  const int32_t rythmes[] = {87, 88, 89, 90, 91};
-  for (int32_t p : rythmes) {
-    pulses_depuis_octets(trame, vevor::FRAME_BYTES, p, pulses);
-    const int32_t est = vevor::estimer_periode_x10(pulses.data(), pulses.size());
+  const int32_t rhythms[] = {87, 88, 89, 90, 91};
+  for (int32_t p : rhythms) {
+    pulses_from_bytes(frame, vevor::FRAME_BYTES, p, pulses);
+    const int32_t est = vevor::estimate_period_x10(pulses.data(), pulses.size());
     repare = false;
     const bool ok = vevor::decode_timings(pulses.data(), pulses.size(), vevor::PERIOD_CANDIDATES,
                                           vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(),
-                                          raw, &periode, &inverse, &rejets, &repare);
-    expect(ok && std::memcmp(raw, trame, vevor::FRAME_BYTES) == 0 && !repare,
-           "rafale émise à " + std::to_string(p) + " us : décodée (estimée à " +
+                                          raw, &period, &inverted, &rejected, &repare);
+    expect(ok && std::memcmp(raw, frame, vevor::FRAME_BYTES) == 0 && !repare,
+           "burst emitted at " + std::to_string(p) + " us: decoded (estimated at " +
                std::to_string(est / 10) + "," + std::to_string(est % 10) + " us)");
   }
 
   // (c) a TWO-bit pulse measured as ONE: the demodulator shortens a two-period pulse and
   //     everything after shifts by a bit. We shorten a pulse in the payload and insertion
   //     repair must recover the exact frame.
-  pulses_depuis_octets(trame, vevor::FRAME_BYTES, 88, pulses);
-  expect(raccourcir_une_impulsion(pulses, 88),
-         "une impulsion de deux bits a été trouvée dans la charge pour la raccourcir");
+  pulses_from_bytes(frame, vevor::FRAME_BYTES, 88, pulses);
+  expect(shorten_one_pulse(pulses, 88),
+         "a two-bit pulse was found in the payload to shorten it");
   repare = false;
   const bool ok_repare =
       vevor::decode_timings(pulses.data(), pulses.size(), vevor::PERIOD_CANDIDATES,
-                            vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(), raw, &periode,
-                            &inverse, &rejets, &repare);
-  expect(ok_repare && repare && std::memcmp(raw, trame, vevor::FRAME_BYTES) == 0,
-         "impulsion de deux bits raccourcie à un bit : repaired, trame exacte retrouvée");
+                            vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(), raw, &period,
+                            &inverted, &rejected, &repare);
+  expect(ok_repare && repare && std::memcmp(raw, frame, vevor::FRAME_BYTES) == 0,
+         "two-bit pulse shortened to one bit: repaired, exact frame recovered");
 
   // (d) counter-test: what does the repair FABRICATE? It widens the set of accepted frames,
   //     so its output must be bounded. 200 RANDOM payloads with correct sync and header:
   //     none may be published (measured: 0 of 200, which is what justifies keeping the repair).
-  int fabriquees = 0;
-  for (uint32_t graine = 1; graine <= 200; graine++) {
-    uint8_t alea[vevor::FRAME_BYTES];
-    uint32_t x = graine * 2654435761u;
+  int fabricated = 0;
+  for (uint32_t seed = 1; seed <= 200; seed++) {
+    uint8_t random[vevor::FRAME_BYTES];
+    uint32_t x = seed * 2654435761u;
     for (size_t i = 0; i < vevor::FRAME_BYTES; i++) {
       x = x * 1103515245u + 12345u;
-      alea[i] = (uint8_t)(x >> 16);
+      random[i] = (uint8_t)(x >> 16);
     }
-    alea[0] = 0xAA;   // correct header: sync succeeded
-    alea[1] = 0x00;
-    pulses_depuis_octets(alea, vevor::FRAME_BYTES, 88, pulses);
+    random[0] = 0xAA;   // correct header: sync succeeded
+    random[1] = 0x00;
+    pulses_from_bytes(random, vevor::FRAME_BYTES, 88, pulses);
     if (vevor::decode_timings(pulses.data(), pulses.size(), vevor::PERIOD_CANDIDATES,
                               vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(), raw,
-                              &periode, &inverse)) {
-      fabriquees++;
+                              &period, &inverted)) {
+      fabricated++;
     }
   }
-  expect(fabriquees == 0,
-         "200 charges utiles aléatoires (synchro et en-tête justes) : " +
-             std::to_string(fabriquees) + " publiée(s) — la repairation ne fabrique pas de trame");
+  expect(fabricated == 0,
+         "200 random payloads (sync and header correct): " +
+             std::to_string(fabricated) + " published — the repair does not fabricate a frame");
 
   // (e) noise alone: no frame published.
-  std::vector<int32_t> bruit;
+  std::vector<int32_t> noise;
   for (int i = 0; i < 200; i++) {
     const int32_t d = 40 + (i * 7) % 60;
-    bruit.push_back((i % 2 == 0) ? d : -d);
+    noise.push_back((i % 2 == 0) ? d : -d);
   }
-  expect(!vevor::decode_timings(bruit.data(), bruit.size(), vevor::PERIOD_CANDIDATES,
+  expect(!vevor::decode_timings(noise.data(), noise.size(), vevor::PERIOD_CANDIDATES,
                                 vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(), raw,
-                                &periode, &inverse),
-         "bruit sans préambule : aucune trame publiée");
+                                &period, &inverted),
+         "noise without preamble: no frame published");
 }
 
 // --- 14. REAL station bursts (regression vectors, acceptance criterion) ----------
@@ -665,14 +665,14 @@ static void test_periode_mesuree() {
 // Criterion fixed in docs/bit-jitter-analysis.md: 5 of 6 must decode, the sixth an assumed
 // counter-example (it needs at least two corrections); the five carry the same measurement.
 static void test_captures_reelles() {
-  printf("Rafales RÉELLES de la station (%d captures du dump du 03/10)\n", VEVOR_REAL_CAPTURE_COUNT);
+  printf("REAL station bursts (%d captures from the 03/10 dump)\n", VEVOR_REAL_CAPTURE_COUNT);
   std::vector<uint8_t> bits(vevor::MAX_BITS);
   uint8_t raw[vevor::FRAME_BYTES];
   int32_t period_used = 0;
   bool inverted = false;
   bool repaired = false;
   size_t rejected = 0;
-  int decodees = 0;
+  int decoded = 0;
   for (int i = 0; i < VEVOR_REAL_CAPTURE_COUNT; i++) {
     const VevorRealCapture &c = VEVOR_REAL_CAPTURES[i];
     repaired = false;
@@ -680,27 +680,27 @@ static void test_captures_reelles() {
                                           vevor::PERIOD_CANDIDATE_COUNT, bits.data(), bits.size(),
                                           raw, &period_used, &inverted, &rejected, &repaired);
     if (ok) {
-      decodees++;
-      printf("    %-18s décodée (%d.%d us, %s) : %s\n", c.name, (int) (period_used / 10),
-             (int) (period_used % 10), repaired ? "RÉPARÉE" : "directe",
+      decoded++;
+      printf("    %-18s decoded (%d.%d us, %s): %s\n", c.name, (int) (period_used / 10),
+             (int) (period_used % 10), repaired ? "REPAIRED" : "direct",
              vevor::hex_bytes(raw, vevor::FRAME_BYTES).c_str());
       expect(std::memcmp(raw, VEVOR_CAPTURE_PREFIX, VEVOR_CAPTURE_PREFIX_LEN) == 0,
-             std::string(c.name) + " : porte bien la mesure de la station (préfixe attendu)");
+             std::string(c.name) + " : carries the station measurement (expected prefix)");
     } else {
-      bool contre_exemple = false;
-      for (int k = 0; k < VEVOR_CAPTURE_CONTRE_EXEMPLE_COUNT; k++) {
-        if (i == VEVOR_CAPTURE_CONTRE_EXEMPLES[k]) {
-          contre_exemple = true;
+      bool counter_example = false;
+      for (int k = 0; k < VEVOR_CAPTURE_COUNTER_EXAMPLE_COUNT; k++) {
+        if (i == VEVOR_CAPTURE_COUNTER_EXAMPLES[k]) {
+          counter_example = true;
         }
       }
-      printf("    %-18s NON décodée%s\n", c.name,
-             contre_exemple ? " (contre-exemple assumé)" : " <-- RÉGRESSION");
+      printf("    %-18s NOT decoded%s\n", c.name,
+             counter_example ? " (assumed counter-example)" : " <-- REGRESSION");
     }
   }
-  expect(decodees >= VEVOR_CAPTURE_ATTENDUES,
-         "rafales réelles : " + std::to_string(decodees) + " décodées sur " +
-             std::to_string(VEVOR_REAL_CAPTURE_COUNT) + " (critère : " +
-             std::to_string(VEVOR_CAPTURE_ATTENDUES) + " au moins)");
+  expect(decoded >= VEVOR_CAPTURE_ATTENDUES,
+         "real bursts: " + std::to_string(decoded) + " decoded out of " +
+             std::to_string(VEVOR_REAL_CAPTURE_COUNT) + " (criterion: " +
+             std::to_string(VEVOR_CAPTURE_ATTENDUES) + " at least)");
 }
 
 // --- 15. Rain: a physically impossible rise is rejected ------------------------
@@ -710,30 +710,30 @@ static void test_captures_reelles() {
 // The protocol gate does NOT check rain; the bound applies to the RISE only. A FALL must not
 // be rejected: the station zeroes its counter and the protocol documents a legitimate 256-tick
 // drop, so rejecting a FALL would reject every frame, forever.
-static void test_pluie_plausible() {
-  printf("Pluie : hausse physiquement impossible refusée\n");
+static void test_rain_plausible() {
+  printf("Rain: physically impossible rise rejected\n");
   const float stable = 59.18f;
 
-  expect(vevor::pluie_plausible(59.2f, stable, true), "hausse normale (+0,02 mm) : acceptée");
-  expect(vevor::pluie_plausible(60.1f, stable, true), "hausse de 1 mm : acceptée");
-  expect(!vevor::pluie_plausible(7634.5f, stable, true),
-         "pic mesuré à 7 634,5 mm : REFUSÉ (hausse impossible)");
-  expect(!vevor::pluie_plausible(65.0f, stable, true), "hausse de 6 mm en une rafale : refusée");
-  expect(!vevor::pluie_plausible(-1.0f, stable, true), "valeur négative : refusée");
+  expect(vevor::rain_plausible(59.2f, stable, true), "normal rise (+0.02 mm): accepted");
+  expect(vevor::rain_plausible(60.1f, stable, true), "rise of 1 mm: accepted");
+  expect(!vevor::rain_plausible(7634.5f, stable, true),
+         "peak measured at 7634.5 mm: REJECTED (impossible rise)");
+  expect(!vevor::rain_plausible(65.0f, stable, true), "rise of 6 mm in one burst: rejected");
+  expect(!vevor::rain_plausible(-1.0f, stable, true), "negative value: rejected");
 
   // Counter-test in both directions, per the protocol's reference decoder
   // (references/PROTOCOL.md): rain can only RISE, or restart at zero after a battery change.
 
   // A non-zero fall is a corruption even with a valid checksum — rejecting it is CORRECT (the
   // published 59.18 → 29.36 mm value was false).
-  expect(!vevor::pluie_plausible(29.36f, stable, true),
-         "division par deux observée (59,18 → 29,36 mm) : REFUSÉE (baisse non nulle = corruption)");
-  expect(!vevor::pluie_plausible(59.0f, stable, true), "baisse de 0,2 mm : refusée");
-  expect(vevor::pluie_plausible(0.0f, stable, true),
-         "compteur remis à zéro (changement de pile) : accepté");
-  expect(vevor::pluie_plausible(0.2f, 0.0f, true), "première bascule après la remise à zéro : acceptée");
-  expect(vevor::pluie_plausible(7634.5f, 0.0f, false),
-         "première trame, sans référence : acceptée (elle a déjà passé le reste de la porte)");
+  expect(!vevor::rain_plausible(29.36f, stable, true),
+         "observed halving (59.18 -> 29.36 mm): REJECTED (non-zero fall = corruption)");
+  expect(!vevor::rain_plausible(59.0f, stable, true), "fall of 0.2 mm: rejected");
+  expect(vevor::rain_plausible(0.0f, stable, true),
+         "counter reset to zero (battery change): accepted");
+  expect(vevor::rain_plausible(0.2f, 0.0f, true), "first toggle after reset: accepted");
+  expect(vevor::rain_plausible(7634.5f, 0.0f, false),
+         "first frame, no reference: accepted (it already passed the rest of the gate)");
 
   // FRAME-level proof: a frame passing header, sum, counter AND the whole protocol
   // plausibility gate can still carry the peak. We build it and check that the continuity
@@ -741,21 +741,21 @@ static void test_pluie_plausible() {
   uint8_t pic[vevor::FRAME_BYTES] = {0xAA, 0x00, 0x84, 0xCB, 0x16, 0x02, 0x90, 0x50, 0x01,
                                      0x01, 0x00, 0x02, 0x22, 0x80, 0xFF, 0x02, 0x31, 0xDF,
                                      0x33, 0x00, 0x00};
-  uint16_t somme = 0;
+  uint16_t sum_bytes = 0;
   for (int i = 0; i < 19; i++) {
-    somme += pic[i];
+    sum_bytes += pic[i];
   }
-  pic[19] = (uint8_t)(somme & 0xFF);
+  pic[19] = (uint8_t)(sum_bytes & 0xFF);
   pic[20] = (uint8_t)(pic[18] + 1);
   vevor::Frame f;
   const char *raison = "";
   expect(vevor::decode(pic, f, &raison),
-         "la trame au pic traverse en-tête, somme, compteur et porte de plausibilité du protocole");
+         "the peak frame passes header, sum, counter and the protocol plausibility gate");
   expect(f.rain_mm > 7000.0f && f.rain_mm < 7700.0f,
-         "elle porte bien la pluie aberrante (7 634,5 mm attendus, " +
-             std::to_string(f.rain_mm) + " obtenus)");
-  expect(!vevor::pluie_plausible(f.rain_mm, stable, true),
-         "c'est le contrôle de continuité qui l'arrête — celui qui manquait ce jour-là");
+         "it really carries the aberrant rain (7634.5 mm expected, " +
+             std::to_string(f.rain_mm) + " got)");
+  expect(!vevor::rain_plausible(f.rain_mm, stable, true),
+         "it is the continuity check that stops it — the one missing that day");
 }
 
 // --- 15. Zero wind: the insertion repair must not fabricate a frame ------------------
@@ -764,7 +764,7 @@ static void test_pluie_plausible() {
 // that day. Cause: the insertion repair searched a bit of ANY value at ANY position, and
 // 0x01+0x01+0x00 = 0x02+0x80+0x80 (mod 256): the byte sum is preserved, so checksum, counter and
 // the whole plausibility gate stayed green and the WRONG position was accepted. The fix requires
-// the recovered bit to extend the preceding pulse (same level) — see reparer_par_insertion.
+// the recovered bit to extend the preceding pulse (same level) — see repair_by_insertion.
 //
 // This test sweeps every pulse longer than one bit of two REAL zero-wind frames, shortens each by
 // one bit (the measured mechanism: a pulse rounded down), and demands that nothing false comes
@@ -772,68 +772,68 @@ static void test_pluie_plausible() {
 // guard — the component does not publish it then. Before the fix this test fails (02 80 80 is
 // published); after it, it passes.
 static void test_reparation_vent_nul() {
-  printf("Vent nul : la repairation par insertion ne fabrique pas de trame\n");
-  const uint8_t trames[2][vevor::FRAME_BYTES] = {
+  printf("Zero wind: insertion repair does not fabricate a frame\n");
+  const uint8_t frames[2][vevor::FRAME_BYTES] = {
       {0xAA, 0x00, 0x84, 0xCB, 0x16, 0x02, 0x90, 0x50, 0x01, 0x01, 0x00,
        0x02, 0x22, 0x01, 0xFF, 0x02, 0x31, 0xDF, 0x33, 0x5C, 0x34},
       {0xAA, 0x00, 0x84, 0xCB, 0x16, 0x02, 0x8F, 0x58, 0x01, 0x01, 0x00,
        0x02, 0x0F, 0x01, 0xFF, 0x01, 0x01, 0x01, 0x4E, 0x5C, 0x4F},
   };
   static std::vector<uint8_t> bits(vevor::MAX_BITS);
-  vevor::Frame vraie;
+  vevor::Frame genuine;
   const char *raison = "";
-  expect(vevor::decode(trames[0], vraie, &raison), "trame de référence : vent nul, acceptée");
-  expect_near(vraie.wind_kmh, 0.0f, 0.05f, "référence : vent mesuré 0,0 km/h");
+  expect(vevor::decode(frames[0], genuine, &raison), "reference frame: zero wind, accepted");
+  expect_near(genuine.wind_kmh, 0.0f, 0.05f, "reference: measured wind 0.0 km/h");
 
-  int essais = 0;
-  int fabriquees = 0;
-  for (const auto &trame : trames) {
+  int attempts = 0;
+  int fabricated = 0;
+  for (const auto &frame : frames) {
     std::vector<int32_t> pulses;
-    pulses_depuis_octets(trame, vevor::FRAME_BYTES, 88, pulses);
+    pulses_from_bytes(frame, vevor::FRAME_BYTES, 88, pulses);
     for (size_t i = 0; i < pulses.size(); i++) {
       const int32_t d = pulses[i] > 0 ? pulses[i] : -pulses[i];
       const int32_t bits_impulsion = d / 88;
       if (bits_impulsion < 2) {
-        continue;   // seule une impulsion d'au moins deux bits peut en perdre un
+        continue;   // only a pulse of at least two bits can lose one
       }
       std::vector<int32_t> raccourcies = pulses;
       raccourcies[i] = (pulses[i] > 0) ? (bits_impulsion - 1) * 88 : -(bits_impulsion - 1) * 88;
-      uint8_t publiee[vevor::FRAME_BYTES];
-      int32_t periode = 0;
-      bool inverse = false;
+      uint8_t published[vevor::FRAME_BYTES];
+      int32_t period = 0;
+      bool inverted = false;
       bool repare = false;
-      size_t rejets = 0;
+      size_t rejected = 0;
       const bool ok = vevor::decode_timings(raccourcies.data(), raccourcies.size(),
                                             vevor::PERIOD_CANDIDATES, vevor::PERIOD_CANDIDATE_COUNT,
-                                            bits.data(), bits.size(), publiee, &periode, &inverse,
-                                            &rejets, &repare);
-      essais++;
-      if (!ok || std::memcmp(publiee, trame, vevor::FRAME_BYTES) == 0) {
+                                            bits.data(), bits.size(), published, &period, &inverted,
+                                            &rejected, &repare);
+      attempts++;
+      if (!ok || std::memcmp(published, frame, vevor::FRAME_BYTES) == 0) {
         continue;
       }
       // Frame differs: it must NOT pass for the wind/gust, and the component must refuse it
       // through the rain continuity guard, else it reaches Home Assistant.
       vevor::Frame f;
       const char *motif = "";
-      const bool publiee_valide = vevor::decode(publiee, f, &motif);
-      const bool fausse =
-          publiee_valide && (f.wind_kmh != vraie.wind_kmh || f.gust_kmh != vraie.gust_kmh) &&
-          vevor::pluie_plausible(f.rain_mm, vraie.rain_mm, true);
-      if (fausse) {
-        fabriquees++;
-        printf("   FAUSSE impulsion %zu (%d bits -> %d) : vent %.1f rafale %.1f pluie %.1f\n", i,
+      const bool published_valid = vevor::decode(published, f, &motif);
+      const bool bogus =
+          published_valid && (f.wind_kmh != genuine.wind_kmh || f.gust_kmh != genuine.gust_kmh) &&
+          vevor::rain_plausible(f.rain_mm, genuine.rain_mm, true);
+      if (bogus) {
+        fabricated++;
+        printf("   FALSE pulse %zu (%d bits -> %d): wind %.1f gust %.1f rain %.1f\n", i,
                (int) bits_impulsion, (int) bits_impulsion - 1, f.wind_kmh, f.gust_kmh, f.rain_mm);
       }
     }
   }
-  expect(essais > 50,
-         "balayage : " + std::to_string(essais) + " pulses raccourcies essayées (2 trames)");
-  expect(fabriquees == 0,
-         "aucune trame FAUSSE publiée (avant correction : 02 80 80 = 46,0 km/h / 102,4 km/h)");
+  expect(attempts > 50,
+         "sweep: " + std::to_string(attempts) + " shortened pulses tried (2 frames)");
+  expect(fabricated == 0,
+         "no FALSE frame published (before the fix: 02 80 80 = 46.0 km/h / 102.4 km/h)");
 }
 
 int main() {
-  printf("=== Tests du décodeur Vevor 7-en-1 (sans matériel) ===\n\n");
+  printf("=== Vevor 7-in-1 decoder tests (no hardware) ===\n\n");
   test_vectors();
   test_rtl433_reference();
   test_lux_x10_anchor();
@@ -846,16 +846,16 @@ int main() {
   test_hole_skip();
   test_fragment_policy();
   test_header_tolerance();
-  test_periode_mesuree();
+  test_period_measured();
   test_captures_reelles();
-  test_pluie_plausible();
+  test_rain_plausible();
   test_reparation_vent_nul();
 
-  printf("\n%d vérifications, %d échec(s)\n", g_checks, g_failures);
+  printf("\n%d checks, %d failure(s)\n", g_checks, g_failures);
   if (g_failures == 0) {
-    printf("%s TOUS LES TESTS PASSENT\n", CHECK);
+    printf("%s ALL TESTS PASS\n", CHECK);
     return 0;
   }
-  printf("%s %d ÉCHEC(S)\n", FAIL, g_failures);
+  printf("%s %d FAILURE(S)\n", FAIL, g_failures);
   return 1;
 }

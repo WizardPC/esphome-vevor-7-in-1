@@ -11,7 +11,7 @@ from esphome.const import CONF_ID
 # `includes/vevor_protocol.h`, pure C++ testable without hardware (`tools/run_tests.sh`).
 #
 # NO BIT-PERIOD SETTING, on purpose. The bit period is MEASURED on every burst
-# (estimer_periode_x10) and several nearby values are tried on each capture: the station's crystal
+# (estimate_period_x10) and several nearby values are tried on each capture: the station's crystal
 # and the demodulator decide it, not the configuration. A `bit_period:` knob used to be declared
 # here and was read by nobody — removed rather than left as a lie that looks like a setting.
 #

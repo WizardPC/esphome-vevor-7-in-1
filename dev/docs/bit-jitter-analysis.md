@@ -138,7 +138,7 @@ Ordered by expected value, all measurable:
    as short as possible across the module's pins.
 
    **Its absence has never been measured as a cause on this board.** It was carried from the project
-   notes ("100 nF non monté" — true, but that is not a measurement). Do not present it as the lever
+   notes ("100 nF not fitted" — true, but that is not a measurement). Do not present it as the lever
    it was assumed to be. What the chip itself reports — `CHIP_RDYn` high, "supply or crystal not
    ready" — points at supply/quartz **startup**, where the actionable lever is a supply cycle, not
    decoupling.

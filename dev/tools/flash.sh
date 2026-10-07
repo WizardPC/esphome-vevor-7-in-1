@@ -9,13 +9,13 @@
 set -uo pipefail
 DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/: tools, tests, docs, logs
 ROOT="$(cd "$DEV/.." && pwd)"            # repo root: esphome/ lives here, and nothing else
-TARGET="${1:?usage: flash.sh <port_serie|IP> [yaml]}"
+TARGET="${1:?usage: flash.sh <serial_port|IP> [yaml]}"
 YAML="${2:-vevor-7in1}"
 mkdir -p "$DEV/logs"
 # Same lock as build.sh: prevents a flash concurrent with another run's build.
 exec 9>"$DEV/build/.build_flash.lock"
 flock -w 1500 9 || {
-  printf 'FLASH ABANDONNE code=3 verrou occupe (un autre build/flash tourne)\n' | tee "$DEV/logs/last_flash_status.txt"
+  printf 'FLASH ABORTED code=3 lock held (another build/flash is running)\n' | tee "$DEV/logs/last_flash_status.txt"
   exit 3
 }
 cd "$ROOT/esphome"
@@ -27,8 +27,8 @@ CODE=$?
 tail -25 "$DEV/logs/last_flash.log"
 
 if [ "$CODE" -eq 0 ]; then
-  printf 'FLASH OK code=0 cible=%s\n' "$TARGET" | tee "$DEV/logs/last_flash_status.txt"
+  printf 'FLASH OK code=0 target=%s\n' "$TARGET" | tee "$DEV/logs/last_flash_status.txt"
   exit 0
 fi
-printf 'FLASH FAIL code=%s cible=%s (voir logs/last_flash.log)\n' "$CODE" "$TARGET" | tee "$DEV/logs/last_flash_status.txt"
+printf 'FLASH FAIL code=%s target=%s (see logs/last_flash.log)\n' "$CODE" "$TARGET" | tee "$DEV/logs/last_flash_status.txt"
 exit "$CODE"

@@ -5,7 +5,7 @@ Generalizes `dump_pulses.py` (which only presses "Dump pulses"): any named butto
 pressed without reflashing. The exact press time is logged to slice the window.
 
 Usage:
- dev/tools/press_button.py --name "Réappliquer la config radio" [--seconds 300] [--out logs/x.log]
+ dev/tools/press_button.py --name "Re-apply radio config" [--seconds 300] [--out logs/x.log]
 
 Return codes:
     0  window captured, at least one log line received;
@@ -53,9 +53,9 @@ async def main() -> int:
 
     button = buttons.get(args.name)
     if button is None:
-        print("boutons disponibles :", ", ".join(sorted(buttons)) or "(aucun)", file=sys.stderr)
+        print("available buttons:", ", ".join(sorted(buttons)) or "(none)", file=sys.stderr)
         await client.disconnect()
-        print(f"# ERREUR : bouton « {args.name} » introuvable", file=sys.stderr)
+        print(f"# ERROR: button \"{args.name}\" not found", file=sys.stderr)
         return RC_ERREUR
 
     lines: list[str] = []
@@ -68,15 +68,15 @@ async def main() -> int:
     await asyncio.sleep(1.0)
 
     t0 = time.strftime("%H:%M:%S", time.gmtime())
-    print(f"[{t0} UTC] appui sur « {args.name} »")
+    print(f"[{t0} UTC] pressing \"{args.name}\"")
     await maybe_await(client.button_command(button.key))
 
     await asyncio.sleep(args.seconds)
     t1 = time.strftime("%H:%M:%S", time.gmtime())
-    print(f"[{t1} UTC] fin de fenêtre ({args.seconds:.0f} s) — {len(lines)} ligne(s) reçue(s)")
+    print(f"[{t1} UTC] end of window ({args.seconds:.0f} s) — {len(lines)} line(s) received")
 
     if args.out:
-        header = f"# appui « {args.name} » a {t0} UTC, fenetre {args.seconds:.0f} s (fin {t1} UTC)"
+        header = f"# press \"{args.name}\" at {t0} UTC, window {args.seconds:.0f} s (end {t1} UTC)"
         print(f"-> {atomic_write_text(args.out, header + '\n' + '\n'.join(lines) + '\n')}")
 
     for text in lines:
@@ -85,7 +85,7 @@ async def main() -> int:
             print("  LOG:", text.strip()[:300])
     await client.disconnect()
     if not lines:
-        print("# MESURE NULLE — aucune ligne de log reçue : rien n'a été mesuré", file=sys.stderr)
+        print("# NULL MEASUREMENT — no log line received: nothing was measured", file=sys.stderr)
         return RC_MESURE_NULLE
     return RC_OK
 
@@ -96,5 +96,5 @@ if __name__ == "__main__":
     except SystemExit:
         raise
     except Exception as exc:
-        print(f"# ERREUR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"# ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
         raise SystemExit(RC_ERREUR)

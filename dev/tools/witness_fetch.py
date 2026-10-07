@@ -39,7 +39,7 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
 
     lines = [
-        f"# Témoin — GET http://{args.host}{args.path} pendant {args.seconds:.0f} s",
+        f"# Witness — GET http://{args.host}{args.path} for {args.seconds:.0f} s",
         f"# {dt.datetime.now(dt.timezone.utc):%Y-%m-%dT%H:%M:%SZ}",
     ]
     deadline = dt.datetime.now().timestamp() + args.seconds
@@ -51,10 +51,10 @@ def main() -> int:
                 if dt.datetime.now().timestamp() >= deadline:
                     break
     except Exception as exc:  # noqa: BLE001 - a failure is a result, it is logged
-        lines.append(f"# ÉCHEC {type(exc).__name__}: {exc}")
+        lines.append(f"# FAIL {type(exc).__name__}: {exc}")
 
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"fichier : {out} ({len(lines)} lignes)")
+    print(f"file: {out} ({len(lines)} lines)")
     for line in lines[:12]:
         print(" |", line[:200])
     return 0

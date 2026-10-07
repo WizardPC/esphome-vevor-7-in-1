@@ -1,140 +1,140 @@
-# MISSION — Récepteur Vevor 7-en-1 868 MHz (ESP32-C3 SuperMini + CC1101) sous ESPHome
+# MISSION — Vevor 7-in-1 868 MHz receiver (ESP32-C3 SuperMini + CC1101) under ESPHome
 
-## Objectif final (critère de sortie)
+## Final objective (exit criterion)
 
-Un firmware ESPHome fonctionnel qui, en continu :
+A working ESPHome firmware that, continuously:
 
-1. reçoit les trames 868 MHz de la station Vevor 7-en-1 et les **décode** (tous les capteurs) ;
-2. publie dans Home Assistant : température, humidité, vitesse vent, rafale, direction,
-   pluie cumulée, UV, luminosité, batterie faible ;
-3. **rejette** toute trame invalide (checksum + compteur) ;
-4. tourne de façon stable (pas de reboot, pas de fuite mémoire) et est documenté.
+1. receives the 868 MHz frames from the Vevor 7-in-1 station and **decodes** them (all sensors);
+2. publishes to Home Assistant: temperature, humidity, wind speed, gust, direction,
+   cumulative rain, UV, illuminance, low battery;
+3. **rejects** any invalid frame (checksum + counter);
+4. runs stably (no reboot, no memory leak) and is documented.
 
-« Fonctionnel » = au moins 10 trames consécutives valides, cadencées à ~20 s, avec des
-valeurs plausibles et recoupées avec une source indépendante.
+"Functional" = at least 10 consecutive valid frames, paced at ~20 s, with
+plausible values cross-checked against an independent source.
 
-## Répartition du travail (règle anti-collision, validée le 30/09)
+## Work split (anti-collision rule, validated on 30/09)
 
-Deux agents travaillent sur ce dépôt : la **session interactive** (l'humain + l'assistant dans
-le salon de discussion) et **la boucle planifiée** (celle qui poste dans #esphome). Pour ne plus
-se réécrire les fichiers sous les pieds :
+Two agents work on this repository: the **interactive session** (the human + the assistant in
+the chat room) and **the scheduled loop** (the one that posts in #esphome). So they stop
+overwriting each other's files:
 
-- **La boucle** : la radio et le matériel uniquement — paramètres CC1101, build, flash, captures,
-  balayages de fréquence, mesures. Elle écrit ses essais dans `state/PROGRESS.md` et avance
+- **The loop**: the radio and the hardware only — CC1101 parameters, build, flash, captures,
+  frequency sweeps, measurements. It writes its trials in `state/PROGRESS.md` and advances
   `state/PHASE`.
-- **La session interactive** : le décodeur (`esphome/components/vevor_7in1/vevor_protocol.h`), l'outillage
-  d'analyse (`tools/eval_frames.py`), les tests et la documentation destinée aux autres
-  utilisateurs.
-- Avant de modifier un fichier hors de son périmètre, le noter dans PROGRESS.md. En cas de
-  collision : `build/last_status.txt` ou `logs/last_flash_status.txt` affiche
-  « ABANDONNE code=3 » → attendre et reprendre.
-- Objectif du projet : que **n'importe quel utilisateur** ayant une station de cette famille
-  arrive à un récepteur fonctionnel avec de la documentation, sans dépendre de l'installation
-  particulière de l'utilisateur actuel (IP, secrets, chemins).
+- **The interactive session**: the decoder (`esphome/components/vevor_7in1/vevor_protocol.h`), the analysis
+  tooling (`tools/eval_frames.py`), the tests and the documentation intended for other
+  users.
+- Before modifying a file outside its scope, note it in PROGRESS.md. In case of
+  collision: `build/last_status.txt` or `logs/last_flash_status.txt` displays
+  "BUILD ABORTED code=3" → wait and resume.
+- Project goal: that **any user** with a station of this family
+  reaches a working receiver with documentation, without depending on the current
+  user's particular installation (IP, secrets, paths).
 
-## Boucle d'itération (politique adaptative validée par l'utilisateur)
+## Iteration loop (adaptive policy validated by the user)
 
-Un cycle = compiler → flasher → capturer → évaluer → décider. La cadence **s'adapte au
-résultat** (pas de reflash aveugle) :
+One cycle = compile → flash → capture → evaluate → decide. The cadence **adapts to
+the result** (no blind reflash):
 
-| Observation après flash + capture | Décision |
+| Observation after flash + capture | Decision |
 |---|---|
-| Aucune trame valide au bout de ~5 min | Corriger la radio (fréquence, déviation, bande passante, syncword) puis **reflasher** |
-| Valid frames mais irrégulières, trous > 25 s sur 10 min | Ajuster (RSSI/antenne/déviation) puis **reflasher** |
-| Cadence propre ~20 s | **Laisser tourner 30 min** et vérifier la cohérence des données sur toute la fenêtre |
-| Cadence propre + cohérence OK sur 30 min | Écrire `state/DONE.md`, prévenir l'utilisateur, arrêter la boucle |
+| No valid frame after ~5 min | Fix the radio (frequency, deviation, bandwidth, syncword) then **reflash** |
+| Valid frames but irregular, gaps > 25 s over 10 min | Adjust (RSSI/antenna/deviation) then **reflash** |
+| Clean cadence ~20 s | **Let it run 30 min** and check the data consistency over the whole window |
+| Clean cadence + consistency OK over 30 min | Write `state/DONE.md`, notify the user, stop the loop |
 
-Une itération = un cycle. Ne pas reflasher sans avoir lu les logs du flash précédent.
+One iteration = one cycle. Do not reflash without having read the logs of the previous flash.
 
-## Boucle d'itération (une itération = un cycle)
+## Iteration loop (one iteration = one cycle)
 
-1. Lire `state/PROGRESS.md` (où on en est, dernière hypothèse, prochaine action).
-2. Modifier le firmware (`esphome/vevor-7in1.yaml`, `esphome/components/vevor_7in1/*.h`).
-3. Compiler : `tools/build.sh` → si échec, corriger et revenir en 2.
-4. Flasher : `tools/flash.sh <ip_ou_port>` (USB la première fois, OTA ensuite).
-5. Capturer les logs : `.venv/bin/python tools/capture_logs.py --host <ip> --seconds <durée_s> --out logs/capture_*.log`.
-6. Évaluer : `tools/eval_frames.py logs/capture_*.log` → rapport JSON.
-7. Écrire dans `state/PROGRESS.md` : ce qui a marché, ce qui a échoué, la prochaine action.
-   Consigner les trames brutes dans `logs/raw_frames.jsonl`.
-8. Si le critère de sortie est atteint → écrire `state/DONE.md` et le dire à l'utilisateur.
+1. Read `state/PROGRESS.md` (where we are, last hypothesis, next action).
+2. Modify the firmware (`esphome/vevor-7in1.yaml`, `esphome/components/vevor_7in1/*.h`).
+3. Compile: `tools/build.sh` → if it fails, fix and go back to 2.
+4. Flash: `tools/flash.sh <ip_or_port>` (USB the first time, OTA afterwards).
+5. Capture the logs: `.venv/bin/python tools/capture_logs.py --host <ip> --seconds <duration_s> --out logs/capture_*.log`.
+6. Evaluate: `tools/eval_frames.py logs/capture_*.log` → JSON report.
+7. Write in `state/PROGRESS.md`: what worked, what failed, the next action.
+   Record the raw frames in `logs/raw_frames.jsonl`.
+8. If the exit criterion is met → write `state/DONE.md` and tell the user.
 
-## Règles non négociables
+## Non-negotiable rules
 
-- **Aucune valeur inventée.** Toute affirmation sur le décodage doit citer une ligne de log
-  brute. Si rien n'est capté, le dire : « pas de signal », jamais « ça doit marcher ».
-- **À lire avant de toucher à la radio** : `references/EXTERNAL_CONTEXT_WIZARDPC.md` — analyse
-  (contexte, pas du code à reprendre) d'un projet fonctionnel sur le même protocole. Il donne
-  des réglages radio **mesurés** (868,35 MHz / déviation **70 kHz** / bande **100 kHz** /
-  11 111 baud) — exactement ceux que nous avons fini par adopter : nos anciennes valeurs
-  (868,30 MHz / 37 kHz / 200 kHz) ne décodaient rien. Ils ont servi de guide, ce ne sont plus des
-  hypothèses en attente de test. Il documente aussi des pièges de protocole à intégrer à l'auto-évaluation
-  (pluie qui peut baisser avec un checksum **valide**, trames arrivant coupées, Station ID qui
-  change à chaque mise sous tension, rejet `vent > 0` avec `rafale == 0`, cohérence lux/UV).
-- **Ne jamais se fier à la sortie console d'un script passé dans un pipe** : `tail` et `tee`
-  masquent les codes retour. Lire `build/last_status.txt` (BUILD OK/FAIL) et
-  `logs/last_flash_status.txt` (FLASH OK/FAIL) — c'est la source de vérité du succès d'une étape.
-- Une hypothèse à la fois sur la partie radio (fréquence, déviation, bande passante), et
-  noter l'effet mesuré dans PROGRESS.md.
-- Ne jamais supprimer une trace de log : elles servent de preuve d'évaluation.
-- Après 3 itérations sans amélioration : changer de stratégie, pas répéter la même tentative.
-  Le faire explicitement dans PROGRESS.md.
-- Ordre de diagnostic si aucun paquet : (1) le CC1101 répond-il au SPI ? (2) fréquence,
-  (3) déviation/bande passante, (4) syncword/longueur, (5) câblage/antenne.
+- **No invented value.** Any statement about the decoding must cite a raw log
+  line. If nothing is captured, say so: "no signal", never "it must work".
+- **Read before touching the radio**: `references/EXTERNAL_CONTEXT_WIZARDPC.md` — analysis
+  (context, not code to reuse) of a working project on the same protocol. It gives
+  **measured** radio settings (868.35 MHz / **70 kHz** deviation / **100 kHz** bandwidth /
+  11 111 baud) — exactly the ones we ended up adopting: our old values
+  (868.30 MHz / 37 kHz / 200 kHz) decoded nothing. They served as a guide, they are no longer
+  hypotheses awaiting a test. It also documents protocol pitfalls to integrate into the self-evaluation
+  (rain that can go down with a **valid** checksum, frames arriving cut, Station ID that
+  changes at every power-up, rejection of `wind > 0` with `gust == 0`, lux/UV consistency).
+- **Never trust the console output of a script passed through a pipe**: `tail` and `tee`
+  mask the return codes. Read `build/last_status.txt` (BUILD OK/FAIL) and
+  `logs/last_flash_status.txt` (FLASH OK/FAIL) — that is the source of truth for a step's success.
+- One hypothesis at a time on the radio side (frequency, deviation, bandwidth), and
+  note the measured effect in PROGRESS.md.
+- Never delete a log trace: they serve as evidence for the evaluation.
+- After 3 iterations without improvement: change strategy, do not repeat the same attempt.
+  Do it explicitly in PROGRESS.md.
+- Diagnostic order if no packet: (1) does the CC1101 respond to SPI? (2) frequency,
+  (3) deviation/bandwidth, (4) syncword/length, (5) wiring/antenna.
 
-## Câblage de référence (à confirmer avec l'utilisateur)
+## Reference wiring (to be confirmed with the user)
 
 | ESP32-C3 SuperMini | CC1101 | Signal |
 |---|---|---|
-| 3V3 | VCC (pin 1) | alim 3,3 V |
-| GND | GND (pin 2) | masse |
+| 3V3 | VCC (pin 1) | 3.3 V supply |
+| GND | GND (pin 2) | ground |
 | GPIO6 | MOSI (pin 4) | SPI |
 | GPIO4 | SCLK (pin 3) | SPI |
 | GPIO5 | MISO (pin 6) | SPI |
 | GPIO7 | CSN (pin 8) | chip select |
-| GPIO3 | GDO0 (pin 3 module) | data / interrupt paquet |
-| — | GDO2 | non connecté |
+| GPIO3 | GDO0 (module pin 3) | data / packet interrupt |
+| — | GDO2 | not connected |
 
-GPIO2/GPIO8/GPIO9 sont des pins de strapping sur ESP32-C3 : on évite GPIO2 pour GDO0.
+GPIO2/GPIO8/GPIO9 are strapping pins on ESP32-C3: GPIO2 is avoided for GDO0.
 
-## Environnement
+## Environment
 
-- LXC Debian 13, IP `<conteneur>` ; Home Assistant `<home-assistant>` (HA Core ne répondait pas
-  sur 8123 au 30/09 ; le token est dans `.ha_token`).
-- **La carte peut être déplacée** : l'utilisateur a proposé de la mettre ailleurs si la réception
-  868 MHz est mauvaise. Conséquence opérationnelle : **si `/dev/ttyACM0` disparaît** (carte
-  débranchée de l'hôte Proxmox), le flash USB n'est plus possible → flasher en **OTA**
-  (`tools/flash.sh <ip-de-la-carte>`). Les logs restent disponibles par l'API native, mais une carte
-  dont le Wi-Fi casse doit être rapportée physiquement à l'hôte pour être récupérée en USB.
-- ESPHome dans `~/projets/vevor-7in1/.venv` (Python autonome + `esphome`, `aioesphomeapi`).
-- Logs ESP32 lus via l'API native (port 6053) avec `tools/capture_logs.py` — **indépendant
-  de Home Assistant**, donc plus fiable que la lecture des logs de l'add-on.
-- **Compilation : dans ce conteneur** (déjà vérifiée, ~4 min, cache chaud ensuite).
-- **Sources des composants : `esphome/vevor-7in1.yaml` pointe sur le dépôt public**
-  (`github://WizardPC/esphome-vevor-7-in-1@main`) pour rester copiable tel quel par n'importe qui.
-  Toute compilation depuis CE dépôt doit donc forcer la source locale, sinon ESPHome télécharge la
-  version publiée et ignore l'arbre de travail : `tools/build.sh` et `tools/flash.sh` le font
-  (`-s vevor_components components`) — passer par eux, ou ajouter cette option à la main.
-- **Flash : OTA depuis ce conteneur** (`tools/flash.sh <IP>`) dès que le premier flash a été
-  fait. L'add-on ESPHome Builder de HA sert au tout premier flash (il a l'accès UART à l'hôte
-  HA) et de référence pour la gestion des appareils.
-- Fréquence de balayage : `tools/scan_freq.py` pilote l'entité `number` du firmware en direct
-  (aucun reflash nécessaire pour chercher le signal).
+- Debian 13 LXC, IP `<container>`; Home Assistant `<home-assistant>` (HA Core was not responding
+  on 8123 as of 30/09; the token is in `.ha_token`).
+- **The board can be moved**: the user offered to put it elsewhere if the 868 MHz
+  reception is bad. Operational consequence: **if `/dev/ttyACM0` disappears** (board
+  unplugged from the Proxmox host), USB flashing is no longer possible → flash over **OTA**
+  (`tools/flash.sh <board-ip>`). The logs remain available through the native API, but a board
+  whose Wi-Fi breaks must be physically brought back to the host to be recovered over USB.
+- ESPHome in `~/projets/vevor-7in1/.venv` (standalone Python + `esphome`, `aioesphomeapi`).
+- ESP32 logs read via the native API (port 6053) with `tools/capture_logs.py` — **independent
+  of Home Assistant**, therefore more reliable than reading the add-on's logs.
+- **Compilation: in this container** (already verified, ~4 min, warm cache afterwards).
+- **Component sources: `esphome/vevor-7in1.yaml` points to the public repository**
+  (`github://WizardPC/esphome-vevor-7-in-1@main`) to stay copyable as-is by anyone.
+  Any compilation from THIS repository must therefore force the local source, otherwise ESPHome downloads the
+  published version and ignores the working tree: `tools/build.sh` and `tools/flash.sh` do it
+  (`-s vevor_components components`) — go through them, or add this option by hand.
+- **Flash: OTA from this container** (`tools/flash.sh <IP>`) as soon as the first flash has been
+  done. HA's ESPHome Builder add-on is used for the very first flash (it has UART access to the HA
+  host) and as a reference for device management.
+- Sweep frequency: `tools/scan_freq.py` drives the firmware's `number` entity live
+  (no reflash needed to search for the signal).
 
-Voir `references/HOME_ASSISTANT.md` pour l'intégration HA et ce qui est scriptable côté add-on.
+See `references/HOME_ASSISTANT.md` for the HA integration and what is scriptable on the add-on side.
 
-## Notes de relecture (02/10/2026)
+## Review notes (02/10/2026)
 
-- **Objectif atteint, au-delà du critère.** Le critère de sortie demandait « au moins 10 trames
-  consécutives valides » : la fenêtre validée (`evidence/rapport_fenetre_1h.json`) en compte **180 en
-  une heure**, 0 rejet, verdict `PASS`. Les quatre points (réception, publication, rejet des trames
-  invalides, stabilité) sont couverts.
-- **« Pas de reboot » (objectif, point 4) se lit « pas de reboot subi ».** Le firmware redémarre
-  désormais **volontairement** comme remède au mutisme SPI intermittent (voir `state/DONE.md` §2) :
-  ce n'est pas une instabilité, c'est le garde-fou. La formulation d'origine est datée.
-- **Règles de répartition / anti-collision** : elles visaient deux agents écrivant en même temps.
-  Elles n'ont plus d'objet si une seule session travaille ; les garder quand deux processus tournent.
-- **Faits d'environnement datés** (LXC `<conteneur>`, HA `<home-assistant>`, HA Core muet sur 8123 au
-  30/09) : à rafraîchir si l'installation change — pas des exigences du projet.
-- **Fait corrigé** : le fichier décodeur cité en tête de ce document (`esphome/components/vevor_7in1/vevor_7in1.h`)
-  n'existait pas ; le décodeur est `esphome/components/vevor_7in1/vevor_protocol.h` (l'en-tête `vevor_7in1.h` est
-  celui du composant, sous `esphome/components/vevor_7in1/`).
+- **Objective met, beyond the criterion.** The exit criterion asked for "at least 10 consecutive
+  valid frames": the validated window (`evidence/rapport_fenetre_1h.json`) counts **180 in
+  one hour**, 0 rejects, verdict `PASS`. The four points (reception, publication, rejection of
+  invalid frames, stability) are covered.
+- **"No reboot" (objective, point 4) reads as "no suffered reboot".** The firmware now restarts
+  **deliberately** as a remedy for the intermittent SPI muteness (see `state/DONE.md` §2):
+  this is not an instability, it is the safeguard. The original wording is dated.
+- **The split / anti-collision rules**: they targeted two agents writing at the same time.
+  They no longer apply if a single session works; keep them when two processes run.
+- **Dated environment facts** (LXC `<container>`, HA `<home-assistant>`, HA Core mute on 8123 as of
+  30/09): to refresh if the installation changes — not project requirements.
+- **Fact corrected**: the decoder file cited at the top of this document (`esphome/components/vevor_7in1/vevor_7in1.h`)
+  did not exist; the decoder is `esphome/components/vevor_7in1/vevor_protocol.h` (the `vevor_7in1.h` header is
+  the component's own, under `esphome/components/vevor_7in1/`).

@@ -8,7 +8,7 @@ def get(path):
         return json.loads(r.read().decode())
 print("api/ ->", get("/api/"))
 st = get("/api/states")
-print(len(st), "entites")
+print(len(st), "entities")
 for x in st:
     e = x["entity_id"]
     if "vevor" in e or "esp32_weather" in e:

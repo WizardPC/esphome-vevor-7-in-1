@@ -14,7 +14,7 @@ mkdir -p "$DEV/build" "$DEV/logs"
 # the second waits, then gives up cleanly with an explicit status.
 exec 9>"$DEV/build/.build_flash.lock"
 flock -w 1500 9 || {
-  printf 'BUILD ABANDONNE code=3 verrou occupe (un autre build/flash tourne)\n' | tee "$DEV/build/last_status.txt"
+  printf 'BUILD ABORTED code=3 lock held (another build/flash is running)\n' | tee "$DEV/build/last_status.txt"
   exit 3
 }
 cd "$ROOT/esphome"
@@ -27,8 +27,8 @@ tail -20 "$DEV/build/last_compile.log"
 
 BIN="$ROOT/esphome/.esphome/build/$YAML/build/firmware.ota.bin"
 if [ "$CODE" -eq 0 ] && [ -f "$BIN" ]; then
-  printf 'BUILD OK code=0 binaire=%s taille=%s octets\n' "$BIN" "$(stat -c %s "$BIN")" | tee "$DEV/build/last_status.txt"
+  printf 'BUILD OK code=0 binary=%s size=%s bytes\n' "$BIN" "$(stat -c %s "$BIN")" | tee "$DEV/build/last_status.txt"
   exit 0
 fi
-printf 'BUILD FAIL code=%s (voir build/last_compile.log)\n' "$CODE" | tee "$DEV/build/last_status.txt"
+printf 'BUILD FAIL code=%s (see build/last_compile.log)\n' "$CODE" | tee "$DEV/build/last_status.txt"
 exit "$CODE"

@@ -75,28 +75,28 @@ def decode(b: list[int]) -> dict:
 def plausibility(f: dict) -> list[str]:
     problems = []
     if not -40 <= f["temp_c"] <= 60:
-        problems.append(f"température hors plage: {f['temp_c']} °C")
+        problems.append(f"temperature out of range: {f['temp_c']} °C")
     if not 0 <= f["humidity"] <= 100:
-        problems.append(f"humidité hors plage: {f['humidity']} %")
+        problems.append(f"humidity out of range: {f['humidity']} %")
     if not 0 <= f["wind_kmh"] <= 180:
-        problems.append(f"vent hors plage: {f['wind_kmh']} km/h")
+        problems.append(f"wind out of range: {f['wind_kmh']} km/h")
     if not 0 <= f["gust_kmh"] <= 250:
-        problems.append(f"rafale hors plage: {f['gust_kmh']} km/h")
+        problems.append(f"gust out of range: {f['gust_kmh']} km/h")
     if not 0 <= f["wind_dir_deg"] <= 359:
-        problems.append(f"direction hors plage: {f['wind_dir_deg']}°")
+        problems.append(f"direction out of range: {f['wind_dir_deg']}°")
     if not 0 <= f["uv_index"] <= 16:
-        problems.append(f"UV hors plage: {f['uv_index']}")
+        problems.append(f"UV out of range: {f['uv_index']}")
     if f["lux"] < 0:
-        problems.append(f"lux négatif: {f['lux']}")
+        problems.append(f"negative lux: {f['lux']}")
     if f["rain_mm"] < 0:
-        problems.append("pluie négative")
+        problems.append("negative rain")
     # Lux / UV consistency (the reference firmware rejects the same cases).
     if f["uv_index"] > 0 and f["lux"] == 0:
-        problems.append(f"lux nul alors que l'UV vaut {f['uv_index']}")
+        problems.append(f"zero lux while the UV is {f['uv_index']}")
     elif f["uv_index"] == 0 and f["lux"] > LUX_PER_UV * LUX_SLACK:
-        problems.append(f"lux {f['lux']} invraisemblable pour un UV de 0")
+        problems.append(f"implausible lux {f['lux']} for a UV of 0")
     elif f["uv_index"] > 0 and f["lux"] > LUX_PER_UV * (f["uv_index"] + 1) * LUX_SLACK:
-        problems.append(f"lux {f['lux']} hors de portée de l'UV {f['uv_index']}")
+        problems.append(f"lux {f['lux']} out of range for UV {f['uv_index']}")
     return problems
 
 
@@ -112,19 +112,19 @@ def compare_with_firmware(ours: list[dict], theirs: list[dict]) -> list[str]:
     """
     mismatches = []
     if len(ours) != len(theirs):
-        mismatches.append(f"{len(ours)} trame(s) décodée(s) ici contre {len(theirs)} publiée(s) "
-                          "par le firmware : les deux ne voient pas le même nombre de trames")
+        mismatches.append(f"{len(ours)} frame(s) decoded here vs {len(theirs)} published "
+                          "by the firmware: the two do not see the same number of frames")
     for i, (a, b) in enumerate(zip(ours, theirs)):
         for field in COMPARE_FIELDS:
             if field not in b:
-                mismatches.append(f"trame {i + 1} : champ « {field} » absent du JSON du firmware")
+                mismatches.append(f"frame {i + 1}: field \"{field}\" missing from the firmware JSON")
                 continue
             va, vb = a.get(field), b.get(field)
             if isinstance(va, float) or isinstance(vb, float):
                 if va is None or vb is None or abs(float(va) - float(vb)) > 0.06:
-                    mismatches.append(f"trame {i + 1} : {field} — python {va} vs firmware {vb}")
+                    mismatches.append(f"frame {i + 1}: {field} — python {va} vs firmware {vb}")
             elif va != vb:
-                mismatches.append(f"trame {i + 1} : {field} — python {va} vs firmware {vb}")
+                mismatches.append(f"frame {i + 1}: {field} — python {va} vs firmware {vb}")
     return mismatches
 
 
@@ -150,7 +150,7 @@ def main() -> int:
                 f = decode([int(h, 16) for h in hexes])
                 tsm = TS_RE.match(line)
                 f["ts"] = tsm.group(1) if tsm else None
-                f["problems"] = plausibility(f) if f["valid"] else ["trame invalide"]
+                f["problems"] = plausibility(f) if f["valid"] else ["invalid frame"]
                 frames.append(f)
         mo = OK_RE.search(line)
         if mo:
@@ -179,8 +179,8 @@ def main() -> int:
 
     if not frames:
         report["findings"].append(
-            "Aucune trame RAW dans le log : rien n'a été capté. "
-            "Vérifier SPI/alim, puis balayer la fréquence (867,8–868,6 MHz), puis déviation/bande passante."
+            "No RAW frame in the log: nothing was captured. "
+            "Check SPI/power, then sweep the frequency (867.8–868.6 MHz), then deviation/bandwidth."
         )
 
     sequence_breaks = 0
@@ -207,37 +207,37 @@ def main() -> int:
                 else:
                     # Very short dt with a counter gap: signature of a DOUBLE publication (the
                     # station cannot emit two frames in the same second at 20 s cadence).
-                    quoi = ("double publication dans la même seconde"
-                            if dt <= 1 else f"pour {dt} s, soit {expected:.0f} attendus")
-                    gaps.append(f"compteur TX {a['tx_counter']} → {b['tx_counter']} "
-                                f"(écart {dc} {quoi})")
+                    quoi = ("double publication in the same second"
+                            if dt <= 1 else f"for {dt} s, i.e. {expected:.0f} expected")
+                    gaps.append(f"TX counter {a['tx_counter']} → {b['tx_counter']} "
+                                f"(gap {dc} {quoi})")
             elif dc > 60:
-                gaps.append(f"compteur TX {a['tx_counter']} → {b['tx_counter']} (écart {dc})")
+                gaps.append(f"TX counter {a['tx_counter']} → {b['tx_counter']} (gap {dc})")
         sequence_breaks += len(gaps)
         if gaps:
-            report["findings"].append(f"ID {sid}: {len(gaps)} incohérence(s) de compteur TX — "
+            report["findings"].append(f"ID {sid}: {len(gaps)} TX counter incoherence(s) — "
                                       + "; ".join(gaps[:5]))
         else:
             report["findings"].append(
-                f"ID {sid}: avance du compteur TX conforme au temps écoulé sur {len(fr)} trame(s) "
-                f"(~{TX_TICKS_PER_S} tick/s ; {duplicates} duplicate(s) de livraison RMT, "
-                f"{missed} rafale(s) manquée(s))")
+                f"ID {sid}: TX counter advance consistent with elapsed time over {len(fr)} frame(s) "
+                f"(~{TX_TICKS_PER_S} tick/s; {duplicates} RMT delivery duplicate(s), "
+                f"{missed} missed burst(s))")
         rain = [x["rain_mm"] for x in fr]
         if any(y < x for x, y in zip(rain, rain[1:])):
-            report["findings"].append(f"ID {sid}: pluie décroissante {rain} → suspicion de mauvais mapping d'octets")
-            report["reasons_fail"].append("pluie décroissante")
+            report["findings"].append(f"ID {sid}: decreasing rain {rain} → suspicion of wrong byte mapping")
+            report["reasons_fail"].append("decreasing rain")
         else:
-            report["findings"].append(f"ID {sid}: pluie monotone OK ({rain[0]} → {rain[-1]} mm)")
+            report["findings"].append(f"ID {sid}: monotonic rain OK ({rain[0]} → {rain[-1]} mm)")
         bad = [x for x in fr if x["problems"]]
         if bad:
             report["findings"].append(
-                f"ID {sid}: {len(bad)} trame(s) à valeurs implausibles — "
+                f"ID {sid}: {len(bad)} frame(s) with implausible values — "
                 + "; ".join(sorted({p for x in bad for p in x["problems"]})[:6])
             )
-            report["reasons_fail"].append("valeurs implausibles (ou incohérence lux/UV)")
+            report["reasons_fail"].append("implausible values (or lux/UV incoherence)")
         else:
-            report["findings"].append(f"ID {sid}: toutes les valeurs sont dans les plages physiques "
-                                      "et la cohérence lux/UV est respectée")
+            report["findings"].append(f"ID {sid}: all values are within the physical ranges "
+                                      "and the lux/UV coherence holds")
 
     # Cadence: compare timestamps when they exist.
     cadence_ok = None
@@ -255,23 +255,23 @@ def main() -> int:
         significant = [d for d in deltas if d > 1]
         cadence_ok = bool(significant) and near20 >= max(1, int(0.6 * len(significant)))
         report["findings"].append(
-            f"cadence: {near20}/{len(significant)} intervalles significatifs entre 15 et 25 s "
-            f"— la station émet une rafale toutes les 20 s"
+            f"cadence: {near20}/{len(significant)} significant intervals between 15 and 25 s "
+            f"— the station emits one burst every 20 s"
         )
         if not cadence_ok:
-            report["reasons_fail"].append("cadence de la station non retrouvée (~20 s attendu)")
+            report["reasons_fail"].append("station cadence not found (~20 s expected)")
 
     if valid:
         f0 = valid[0]
         if args.ref_temp is not None:
             d = abs(f0["temp_c"] - args.ref_temp)
             report["findings"].append(
-                f"recoupement température: station {f0['temp_c']} °C vs référence {args.ref_temp} °C (écart {d:.1f})"
+                f"temperature cross-check: station {f0['temp_c']} °C vs reference {args.ref_temp} °C (gap {d:.1f})"
             )
         if args.ref_hum is not None:
             d = abs(f0["humidity"] - args.ref_hum)
             report["findings"].append(
-                f"recoupement humidité: station {f0['humidity']} % vs référence {args.ref_hum} % (écart {d:.1f})"
+                f"humidity cross-check: station {f0['humidity']} % vs reference {args.ref_hum} % (gap {d:.1f})"
             )
 
     # Frame-by-frame comparison with the values published by the firmware C++.
@@ -282,43 +282,43 @@ def main() -> int:
         report["firmware_mismatch_count"] = len(mismatches)
         if mismatches:
             report["findings"].append(
-                f"firmware: DÉSACCORD entre le C++ et le décodeur Python sur {len(mismatches)} champ(s) — "
+                f"firmware: DISAGREEMENT between the C++ and the Python decoder on {len(mismatches)} field(s) — "
                 + "; ".join(mismatches[:5]))
-            report["reasons_fail"].append("désaccord firmware / décodeur indépendant")
+            report["reasons_fail"].append("firmware / independent decoder disagreement")
         else:
             report["findings"].append(
-                f"firmware: les {len(firmware_frames)} trames publiées par le C++ concordent champ par champ "
-                "avec le décodeur Python indépendant")
+                f"firmware: the {len(firmware_frames)} frames published by the C++ agree field by field "
+                "with the independent Python decoder")
     elif firmware_frames and not valid:
         report["findings"].append(
-            f"firmware: {len(firmware_frames)} trame(s) publiée(s) mais aucune ligne RAW exploitable — "
-            "comparaison impossible")
-        report["reasons_fail"].append("aucune trame RAW exploitable pour recouper le firmware")
+            f"firmware: {len(firmware_frames)} frame(s) published but no usable RAW line — "
+            "comparison impossible")
+        report["reasons_fail"].append("no usable RAW frame to cross-check the firmware")
 
     # VERDICT: everything must agree; one entry in reasons_fail is enough to refuse.
     if len(valid) < args.min_valid:
-        report["reasons_fail"].append(f"moins de {args.min_valid} trames valides ({len(valid)})")
+        report["reasons_fail"].append(f"fewer than {args.min_valid} valid frames ({len(valid)})")
     if sequence_breaks:
-        report["reasons_fail"].append(f"{sequence_breaks} incohérence(s) de compteur TX")
+        report["reasons_fail"].append(f"{sequence_breaks} TX counter incoherence(s)")
     if frames and not valid:
-        report["reasons_fail"].append("aucune trame valide")
+        report["reasons_fail"].append("no valid frame")
     report["verdict"] = "PASS" if not report["reasons_fail"] else "FAIL"
 
     print(json.dumps(report, ensure_ascii=False, indent=2))
     if args.json_out:
         atomic_write_json(args.json_out, report)
 
-    print("\n=== RÉSUMÉ ===", file=sys.stderr)
+    print("\n=== SUMMARY ===", file=sys.stderr)
     print(
-        f"frames={len(frames)} valides={len(valid)} "
-        f"(checksum KO={report['checksum_fail']}, compteur KO={report['counter_fail']}) "
-        f"verdict={report['verdict']} (seuil {args.min_valid})",
+        f"frames={len(frames)} valid={len(valid)} "
+        f"(checksum KO={report['checksum_fail']}, counter KO={report['counter_fail']}) "
+        f"verdict={report['verdict']} (threshold {args.min_valid})",
         file=sys.stderr,
     )
     for f in report["findings"]:
         print(" - " + f, file=sys.stderr)
     if report["reasons_fail"]:
-        print(" MOTIFS DE REFUS : " + "; ".join(report["reasons_fail"]), file=sys.stderr)
+        print(" REFUSAL REASONS: " + "; ".join(report["reasons_fail"]), file=sys.stderr)
     return 0 if report["verdict"] == "PASS" else 1
 
 

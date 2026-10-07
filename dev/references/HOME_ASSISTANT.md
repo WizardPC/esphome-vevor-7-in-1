@@ -1,70 +1,70 @@
-# Intégration Home Assistant — ce qui est vérifié, ce qui est scriptable
+# Home Assistant integration — what is verified, what is scriptable
 
-HA : `192.168.2.104`. Add-on visé : **ESPHome Device Builder** (slug `esphome`).
+HA: `192.168.2.104`. Target add-on: **ESPHome Device Builder** (slug `esphome`).
 
-> **Statut au 02/10/2026** (bandeau ajouté, commit 9693dbe). Les faits sur l'add-on ci-dessous (slug,
-> image, version 2026.9.1, `uart: true`, `map: config:rw`) sont des lectures de dépôt : valables comme
-> référence. **En revanche, la section « Sondage à faire dès que le token HA est disponible » n'est pas
-> applicable en l'état** : le token HA (`~/projets/vevor-7in1/.ha_token`) est désormais **présent**
-> (183 o, 30/09), mais **l'API HA sur le port 8123 ne répond pas** — mesuré le 02/10 :
-> `http://192.168.2.104:8123/api/` échoue, seul le port 80 (observateur HAOS) répond. Cohérent avec
-> `state/PROGRESS.md` (« aucun service sur 8123 », 30/09). Ne pas compter sur un recoupement météo via
-> l'API HA tant que HA Core ne réécoute pas sur 8123.
+> **Status as of 02/10/2026** (banner added, commit 9693dbe). The facts about the add-on below (slug,
+> image, version 2026.9.1, `uart: true`, `map: config:rw`) are repository readings: valid as
+> references. **However, the section "Polling to do as soon as the HA token is available" is not
+> applicable as it stands**: the HA token (`~/projets/vevor-7in1/.ha_token`) is now **present**
+> (183 B, 30/09), but **the HA API on port 8123 does not respond** — measured on 02/10:
+> `http://192.168.2.104:8123/api/` fails, only port 80 (HAOS observer) responds. Consistent with
+> `state/PROGRESS.md` ("no service on 8123", 30/09). Do not count on a weather cross-check via
+> the HA API as long as HA Core does not listen again on 8123.
 
 
-## Faits vérifiés sur l'add-on (lus dans `esphome/home-assistant-addon`, branche main)
+## Verified facts about the add-on (read in `esphome/home-assistant-addon`, branch main)
 
-- `slug: esphome`, nom « ESPHome Device Builder », image `ghcr.io/esphome/esphome-hassio`,
-  version `2026.9.1` — même version qu'ESPHome installé dans ce conteneur.
-- `uart: true` → **l'add-on a accès aux ports série de l'hôte HA** : il peut flasher
-  l'ESP32 en USB si la carte est branchée sur la machine qui fait tourner HA.
-- `map: config:rw` → les configurations vivent dans `/config/esphome` (dossier HA).
-- `ingress: true`, `ingress_port: 0` → l'interface est normalement accessible via l'ingress
-  HA (donc derrière l'authentification HA).
-- `ports: 6052/tcp: null` → **le port 6052 n'est pas exposé par défaut** ; on peut l'ouvrir
-  dans la configuration de l'add-on (`6052/tcp: 6052`) pour parler directement au dashboard.
-- Options de configuration : `leave_front_door_open` (désactive toute authentification du
-  dashboard — uniquement acceptable sur un LAN de confiance), `default_compile_process_limit`,
+- `slug: esphome`, name "ESPHome Device Builder", image `ghcr.io/esphome/esphome-hassio`,
+  version `2026.9.1` — same version as the ESPHome installed in this container.
+- `uart: true` → **the add-on has access to the HA host's serial ports**: it can flash
+  the ESP32 over USB if the board is plugged into the machine running HA.
+- `map: config:rw` → the configurations live in `/config/esphome` (HA folder).
+- `ingress: true`, `ingress_port: 0` → the interface is normally accessible via HA
+  ingress (therefore behind HA authentication).
+- `ports: 6052/tcp: null` → **port 6052 is not exposed by default**; it can be opened
+  in the add-on configuration (`6052/tcp: 6052`) to talk directly to the dashboard.
+- Configuration options: `leave_front_door_open` (disables all authentication of the
+  dashboard — only acceptable on a trusted LAN), `default_compile_process_limit`,
   `home_assistant_dashboard_integration`.
 
-## API du dashboard (extraite du bundle officiel `esphome-dashboard`)
+## Dashboard API (extracted from the official `esphome-dashboard` bundle)
 
-- `POST /compile?configuration=<fichier>.yaml` (et `only_generate=true`) → renvoie le journal
-  de compilation en flux. **C'est l'endpoint le plus utile : il compile sans authentification
-  complexe dès lors que le port est exposé.**
-- `GET /edit?configuration=<fichier>.yaml` → renvoie le contenu YAML (permet de relire ce
-  qu'il y a dans HA).
-- `GET|POST /delete?configuration=...` → supprime une configuration.
-- L'**installation (flash) et le suivi des logs passent par un WebSocket**, pas par ces
-  endpoints. Le format exact des messages reste à confirmer par sondage une fois l'accès
-  ouvert (chemin et protocole non documentés publiquement).
+- `POST /compile?configuration=<file>.yaml` (and `only_generate=true`) → returns the compilation
+  log as a stream. **This is the most useful endpoint: it compiles without complex
+  authentication as soon as the port is exposed.**
+- `GET /edit?configuration=<file>.yaml` → returns the YAML content (allows re-reading what
+  is in HA).
+- `GET|POST /delete?configuration=...` → deletes a configuration.
+- **Installation (flash) and log follow-up go through a WebSocket**, not through these
+  endpoints. The exact message format remains to be confirmed by polling once access is
+  open (path and protocol not publicly documented).
 
-## Conséquence pratique : le partage des rôles
+## Practical consequence: the role split
 
-| Étape | Où | Pourquoi |
+| Step | Where | Why |
 |---|---|---|
-| Compilation | ce conteneur (`tools/build.sh`) | toolchain déjà opérationnelle et vérifiée |
-| Premier flash | add-on ESPHome Builder (USB sur l'hôte HA) **ou** web.esphome.io | l'add-on a l'accès UART, pas ce conteneur |
-| Flashs suivants | ce conteneur, OTA (`tools/flash.sh <IP>`) | pas de dépendance à HA, plus rapide |
-| Logs | ce conteneur, API native port 6053 | structuré, filtrable, indépendant de HA |
-| Balayage fréquence | ce conteneur, entité `number` via l'API | aucun reflash nécessaire |
-| Valeurs finales | intégration ESPHome dans HA | la carte est découverte et suivie normalement |
+| Compilation | this container (`tools/build.sh`) | toolchain already operational and verified |
+| First flash | ESPHome Builder add-on (USB on the HA host) **or** web.esphome.io | the add-on has UART access, this container does not |
+| Subsequent flashes | this container, OTA (`tools/flash.sh <IP>`) | no dependency on HA, faster |
+| Logs | this container, native API port 6053 | structured, filterable, independent of HA |
+| Frequency sweep | this container, `number` entity via the API | no reflash needed |
+| Final values | ESPHome integration in HA | the board is discovered and tracked normally |
 
-Palliatif qui supprime même le premier flash manuel : passer le port USB de l'hôte Proxmox
-dans le LXC (voir README). L'agent flashe alors tout lui-même, en USB.
+Palliative that even removes the first manual flash: pass the Proxmox host's USB port
+into the LXC (see README). The agent then flashes everything itself, over USB.
 
-## Sondage à faire dès que le token HA est disponible
+## Polling to do as soon as the HA token is available
 
 ```bash
 H=http://192.168.2.104:8123
 TOKEN=$(<~/projets/vevor-7in1/.ha_token)
-curl -s -H "Authorization: Bearer $TOKEN" $H/api/ | jq .
-curl -s -H "Authorization: Bearer $TOKEN" $H/api/config | jq '{latitude, longitude, version}'
-# add-on présent ? état ? port exposé ? (nécessite un compte admin)
-curl -s -H "Authorization: Bearer $TOKEN" $H/api/hassio/addons/esphome/info | jq '{state, ingress_url, network, options}'
-# le dashboard répond-il directement ?
+curl -s -H "Authorization: Bearer ***" $H/api/ | jq .
+curl -s -H "Authorization: Bearer ***" $H/api/config | jq '{latitude, longitude, version}'
+# add-on present? state? port exposed? (needs an admin account)
+curl -s -H "Authorization: Bearer ***" $H/api/hassio/addons/esphome/info | jq '{state, ingress_url, network, options}'
+# does the dashboard respond directly?
 curl -s -o /dev/null -w '%{http_code}\n' http://192.168.2.104:6052/devices
 ```
 
-Le token sert aussi au recoupement météo indépendant : HA connaît la latitude/longitude
-(et éventuellement une station météo locale) pour comparer la température/humidité décodée.
+The token is also used for the independent weather cross-check: HA knows the latitude/longitude
+(and possibly a local weather station) to compare the decoded temperature/humidity.

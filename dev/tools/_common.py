@@ -68,11 +68,11 @@ def key_from_yaml(path=None) -> str | None:
     name = parts[1] if len(parts) > 1 else ""
     secrets = yaml_path.parent / "secrets.yaml"
     if not name or not secrets.exists():
-        raise FileNotFoundError(f"!secret {name!r} demandé mais {secrets} est absent")
+        raise FileNotFoundError(f"!secret {name!r} requested but {secrets} is missing")
     sm = re.search(rf"^{re.escape(name)}:\s*(\S+)",
                    secrets.read_text(encoding="utf-8", errors="replace"), re.M)
     if not sm:
-        raise FileNotFoundError(f"clé {name!r} absente de {secrets}")
+        raise FileNotFoundError(f"key {name!r} missing from {secrets}")
     return sm.group(1).strip().strip("\"'")
 
 
@@ -124,9 +124,9 @@ class Device:
         await self.cli.disconnect()
 
     async def wait_states(self, timeout_s: float = 10.0, min_states: int = 1) -> int:
-        """Attend d'avoir reçu au moins `min_states` états. Sans cela, lire 0
-        confond « puce mute » et « rien reçu côté API ». Renvoie le nombre
-        d'états reçus."""
+        """Wait until at least `min_states` states have been received. Otherwise, reading 0
+        confuses a "mute chip" with "nothing received on the API side". Returns the number
+        of states received."""
         for _ in range(max(1, int(timeout_s / 0.25))):
             if len(self.state) >= min_states:
                 break
@@ -150,7 +150,7 @@ class Device:
         """Write the frequency; raise SystemExit if the entity is missing."""
         k = self.key_of(FREQ_RE)
         if k is None:
-            raise SystemExit("entité « Fréquence CC1101 » introuvable — firmware à jour ? (--list)")
+            raise SystemExit("entity \"CC1101 frequency\" not found — firmware up to date? (--list)")
         return self.cli.number_command(k, mhz)
 
     def counts(self) -> tuple[float, float, float | None]:
@@ -166,7 +166,7 @@ class Device:
                 rssi = None
         except (TypeError, ValueError):
             rssi = None
-        return num(self.get("Trames valides")), num(self.get("Trames rejetées")), rssi
+        return num(self.get("Valid frames")), num(self.get("Rejected frames")), rssi
 
 
 # --- Variant table: single source of truth ----------------------------------
@@ -174,19 +174,19 @@ class Device:
 VARIANTS: dict[str, tuple[pathlib.Path, str, pathlib.Path, str]] = {
     "temoin": (TEMOIN / "witness-test", "witness.yaml",
                TEMOIN / "witness-test/.esphome/build/vevor-weather-station/build/firmware.ota.bin",
-               "projet de référence (WizardPC/esphome-vevor-7in1), compilé par nos soins"),
+               "reference project (WizardPC/esphome-vevor-7in1), compiled by us"),
     "origine": (ROOT / "esphome", "vevor-7in1.yaml",
                 DEV / "build/variants/nous_pilote_origine.ota.bin",
-                "pilote d'origine d'ESPHome, notre YAML"),
+                "ESPHome original driver, our YAML"),
     "prod": (ROOT / "esphome", "vevor-7in1.yaml",
              DEV / "build/variants/nous_prod.ota.bin",
-             "notre firmware de production"),
+             "our production firmware"),
     "prod_corrige": (ROOT / "esphome", "vevor-7in1.yaml",
                      DEV / "build/variants/nous_prod_corrige.ota.bin",
-                     "notre pilote + correctif du 03/10 (interruption GDO0 attachée avant tout retour anticipé)"),
+                     "our driver + the 03/10 fix (GDO0 interrupt attached before any early return)"),
     "prod_avant_revue": (ROOT / "esphome", "vevor-7in1.yaml",
                          DEV / "build/variants/prod_avant_revue.ota.bin",
-                         "notre firmware d'avant la revue"),
+                         "our firmware from before the review"),
 }
 
 
@@ -196,16 +196,17 @@ def variant_of(name: str) -> tuple[pathlib.Path, str, pathlib.Path, str]:
         return VARIANTS[name]
     except KeyError:
         raise SystemExit(
-            f"variante inconnue : {name!r} — disponibles : {', '.join(sorted(VARIANTS))}")
+            f"unknown variant: {name!r} — available: {', '.join(sorted(VARIANTS))}")
 
 
 # --- Shared patterns --------------------------------------------------------
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 # Anchored at line start: TS_RE must not match a [12:34:56] mid-line.
 TS_RE = re.compile(r"^\[(\d{2}:\d{2}:\d{2})\]")
-# Anchored on purpose: unanchored `fr[ée]quence` also matched the "Offset fréquence" sensor,
-# whose key silently ignores number_command — the setting did nothing. Never unanchor it.
-FREQ_RE = re.compile(r"^\s*fr[ée]quence", re.I)      # entity "Fréquence CC1101"
+# Anchored on purpose: an unanchored pattern also matched the "Offset" sensor, whose name
+# contains the same French word — its key silently ignores number_command and the setting did
+# nothing. Never unanchor it.
+FREQ_RE = re.compile(r"cc1101 frequency", re.I)      # entity "CC1101 frequency"
 VALID_RE = re.compile(r"^\s*trames valides", re.I)
 REJECT_RE = re.compile(r"^\s*trames rejet", re.I)
 RSSI_RE = re.compile(r"^\s*rssi\b", re.I)

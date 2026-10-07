@@ -2,7 +2,7 @@
 """Probe the firmware counters over the API, WITHOUT depending on the log stream.
 
 A log capture can show no `V7IN1 RAW` line either because the receiver demodulates nothing or
-because the log subscription dropped. The "Trames valides" / "Trames rejetées" counters are state
+because the log subscription dropped. The "Valid frames" / "Rejected frames" counters are state
 entities that advance on any packet, independent of the log stream; comparing the two resolves
 the doubt.
 
@@ -47,13 +47,13 @@ async def run(host: str, port: int, key: str | None, seconds: float) -> tuple[in
         # 0 entities received means NOTHING was measured, NOT "no packet": without this distinct
         # verdict a "frozen counter" reads as radio silence by mistake.
         if n_states0 == 0 or len(dev.state) == 0:
-            verdict = "MESURE NULLE (aucun état d'entité reçu — rien n'a été mesuré)"
+            verdict = "NULL MEASUREMENT (no entity state received — nothing was measured)"
             rc = RC_MESURE_NULLE
         elif delta > 0:
-            verdict = "RECEPTION VIVANTE"
+            verdict = "RECEPTION ALIVE"
             rc = RC_OK
         else:
-            verdict = "AUCUNE TRAME (compteurs figés sur la fenêtre — résultat négatif)"
+            verdict = "NO FRAME (counters frozen over the window — negative result)"
             rc = RC_OK
         return rc, {
             "fenetre_s": round(t1 - t0, 1),
@@ -88,9 +88,9 @@ def main() -> int:
     print(json.dumps(rep, ensure_ascii=False, indent=2))
     print("# " + rep["verdict"])
     if a.json:
-        print(f"# rapport écrit (atomique): {atomic_write_json(a.json, rep)}")
+        print(f"# report written (atomic): {atomic_write_json(a.json, rep)}")
     if rc == RC_MESURE_NULLE:
-        print("# MESURE NULLE — rien n'a été mesuré (code retour 3)", file=sys.stderr)
+        print("# NULL MEASUREMENT — nothing was measured (return code 3)", file=sys.stderr)
     return rc
 
 

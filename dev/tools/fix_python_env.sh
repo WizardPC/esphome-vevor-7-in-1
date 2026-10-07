@@ -7,11 +7,11 @@ cd "$(dirname "$0")/.."
 DEV="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT="$(cd "$DEV/.." && pwd)"
 
-echo "== 1. uv dans le venv actuel =="
+echo "== 1. uv in the current venv =="
 if [ ! -x .venv/bin/uv ]; then .venv/bin/pip install -q uv; fi
 .venv/bin/uv --version
 
-echo "== 2. Python autonome =="
+echo "== 2. standalone Python =="
 UVP="$(.venv/bin/uv python dir)"
 # Target the uv-managed Python explicitly (not the python of the current venv).
 SYS_PY="$(ls -d "$UVP"/cpython-3.13.*/bin/python3.13 2>/dev/null | head -1)"
@@ -19,22 +19,22 @@ if [ -z "$SYS_PY" ]; then
   .venv/bin/uv python install 3.13
   SYS_PY="$(ls -d "$UVP"/cpython-3.13.*/bin/python3.13 | head -1)"
 fi
-echo "python autonome: $SYS_PY"
+echo "standalone python: $SYS_PY"
 "$SYS_PY" -c "import ensurepip, sys; print('ensurepip OK ->', ensurepip.__file__); print(sys.version)"
 
-echo "== 3. reconstruction du venv du projet =="
+echo "== 3. rebuilding the project venv =="
 rm -rf "$ROOT/.venv"
 "$SYS_PY" -m venv "$ROOT/.venv"
 "$ROOT/.venv/bin/python" -m pip --version
 
-echo "== 4. réinstallation d'ESPHome =="
+echo "== 4. reinstalling ESPHome =="
 "$ROOT/.venv/bin/pip" install -q --upgrade pip wheel
 "$ROOT/.venv/bin/pip" install -q esphome aioesphomeapi
 "$ROOT/.venv/bin/esphome" version
 
-echo "== 5. test : le python du venv sait-il créer un venv avec pip ? =="
+echo "== 5. test: can the venv python create a venv with pip? =="
 rm -rf /tmp/venvtest
 "$ROOT/.venv/bin/python" -m venv /tmp/venvtest
 /tmp/venvtest/bin/pip --version && echo "TEST VENV: OK"
 rm -rf /tmp/venvtest
-echo "== repairation terminée =="
+echo "== repair finished =="

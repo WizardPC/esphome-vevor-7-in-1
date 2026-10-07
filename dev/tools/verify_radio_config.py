@@ -46,7 +46,7 @@ def read_subs(path: pathlib.Path) -> dict:
     for name in ("freq_mhz", "deviation_khz", "symbol_rate", "bw_khz"):
         m = re.search(rf'^\s*{name}:\s*"([^"]+)"', txt, re.M)
         if not m:
-            raise SystemExit(f"substitution absente du YAML : {name}")
+            raise SystemExit(f"substitution missing from the YAML: {name}")
         subs[name] = float(m.group(1))
     # other radio settings to check
     for key, default in (("num_preamble", "4"), ("packet_length", "21"),
@@ -144,49 +144,49 @@ def main() -> int:
         if not cond:
             ok = False
 
-    check("frequence", abs(res["freq_err_hz"]) <= args.tol_hz,
-          f"demandé {f_hz/1e6:.6f} MHz -> réel {f_actual/1e6:.6f} MHz "
+    check("frequency", abs(res["freq_err_hz"]) <= args.tol_hz,
+          f"requested {f_hz/1e6:.6f} MHz -> actual {f_actual/1e6:.6f} MHz "
           f"(err {res['freq_err_hz']:+.1f} Hz)")
     check("deviation_vs_spec",
           abs(res["dev_err_hz"]) <= 0.10 * y["deviation_khz"] * 1000.0,
-          f"demandé {y['deviation_khz']:.0f} kHz -> réel {dev_actual/1000:.1f} kHz")
-    check("bande_passante_vs_spec",
+          f"requested {y['deviation_khz']:.0f} kHz -> actual {dev_actual/1000:.1f} kHz")
+    check("bandwidth_vs_spec",
           abs(res["bw_err_hz"]) <= 0.25 * y["bw_khz"] * 1000.0,
-          f"demandé {y['bw_khz']:.0f} kHz -> réel {bw_actual/1000:.1f} kHz")
-    check("debit_vs_spec", abs(res["symbol_rate_err"]) <= 0.02 * y["symbol_rate"],
-          f"demandé {y['symbol_rate']:.0f} -> réel {sr_actual:.0f} bauds")
+          f"requested {y['bw_khz']:.0f} kHz -> actual {bw_actual/1000:.1f} kHz")
+    check("rate_vs_spec", abs(res["symbol_rate_err"]) <= 0.02 * y["symbol_rate"],
+          f"requested {y['symbol_rate']:.0f} -> actual {sr_actual:.0f} baud")
     # CC1101 rule: deviation + rate/2 must fit in BW/2 (otherwise aliasing)
-    check("dev_plus_demi_debit_dans_bw",
+    check("dev_plus_half_rate_in_bw",
           res["dev_plus_rate_over_bw2"] < 1.0,
-          f"(dev + débit/2) / (BW/2) = {res['dev_plus_rate_over_bw2']:.2f} "
-          f"(< 1 requis, sinon écrêtage des bits)")
+          f"(dev + rate/2) / (BW/2) = {res['dev_plus_rate_over_bw2']:.2f} "
+          f"(< 1 required, otherwise bit clipping)")
     check("sync_16_16_ca_54", y["sync_mode"] == "16/16" and y["sync1"].upper().endswith("CA")
           and y["sync0"].upper().endswith("54"),
           f"sync_mode={y['sync_mode']} sync1={y['sync1']} sync0={y['sync0']} "
-          f"(rtl_433 attend ...CA CA 54)")
-    check("pas_de_whitening_ni_manchester",
+          f"(rtl_433 expects ...CA CA 54)")
+    check("no_whitening_no_manchester",
           y["whitening"].lower() == "false" and y["manchester"].lower() == "false"
           and y["crc_enable"].lower() == "false",
           f"whitening={y['whitening']} manchester={y['manchester']} crc={y['crc_enable']} "
-          f"(rtl_433 démodule en NRZ sans blanchiment)")
-    check("mode_packet_longueur_fixe", y["packet_mode"].lower() == "true"
+          f"(rtl_433 demodulates NRZ without whitening)")
+    check("packet_mode_fixed_length", y["packet_mode"].lower() == "true"
           and y["packet_length"] == "21",
-          f"packet_mode={y['packet_mode']} packet_length={y['packet_length']} (21 octets utiles)")
+          f"packet_mode={y['packet_mode']} packet_length={y['packet_length']} (21 useful bytes)")
 
     res["ok"] = ok
     OUT.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(OUT, res)
 
-    print(f"# rapport -> {OUT}")
-    print(f"freq   : {f_hz/1e6:.3f} MHz demandé -> {f_actual/1e6:.6f} MHz "
+    print(f"# report -> {OUT}")
+    print(f"freq   : {f_hz/1e6:.3f} MHz requested -> {f_actual/1e6:.6f} MHz "
           f"(FREQ2..0 = 0x{FREQ2:02X} 0x{FREQ1:02X} 0x{FREQ0:02X})")
-    print(f"dev    : {y['deviation_khz']:.1f} kHz demandé -> {dev_actual/1000:.2f} kHz "
+    print(f"dev    : {y['deviation_khz']:.1f} kHz requested -> {dev_actual/1000:.2f} kHz "
           f"(DEVIATN=0x{DEVIATN:02X} E={DEVIATION_E} M={DEVIATION_M})")
-    print(f"BW     : {y['bw_khz']:.0f} kHz demandé -> {bw_actual/1000:.2f} kHz "
+    print(f"BW     : {y['bw_khz']:.0f} kHz requested -> {bw_actual/1000:.2f} kHz "
           f"(CHANBW_E={CHANBW_E} M={CHANBW_M})")
-    print(f"débit  : {y['symbol_rate']:.0f} demandé -> {sr_actual:.1f} bauds "
+    print(f"rate   : {y['symbol_rate']:.0f} requested -> {sr_actual:.1f} baud "
           f"(DRATE_E={DRATE_E} M={DRATE_M}, MDMCFG4=0x{MDMCFG4:02X})")
-    print(f"(dev + débit/2)/(BW/2) = {res['dev_plus_rate_over_bw2']:.2f}")
+    print(f"(dev + rate/2)/(BW/2) = {res['dev_plus_rate_over_bw2']:.2f}")
     for item in v:
         print(f"  [{'OK ' if item['ok'] else 'KO '}] {item['check']}: {item['detail']}")
     print("VERDICT:", "OK" if ok else "KO")

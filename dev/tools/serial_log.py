@@ -16,7 +16,7 @@ import time
 try:
     import serial  # pyserial
 except ImportError:
-    print("# pyserial absent : .venv/bin/pip install pyserial", file=sys.stderr)
+    print("# pyserial missing: .venv/bin/pip install pyserial", file=sys.stderr)
     sys.exit(3)
 
 
@@ -30,10 +30,10 @@ def main() -> int:
     try:
         ser = serial.Serial(args.port, args.baud, timeout=1)
     except Exception as exc:
-        print(f"# impossible d'ouvrir {args.port}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"# cannot open {args.port}: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
 
-    print(f"# lecture de {args.port} pendant {args.seconds}s à {args.baud} bauds", flush=True)
+    print(f"# reading {args.port} for {args.seconds}s at {args.baud} baud", flush=True)
     deadline = time.monotonic() + args.seconds
     buf = b""
     lines = 0
@@ -51,7 +51,7 @@ def main() -> int:
         pass
     finally:
         ser.close()
-    print(f"# fin de lecture ({lines} lignes)", flush=True)
+    print(f"# end of read ({lines} lines)", flush=True)
     return 0 if lines else 1
 
 

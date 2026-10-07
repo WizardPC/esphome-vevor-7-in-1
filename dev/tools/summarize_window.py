@@ -43,8 +43,8 @@ RAW = re.compile(r"V7IN1 RAW ([0-9a-f ]+)$")
 REJ = re.compile(r"V7IN1 REJ ([^$]*)$")
 
 # Vocabulary IDENTICAL to eval_frames.py (both must justify the same way).
-MOTIF_PLUIE = "pluie décroissante"
-MOTIF_IMPLAUSIBLE = "valeurs implausibles (ou incohérence lux/UV)"
+MOTIF_PLUIE = "decreasing rain"
+MOTIF_IMPLAUSIBLE = "implausible values (or lux/UV incoherence)"
 
 
 def plausibility_of(frame: dict) -> list[str]:
@@ -58,10 +58,10 @@ def plausibility_of(frame: dict) -> list[str]:
         probs = []
         d = frame.get("wind_dir_deg")
         if isinstance(d, (int, float)) and not 0 <= d <= 359:
-            probs.append(f"direction hors plage: {d}°")
+            probs.append(f"direction out of range: {d}°")
         r = frame.get("rain_mm")
         if isinstance(r, (int, float)) and r < 0:
-            probs.append("pluie négative")
+            probs.append("negative rain")
         return probs
 
 
@@ -82,11 +82,11 @@ def main() -> int:
     if not path.is_absolute():
         path = ROOT / path
     if not path.exists():
-        print(f"# MESURE NULLE — fichier absent : {path}", file=sys.stderr)
+        print(f"# NULL MEASUREMENT — file missing: {path}", file=sys.stderr)
         return RC_MESURE_NULLE
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     if not any(line.strip() for line in lines):
-        print(f"# MESURE NULLE — fichier vide ({path}) : rien n'a été mesuré", file=sys.stderr)
+        print(f"# NULL MEASUREMENT — empty file ({path}): nothing was measured", file=sys.stderr)
         return RC_MESURE_NULLE
 
     frames, rejects, raw_count = [], [], 0
@@ -121,18 +121,18 @@ def main() -> int:
         if not rp.is_absolute():
             rp = ROOT / rp
         if not rp.exists():
-            print(f"# ERREUR : rapport apparié absent : {rp}", file=sys.stderr)
+            print(f"# ERROR: paired report missing: {rp}", file=sys.stderr)
             return 2
         rapport = json.loads(rp.read_text(encoding="utf-8", errors="replace"))
 
     if not frames:
         say(f"=== {path.name} ===")
-        say(f"lignes lues : {len(lines)} | AUCUNE TRAME décodée | rejets firmware : {len(rejects)}")
+        say(f"lines read: {len(lines)} | NO decoded FRAME | firmware rejects: {len(rejects)}")
         res = {
             "fichier": args.logfile,
             "lignes": len(lines),
             "trames_decodues": 0,
-            "verdict": "AUCUNE TRAME",
+            "verdict": "NO FRAME",
             "motifs_fail": [],
         }
         if rapport:
@@ -143,14 +143,14 @@ def main() -> int:
             res["motifs_fail"] = list(rapport.get("reasons_fail") or [])
         if args.json:
             atomic_write_json(args.json, res)
-            say(f"résumé JSON : {args.json}")
+            say(f"JSON summary: {args.json}")
         if args.txt:
             atomic_write_text(args.txt, "\n".join(out_lines) + "\n")
         if res["verdict"] == "FAIL":
-            print("# VERDICT : FAIL (re-taken du rapport) — " + "; ".join(res["motifs_fail"]),
+            print("# VERDICT: FAIL (reused from the report) — " + "; ".join(res["motifs_fail"]),
                   file=sys.stderr)
             return 1
-        print("# AUCUNE TRAME : mesure faite, résultat négatif (code 0)", file=sys.stderr)
+        print("# NO FRAME: measurement done, negative result (code 0)", file=sys.stderr)
         return RC_OK
 
     times = sorted({f["_t"] for f in frames})           # distinct emissions (deduplicated)
@@ -223,44 +223,44 @@ def main() -> int:
         # A report from ANOTHER window must not validate/condemn this one.
         rl = rapport.get("logfile")
         if rl and pathlib.Path(str(rl)).name != path.name:
-            print(f"# AVERTISSEMENT : le rapport porte sur {rl!r}, pas sur {path.name!r} — "
-                  "les deux fichiers ne couvrent pas la même fenêtre", file=sys.stderr)
+            print(f"# WARNING: the report is about {rl!r}, not {path.name!r} — "
+                  "the two files do not cover the same window", file=sys.stderr)
             res["rapport_logfile_mismatch"] = True
 
     say(f"=== {path.name} ===")
-    say(f"lignes lues : {len(lines)} | trames décodées : {len(frames)} | "
-        f"émissions distinctes : {len(times)}")
-    say(f"fenêtre couverte : {res['debut']} → {res['fin']} ({span} s)")
+    say(f"lines read: {len(lines)} | decoded frames: {len(frames)} | "
+        f"distinct emissions: {len(times)}")
+    say(f"window covered: {res['debut']} → {res['fin']} ({span} s)")
     if deltas:
-        say(f"cadence : médiane {res['cadence_mediane_s']:.1f} s "
+        say(f"cadence: median {res['cadence_mediane_s']:.1f} s "
             f"(min {res['cadence_min_s']}, max {res['cadence_max_s']})")
-    say(f"trous > 30 s : {res['trous_sup_30s'] or 'aucun'}")
-    say(f"rejets FIRMWARE : {len(rejects)} {res['raisons_rejet_firmware'] if rejects else ''} "
-        f"(≠ verdict du décodeur indépendant)")
-    say(f"station(s) : {[hex(i) for i in res['ids'] if i is not None]}")
-    say(f"T {res['temperature_C']} °C | H {res['humidity_pct']} % | vent {res['vent_kmh']} | "
-        f"rafale {res['rafale_kmh']} | direction {res['wind_dir_deg']} ° | pluie {res['pluie_mm']} mm "
+    say(f"gaps > 30 s: {res['trous_sup_30s'] or 'none'}")
+    say(f"FIRMWARE rejects: {len(rejects)} {res['raisons_rejet_firmware'] if rejects else ''} "
+        f"(≠ independent decoder verdict)")
+    say(f"station(s): {[hex(i) for i in res['ids'] if i is not None]}")
+    say(f"T {res['temperature_C']} °C | H {res['humidity_pct']} % | wind {res['vent_kmh']} | "
+        f"gust {res['rafale_kmh']} | direction {res['wind_dir_deg']} ° | rain {res['pluie_mm']} mm "
         f"| UV {res['uv']} | lux {res['lux']}")
-    say(f"valeurs hors plage : {res['valeurs_hors_plage'] or 'aucune'}")
-    say("émissions par tranche de 10 min :")
+    say(f"out-of-range values: {res['valeurs_hors_plage'] or 'none'}")
+    say("emissions per 10-min bucket:")
     for k, v in res["emissions_par_10min"].items():
         say(f"   {k:>10s} : {'#' * min(v, 60)} {v}")
-    say(f"VERDICT : {verdict}" + (f" — motifs : {'; '.join(motifs)}" if motifs else ""))
+    say(f"VERDICT: {verdict}" + (f" — reasons: {'; '.join(motifs)}" if motifs else ""))
 
     if args.json:
         atomic_write_json(args.json, res)
-        say(f"résumé JSON : {args.json}")
+        say(f"JSON summary: {args.json}")
     if args.txt:
         atomic_write_text(args.txt, "\n".join(out_lines) + "\n")
 
     if verdict == "FAIL":
         # Safety: never a reassuring summary when the report says FAIL.
-        print(f"# VERDICT : FAIL — {len(motifs)} motif(s) : " + "; ".join(motifs), file=sys.stderr)
-        print("# Ce résumé NE PEUT PAS afficher « 0 rejet » sans qualification : "
-              "`rejets_firmware` compte les lignes V7IN1 REJ du firmware, PAS le verdict "
-              "du décodeur indépendant.", file=sys.stderr)
+        print(f"# VERDICT: FAIL — {len(motifs)} reason(s): " + "; ".join(motifs), file=sys.stderr)
+        print("# This summary CANNOT display \"0 reject\" without qualification: "
+              "`rejets_firmware` counts the firmware's V7IN1 REJ lines, NOT the verdict "
+              "of the independent decoder.", file=sys.stderr)
         return 1
-    print("# VERDICT : PASS", file=sys.stderr)
+    print("# VERDICT: PASS", file=sys.stderr)
     return RC_OK
 
 

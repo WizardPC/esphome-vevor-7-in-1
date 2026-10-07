@@ -10,18 +10,18 @@ def num(x):
 raw = [(s["last_changed"][:19], s["state"]) for s in load(P + "last_raw_frame")]
 raw = [(t, s) for t, s in raw if re.match(r"^[0-9a-f]{2}( [0-9a-f]{2}){20}$", str(s))]
 bad = [(t, s) for t, s in raw if s.split()[8:11] == ["02", "80", "80"]]
-print("trames brutes : %d | 02 80 80 : %d" % (len(raw), len(bad)))
+print("raw frames: %d | 02 80 80: %d" % (len(raw), len(bad)))
 FLASH = "2026-10-04T22:25:04"
-print("02 80 80 AVANT le reflash :", sum(1 for t, _ in bad if t < FLASH))
-print("02 80 80 APRES le reflash :", sum(1 for t, _ in bad if t >= FLASH))
+print("02 80 80 BEFORE the reflash:", sum(1 for t, _ in bad if t < FLASH))
+print("02 80 80 AFTER the reflash:", sum(1 for t, _ in bad if t >= FLASH))
 for t, _ in bad:
-    if t >= FLASH: print("   APRES:", t)
-print("repartition horaire des 02 80 80 :", dict(sorted(collections.Counter(t[:13] for t, _ in bad).items())))
+    if t >= FLASH: print("   AFTER:", t)
+print("hourly distribution of 02 80 80:", dict(sorted(collections.Counter(t[:13] for t, _ in bad).items())))
 print()
-print("premiere trame brute :", raw[0][0], "| derniere :", raw[-1][0])
-print("trames brutes apres le reflash :", sum(1 for t, _ in raw if t >= FLASH))
+print("first raw frame:", raw[0][0], "| last:", raw[-1][0])
+print("raw frames after the reflash:", sum(1 for t, _ in raw if t >= FLASH))
 
-print("\n=== SEGMENTS ENTRE REDEMARRAGES (valid_frames) ===")
+print("\n=== SEGMENTS BETWEEN RESTARTS (valid_frames) ===")
 h = [(s["last_changed"][:19], num(s.get("state"))) for s in load(P + "valid_frames")]
 h = [(t, v) for t, v in h if v is not None]
 seg, segs = [], []
@@ -36,10 +36,10 @@ for s in segs:
     if len(s) < 1: continue
     mx = max(v for _, v in s)
     tot += mx
-    print("  %s -> %s : max valid=%g  (%d etats)" % (s[0][0], s[-1][0], mx, len(s)))
-print("  TOTAL trames valides cumulees sur la fenetre :", tot)
+    print("  %s -> %s : max valid=%g  (%d states)" % (s[0][0], s[-1][0], mx, len(s)))
+print("  TOTAL valid frames accumulated over the window:", tot)
 
-print("\n=== last_verdict : valeurs observees ===")
+print("\n=== last_verdict: observed values ===")
 lv = load(P + "last_verdict")
 c = collections.Counter(str(s.get("state")) for s in lv)
 for k, v in c.most_common(15): print("   %-40s %d" % (k[:40], v))

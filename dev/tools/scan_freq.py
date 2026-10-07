@@ -2,7 +2,7 @@
 """Sweeps the CC1101 frequency live through the ESPHome native API and measures the signal.
 
 Main autonomy tool: no need to rebuild/reflash to search for the station. It drives the
-firmware's `number` entity "Fréquence CC1101" and reads the received frame count (valid +
+firmware's `number` entity "CC1101 frequency" and reads the received frame count (valid +
 rejected) and the RSSI at each step.
 
 Usage:
@@ -16,7 +16,7 @@ A step must last at least ~25 s: the station only emits one burst every 20 s.
 Return codes:
     0  sweep measured; a total of 0 frames is a RESULT ("no frame"), not a failure;
     2  technical failure: connection, exception, or frequency write NOT accepted (read back != requested);
-    3  NULL MEASUREMENT: the "Trames valides" entity is missing / no state received — nothing was measured.
+    3  NULL MEASUREMENT: the "Valid frames" entity is missing / no state received — nothing was measured.
 """
 from __future__ import annotations
 
@@ -45,14 +45,14 @@ async def do_set(dev: Device, mhz: float) -> int:
     the command did not arrive."""
     dev.set_freq(mhz)
     await asyncio.sleep(1.5)
-    got = dev.get("Fréquence CC1101")
-    print(f"# fréquence réglée sur {mhz} MHz — entité relue : {got}")
+    got = dev.get("CC1101 frequency")
+    print(f"# frequency set to {mhz} MHz — entity read back: {got}")
     try:
         ok = got is not None and abs(float(got) - mhz) <= 0.001
     except (TypeError, ValueError):
         ok = False
     if not ok:
-        print(f"# ERREUR : la carte n'a PAS pris la valeur (lue {got!r}) — voir FREQ_RE",
+        print(f"# ERROR: the board did NOT take the value (read {got!r}) — see FREQ_RE",
               file=sys.stderr)
         return RC_ERREUR
     return RC_OK
@@ -61,10 +61,10 @@ async def do_set(dev: Device, mhz: float) -> int:
 async def scan(dev: Device, start: float, stop: float, step: float,
                dwell: float, settle: float) -> list[dict] | None:
     """Returns the measured steps, or None if NOTHING could be measured (missing entity)."""
-    # Without the "Trames valides" entity no counter is readable: refuse to conclude
+    # Without the "Valid frames" entity no counter is readable: refuse to conclude
     # (RC_MESURE_NULLE in main).
     if not dev.has(VALID_RE):
-        print("# MESURE NULLE : entité « Trames valides » absente — aucun compteur à lire",
+        print("# NULL MEASUREMENT: \"Valid frames\" entity missing — no counter to read",
               file=sys.stderr)
         return None
     freqs = []
@@ -99,7 +99,7 @@ async def scan(dev: Device, start: float, stop: float, step: float,
         results.append(row)
         print(
             f"{mhz:8.3f} MHz  frames={int(row['frames']):3d} "
-            f"(valides={int(row['valid']):3d} rejetées={int(row['rejected']):3d})  "
+            f"(valid={int(row['valid']):3d} rejected={int(row['rejected']):3d})  "
             f"rssi_max={row['rssi_max']}  rssi_moy={row['rssi_mean']}",
             flush=True,
         )
@@ -138,25 +138,25 @@ def main() -> int:
     except SystemExit:
         raise
     except Exception as exc:
-        print(f"# ERREUR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"# ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
         return RC_ERREUR
 
     if not rows:
         if rc == RC_MESURE_NULLE:
-            print("# MESURE NULLE — rien n'a été mesuré (pas de compteur lisible)", file=sys.stderr)
+            print("# NULL MEASUREMENT — nothing was measured (no readable counter)", file=sys.stderr)
         return rc
 
     best = max(rows, key=lambda r: (r["frames"], -(r["rssi_mean"] or -999)))
-    print(f"\n# meilleur palier: {best['freq_mhz']} MHz "
-          f"({int(best['frames'])} trames, rssi_moy={best['rssi_mean']})")
+    print(f"\n# best step: {best['freq_mhz']} MHz "
+          f"({int(best['frames'])} frames, rssi_mean={best['rssi_mean']})")
     total = sum(r["frames"] for r in rows)
     if total == 0:
-        print("# AUCUNE TRAME sur toute la plage (mesure faite) : vérifier SPI/alim, puis "
-              "déviation, bande passante, syncword, câblage et antenne "
-              "(voir MISSION.md § ordre de diagnostic)")
+        print("# NO FRAME over the whole range (measurement done): check SPI/power, then "
+              "deviation, bandwidth, syncword, wiring and antenna "
+              "(see MISSION.md § diagnostic order)")
     if args.out:
         p = atomic_write_json(args.out, {"rows": rows, "best": best})
-        print(f"# rapport écrit (atomique): {p}")
+        print(f"# report written (atomic): {p}")
     return rc
 
 

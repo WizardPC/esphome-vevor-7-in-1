@@ -39,7 +39,7 @@ MAX_RUN_BITS = 64
 FRAME_BYTES = 21
 
 DUMP_RE = re.compile(r"pulses \[(\d+)-(\d+)\] sur (\d+) : (.+)$")
-CAPTURE_RE = re.compile(r"capture #(\d+) : (\d+) pulses, de (-?\d+) us à (-?\d+) us")
+CAPTURE_RE = re.compile(r"capture #(\d+): (\d+) pulses, (?:de|from) (-?\d+) us (?:à|to) (-?\d+) us")
 
 
 def lit_dumps(chemin: pathlib.Path) -> list[list[int]]:
@@ -62,9 +62,9 @@ def lit_dumps(chemin: pathlib.Path) -> list[list[int]]:
         if debut == 0:
             total_attendu = total
         if n != fin - debut + 1:
-            print(f"  ! tranche incohérente [{debut}-{fin}] : {n} valeurs", file=sys.stderr)
+            print(f"  ! inconsistent slice [{debut}-{fin}]: {n} values", file=sys.stderr)
         if debut != len(courant):
-            print(f"  ! tranche [{debut}-{fin}] reçue alors que {len(courant)} durées sont déjà là",
+            print(f"  ! slice [{debut}-{fin}] received while {len(courant)} durations are already there",
                   file=sys.stderr)
         courant.extend(int(x) for x in valeurs.split())
         if total_attendu is not None and len(courant) >= total_attendu:
@@ -117,9 +117,9 @@ def trame_dans_bits(bits: str):
     """
     for decalage in range(min(8, len(bits))):
         utilisable = (len(bits) - decalage) // 8 * 8
-        octets = bytes(int(bits[decalage + i: decalage + i + 8], 2) for i in range(0, utilisable, 8))
-        for i in range(len(octets) - FRAME_BYTES + 1):
-            b = octets[i:i + FRAME_BYTES]
+        bytes = bytes(int(bits[decalage + i: decalage + i + 8], 2) for i in range(0, utilisable, 8))
+        for i in range(len(bytes) - FRAME_BYTES + 1):
+            b = bytes[i:i + FRAME_BYTES]
             if b[0] != 0xAA or b[1] != 0x00:
                 continue
             if (sum(b[0:19]) & 0xFF) != b[19] or b[20] != ((b[18] + 1) & 0xFF):
@@ -135,27 +135,27 @@ def main() -> int:
     args = ap.parse_args()
 
     if not args.dump.exists():
-        print(f"# MESURE NULLE — fichier absent : {args.dump}", file=sys.stderr)
+        print(f"# NULL MEASUREMENT — file missing: {args.dump}", file=sys.stderr)
         return RC_MESURE_NULLE
     try:
         captures = lit_dumps(args.dump)
     except OSError as exc:
-        print(f"# ERREUR lecture {args.dump}: {exc}", file=sys.stderr)
+        print(f"# ERROR reading {args.dump}: {exc}", file=sys.stderr)
         return RC_ERREUR
 
     if not captures:
-        print(f"# MESURE NULLE — aucune capture dans {args.dump} : rien n'a été mesuré "
-              "(ni « capture # », ni « pulses »)", file=sys.stderr)
+        print(f"# NULL MEASUREMENT — no capture in {args.dump}: nothing was measured "
+              "(neither \"capture #\" nor \"pulses\")", file=sys.stderr)
         return RC_MESURE_NULLE
 
-    print(f"{len(captures)} capture(s) lue(s) dans {args.dump}")
+    print(f"{len(captures)} capture(s) read in {args.dump}")
     rapport = []
     for nc, durees in enumerate(captures, 1):
         if durees:
             lo, hi = min(abs(x) for x in durees), max(abs(x) for x in durees)
-            print(f"\ncapture {nc} : {len(durees)} durées, de {lo} à {hi} µs")
+            print(f"\ncapture {nc} : {len(durees)} durations, from {lo} to {hi} µs")
         else:
-            print(f"\ncapture {nc} : 0 durée")
+            print(f"\ncapture {nc} : 0 duration")
         trouve = None
         for periode in PERIODS:
             for inverser in (False, True):
@@ -165,13 +165,13 @@ def main() -> int:
                 r = trame_dans_bits(bits)
                 if r:
                     b, decalage, position, refus = r
-                    verdict = ("TRAME VALIDE" if refus is None else
-                               f"candidat conforme en-tête+checksum+compteur, REFUSÉ par la porte ({refus})")
-                    print(f"  >>> {verdict} : période {periode} µs, "
-                          f"{'inversée' if inverser else 'normale'}, décalage bit {decalage}, "
-                          f"position octet {position}")
-                    print(f"      brut : {' '.join(f'{x:02x}' for x in b)}")
-                    trouve = {"periode": periode, "inverse": inverser, "octets": list(b),
+                    verdict = ("VALID FRAME" if refus is None else
+                               f"candidate conformant header+checksum+counter, REFUSED by the gate ({refus})")
+                    print(f"  >>> {verdict} : period {periode} µs, "
+                          f"{'inverted' if inverser else 'normal'}, bit shift {decalage}, "
+                          f"byte position {position}")
+                    print(f"      raw : {' '.join(f'{x:02x}' for x in b)}")
+                    trouve = {"periode": periode, "inverse": inverser, "bytes": list(b),
                               "refus": refus, "valide": refus is None}
                     break
             if trouve:
@@ -180,21 +180,21 @@ def main() -> int:
             # Nothing valid: show the best period's bytes for visual judgement.
             for periode in PERIODS[:2]:
                 bits = bits_depuis_durees(durees, periode, False)
-                octets = bytes(int(bits[i:i + 8], 2) for i in range(0, len(bits) // 8 * 8, 8))[:12]
-                print(f"  (période {periode} µs, sans inversion) premiers octets : "
-                      f"{' '.join(f'{x:02x}' for x in octets)}")
+                bytes = bytes(int(bits[i:i + 8], 2) for i in range(0, len(bits) // 8 * 8, 8))[:12]
+                print(f"  (period {periode} µs, no inversion) first bytes: "
+                      f"{' '.join(f'{x:02x}' for x in bytes)}")
         rapport.append({"capture": nc, "nb_durees": len(durees), "trame": trouve})
 
     valides = sum(1 for r in rapport if r["trame"] and r["trame"].get("valide"))
     conformes = sum(1 for r in rapport if r["trame"] and not r["trame"].get("valide"))
     if args.json:
-        print(f"\nrapport écrit (atomique) : {atomic_write_json(args.json, rapport)}")
+        print(f"\nreport written (atomic): {atomic_write_json(args.json, rapport)}")
     if conformes:
-        print(f"{conformes} capture(s) portent un candidat conforme en-tête+checksum+compteur\n"
-              f"mais REFUSÉ par la porte de plausibilité : FAUX POSITIF, pas une réception")
-    print(f"\n{valides} capture(s) sur {len(rapport)} portent une trame VALIDE")
+        print(f"{conformes} capture(s) carry a candidate conformant header+checksum+counter\n"
+              f"but REFUSED by the plausibility gate: FALSE POSITIVE, not a reception")
+    print(f"\n{valides} capture(s) out of {len(rapport)} carry a VALID frame")
     if valides == 0:
-        print("# AUCUNE TRAME valide dans les captures (mesure faite) — résultat négatif", file=sys.stderr)
+        print("# NO valid FRAME in the captures (measurement done) — negative result", file=sys.stderr)
     return RC_OK
 
 

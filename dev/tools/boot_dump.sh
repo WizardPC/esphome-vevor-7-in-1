@@ -7,7 +7,7 @@
 set -uo pipefail
 DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/: tools, tests, docs, logs
 ROOT="$(cd "$DEV/.." && pwd)"            # repo root: esphome/ lives here, and nothing else
-HOST=<ip-de-la-carte>
+HOST=<board-ip>
 ROUNDS=6
 SEC=25
 FLASH=1
@@ -17,7 +17,7 @@ while [ $# -gt 0 ]; do
     --rounds) ROUNDS="$2"; shift 2 ;;
     --seconds) SEC="$2"; shift 2 ;;
     --no-flash) FLASH=0; shift ;;
-    *) echo "option inconnue: $1" >&2; exit 2 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
 
@@ -35,11 +35,11 @@ if [ "$FLASH" -eq 1 ]; then
   if "$DEV/tools/flash.sh" "$HOST" >/dev/null 2>&1; then
     echo "FLASH OK (OTA)"
   else
-    echo "FLASH ECHEC (voir logs/last_flash.log)"
+    echo "FLASH FAIL (see logs/last_flash.log)"
   fi
 fi
 
 wait "$LOOP"
-echo "=== lignes de configuration trouvées ==="
+echo "=== configuration lines found ==="
 grep -ah "CC1101:\|Chip ID\|Frequency:\|Channel:\|Modulation\|Symbol Rate\|Filter Bandwidth\|Output Power\|CS Pin\|SPI bus\|CLK Pin\|SDI Pin\|SDO Pin\|Pin: GPIO\|Filter out\|Signal is done\|Receive symbols\|RMT symbols\|frame extractor\|bit period\|polarity\|Over-The-Air\|Encryption\|Failed to enter RX\|PLL\|calibrat\|V7IN1 BOOT\|Successfully" \
   "$ROOT"/logs/bootdump_*.log 2>/dev/null | sed 's/^\[[0-9:]*\] //' | sort -u

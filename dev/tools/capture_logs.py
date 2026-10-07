@@ -34,7 +34,7 @@ async def run(host: str, port: int, key: str | None, seconds: float) -> tuple[in
                                   noise_psk=None if key in (None, "", "None") else key)
     await cli.connect(login=True)
     info = await cli.device_info()
-    header = f"# connecté à {host}:{port} — {info.name} / {info.model} / esphome {info.esphome_version}"
+    header = f"# connected to {host}:{port} — {info.name} / {info.model} / esphome {info.esphome_version}"
     print(header, flush=True)
 
     stop = asyncio.Event()
@@ -65,7 +65,7 @@ async def run(host: str, port: int, key: str | None, seconds: float) -> tuple[in
     except asyncio.TimeoutError:
         pass
     await cli.disconnect()
-    tail = f"# fin de capture (démarrée {t0}, {seconds}s) — {len(lines)} ligne(s) de log reçue(s)"
+    tail = f"# capture end (started {t0}, {seconds}s) — {len(lines)} log line(s) received"
     print(tail, flush=True)
     return (RC_OK if lines else RC_MESURE_NULLE), [header, *lines, tail]
 
@@ -89,7 +89,7 @@ def main() -> int:
     except SystemExit:
         raise
     except Exception as exc:
-        print(f"# ERREUR capture: {type(exc).__name__}: {exc}", flush=True)
+        print(f"# capture ERROR: {type(exc).__name__}: {exc}", flush=True)
         return RC_ERREUR
 
     if args.out:
@@ -98,11 +98,11 @@ def main() -> int:
         if args.append and p.exists():
             body = p.read_text(encoding="utf-8", errors="replace") + body
         atomic_write_text(p, body)
-        print(f"# fichier écrit (atomique) : {p}")
+        print(f"# file written (atomic): {p}")
 
     if rc == RC_MESURE_NULLE:
-        print("# MESURE NULLE — connexion établie mais AUCUNE ligne de log reçue : "
-              "rien n'a été mesuré", file=sys.stderr)
+        print("# NULL MEASUREMENT — connection established but NO log line received: "
+              "nothing was measured", file=sys.stderr)
     return rc
 
 

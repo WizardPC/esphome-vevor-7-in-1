@@ -50,7 +50,7 @@ def main() -> int:
 
     lines: list[str] = []
     header = [
-        f"# Témoin (projet de référence) — relevé du serveur web {base}:80",
+        f"# Witness (reference project) — survey of the web server {base}:80",
         f"# /events, {args.seconds:.0f} s, {dt.datetime.now(dt.timezone.utc):%Y-%m-%dT%H:%M:%SZ}",
     ]
 
@@ -58,14 +58,14 @@ def main() -> int:
     try:
         with urllib.request.urlopen(base + "/", timeout=10) as resp:
             page = resp.read().decode("utf-8", "replace")
-        lines.append("### / (page d'état) ###")
-        lines.append(f"# HTTP {resp.status}, {len(page)} octets")
+        lines.append("### / (state page) ###")
+        lines.append(f"# HTTP {resp.status}, {len(page)} bytes")
         for pat in (r"<title>([^<]*)</title>", r"uptime[^0-9]{0,20}(\d+)"):
             found = __import__("re").search(pat, page, __import__("re").IGNORECASE)
             if found:
                 lines.append(f"# {pat} -> {found.group(1)}")
     except Exception as exc:  # noqa: BLE001 - a failure is logged, it is a result
-        lines.append(f"# / -> ÉCHEC {type(exc).__name__}: {exc}")
+        lines.append(f"# / -> FAIL {type(exc).__name__}: {exc}")
 
     # SSE stream: entity state + log lines.
     lines.append("### /events (SSE) ###")
@@ -84,20 +84,20 @@ def main() -> int:
                 if "[84CB]" in line or "vevor_decoder" in line:
                     decoded.append(line)
     except Exception as exc:  # noqa: BLE001
-        lines.append(f"# /events interrompu: {type(exc).__name__}: {exc}")
+        lines.append(f"# /events interrupted: {type(exc).__name__}: {exc}")
 
     atomic_write_text(out, "\n".join(lines) + "\n")
 
-    print(f"fichier         : {out}")
-    print(f"lignes SSE      : {len(lines)}")
-    print(f"rafales RF      : {len(bursts)}")
+    print(f"file            : {out}")
+    print(f"SSE lines       : {len(lines)}")
+    print(f"RF bursts       : {len(bursts)}")
     for b in bursts[-5:]:
         print(f"  {b}")
-    print(f"trames décodées : {len(decoded)}")
+    print(f"decoded frames  : {len(decoded)}")
     for d in decoded[-5:]:
         print(f"  {d}")
     if not bursts and not decoded:
-        print("  aucune rafale RF ni trame décodée dans la fenêtre : pas de signal (ou témoin muet)")
+        print("  no RF burst nor decoded frame in the window: no signal (or mute witness)")
     return 0
 
 

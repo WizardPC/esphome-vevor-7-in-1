@@ -15,17 +15,17 @@ DEV="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT="$(cd "$DEV/.." && pwd)"
 
 SERIE="$(ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | tr '\n' ',' || true)"
-[ -n "$SERIE" ] || SERIE="aucun"
+[ -n "$SERIE" ] || SERIE="none"
 BYID="$(ls /dev/serial/by-id/ 2>/dev/null | tr '\n' ',' || true)"
-[ -n "$BYID" ] || BYID="aucun"
+[ -n "$BYID" ] || BYID="none"
 
 PHASE="$( { [ -f "$DEV/state/PHASE" ] && tr -d '\n' < "$DEV/state/PHASE"; } 2>/dev/null || true)"
 [ -n "$PHASE" ] || PHASE="phase=absent"
 
 BUILD="$( { [ -f "$DEV/build/last_status.txt" ] && tr -d '\n' < "$DEV/build/last_status.txt"; } 2>/dev/null | cut -c1-24 || true)"
-[ -n "$BUILD" ] || BUILD="aucun"
+[ -n "$BUILD" ] || BUILD="none"
 FLASH="$( { [ -f "$DEV/logs/last_flash_status.txt" ] && tr -d '\n' < "$DEV/logs/last_flash_status.txt"; } 2>/dev/null | cut -c1-28 || true)"
-[ -n "$FLASH" ] || FLASH="aucun"
+[ -n "$FLASH" ] || FLASH="none"
 
 ESP32="$("$ROOT/.venv/bin/python" "$DEV/tools/find_esp32.py" 2>/dev/null | tail -1)"
 [ -n "$ESP32" ] || ESP32="none"

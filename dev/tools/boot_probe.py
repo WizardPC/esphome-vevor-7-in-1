@@ -27,7 +27,7 @@ from _common import (DEFAULT_HOST, ESPHOME, PY, RC_ERREUR, RC_MESURE_NULLE,  # n
 INTERESTING = re.compile(
     r"CC1101 found|Failed to verify|marked as failed|is_failed|Failed to enter|PLL|"
     r"V7IN1 BOOT|Registered with remote_receiver|Vevor 7-in-1|rf_raw|\[84CB\]|"
-    r"Remote Receiver|Captures RMT|rx_|BOOT",
+    r"Remote Receiver|RMT captures|rx_|BOOT",
     re.I)
 
 
@@ -37,10 +37,10 @@ def main() -> int:
     for name in names:
         workdir, yaml, binary, _desc = variant_of(name)   # unknown name -> readable message
         if not binary.exists():
-            print(f"# ERREUR : binaire absent pour {name} : {binary}", file=sys.stderr)
+            print(f"# ERROR: binary missing for {name}: {binary}", file=sys.stderr)
             return RC_ERREUR
         log = DEV / "logs" / f"boot_{name}_{binary.stat().st_mtime_ns}.log"
-        print(f"\n=== {name} : flash {binary.name} ({binary.stat().st_size} o) ===", flush=True)
+        print(f"\n=== {name}: flash {binary.name} ({binary.stat().st_size} B) ===", flush=True)
         proc = subprocess.run([str(ESPHOME), "upload", yaml, "--device", DEFAULT_HOST,
                                "--file", str(binary)],
                               cwd=workdir, capture_output=True, text=True, timeout=300)
@@ -53,11 +53,11 @@ def main() -> int:
                              capture_output=True, text=True, timeout=120)
         print(f"# capture={cap.returncode}", flush=True)
         if cap.returncode not in (RC_OK, RC_MESURE_NULLE):
-            print(f"  !! capture en échec (code {cap.returncode}) — rien à conclure", flush=True)
+            print(f"  !! failed capture (code {cap.returncode}) — nothing to conclude", flush=True)
             worst = RC_ERREUR
         elif cap.returncode == RC_MESURE_NULLE:
             # Successful but EMPTY capture: not "no boot line", but "nothing measured".
-            print("  !! capture VIDE (0 ligne) — MESURE NULLE, rien à conclure", flush=True)
+            print("  !! EMPTY capture (0 line) — NULL MEASUREMENT, nothing to conclude", flush=True)
             if worst == RC_OK:
                 worst = RC_MESURE_NULLE
         text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
@@ -66,9 +66,9 @@ def main() -> int:
             print("   ", line[:160])
         if not keep:
             if cap.returncode == RC_MESURE_NULLE:
-                print("    (mesure nulle : aucune ligne capturée)")
+                print("    (null measurement: no line captured)")
             else:
-                print("    (aucune ligne de démarrage dans le tampon — capture trop tardive)")
+                print("    (no boot line in the buffer — capture too late)")
     return worst
 
 

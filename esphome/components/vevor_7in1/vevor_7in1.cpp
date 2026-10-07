@@ -182,11 +182,11 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
         this->rain_rejected_++;
         // The RAW bytes in the message: without them the frame is blocked with no way to know why,
         // which is exactly what we want to understand.
-        const std::string octets = vevor::hex_bytes(raw, vevor::FRAME_BYTES);
+        const std::string bytes = vevor::hex_bytes(raw, vevor::FRAME_BYTES);
         ESP_LOGW(TAG,
                  "rain refused: %.1f mm while the previous frame gave %.1f mm (rise "
                  "physiquement impossible) — bruts : %s",
-                 f.rain_mm, derniere, octets.c_str());
+                 f.rain_mm, derniere, bytes.c_str());
         return false;
       }
     }
@@ -230,18 +230,18 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   // value PINS a station: every other ID is dropped, which is how a neighbour's station stays out.
   // A dropped frame is warned about ONCE per pin: a wrong ID must never look like a radio fault
   // (the watchdog watches decoded_, not frames_, precisely so this filter cannot trigger it).
-  const uint16_t id_trame = (uint16_t) (((uint16_t) raw[2] << 8) | raw[3]);
+  const uint16_t frame_id = (uint16_t) (((uint16_t) raw[2] << 8) | raw[3]);
   if (this->station_id_ == 0) {
-    this->station_id_ = id_trame;
+    this->station_id_ = frame_id;
     ESP_LOGI(TAG, "station: ID learned %u (0x%04x) — it changes with the batteries",
-             (unsigned) id_trame, (unsigned) id_trame);
-  } else if (id_trame != this->station_id_) {
+             (unsigned) frame_id, (unsigned) frame_id);
+  } else if (frame_id != this->station_id_) {
     this->foreign_id_++;
     if (!this->foreign_id_warned_) {
       this->foreign_id_warned_ = true;
       ESP_LOGW(TAG, "station: frame from ANOTHER station (ID %u expected, %u received) — ignored; "
                     "set the ID to 0 or press \"Re-learn station ID\" to learn it again",
-               (unsigned) this->station_id_, (unsigned) id_trame);
+               (unsigned) this->station_id_, (unsigned) frame_id);
     }
     return false;
   }
@@ -297,18 +297,18 @@ float Vevor7in1::get_parameter(uint8_t p) const {
   return static_cast<float>(this->rearm_after_slots_);
 }
 
-void Vevor7in1::set_parameter(uint8_t p, float valeur) {
+void Vevor7in1::set_parameter(uint8_t p, float value) {
   if (p == PARAM_STATION_ID) {
     // 0 is legal here and means "learn": the minimum of 1 used for the duration settings does not
     // apply to an identity. A pinned ID is a filter, not a delay.
-    const float arrondi = valeur < 0.0f ? 0.0f : valeur + 0.5f;
+    const float arrondi = value < 0.0f ? 0.0f : value + 0.5f;
     const uint32_t id = arrondi > 65535.0f ? 65535u : static_cast<uint32_t>(arrondi);
     this->station_id_ = static_cast<uint16_t>(id);
     this->foreign_id_warned_ = false;  // a new pin deserves its own warning
     ESP_LOGI(TAG, "station: ID %s", id == 0 ? "back to learning" : "forced");
     return;
   }
-  const uint32_t v = valeur < 1.0f ? 1u : static_cast<uint32_t>(valeur + 0.5f);
+  const uint32_t v = value < 1.0f ? 1u : static_cast<uint32_t>(value + 0.5f);
   if (p == PARAM_MAX_RESTART_DELAY) {
     this->max_restart_delay_s_ = v;
   } else if (p == PARAM_PULSE_THRESHOLD) {

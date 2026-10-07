@@ -2,7 +2,7 @@
 """Frequency sweep on the ASYNCHRONOUS path, judged by the board counters.
 
 Unlike scan_freq.py (written for packet mode and its RSSI), this sweep uses only what the
-asynchronous path actually publishes: the "Trames valides / Trames rejetées" counters and the
+asynchronous path actually publishes: the "Valid frames / Rejected frames" counters and the
 component heartbeats ("captures=…, frames=…, longest=…"), read through the native API.
 Capture rate and pulse durations are NOT signal criteria (noise produces just as many): only
 decoding a frame counts.
@@ -43,9 +43,9 @@ async def main() -> int:
 
     infos, _ = await client.list_entities_services()
     by_name = {getattr(i, "name", ""): i for i in infos}
-    freq_entity = by_name.get("Fréquence CC1101")
+    freq_entity = by_name.get("CC1101 frequency")
     if freq_entity is None:
-        raise SystemExit("entité « Fréquence CC1101 » introuvable")
+        raise SystemExit("entity \"CC1101 frequency\" not found")
 
     latest: dict[int, object] = {}
 
@@ -65,10 +65,10 @@ async def main() -> int:
 
     results = []
     for freq in [float(f) for f in args.freqs.split(",")]:
-        before_valid, before_rejected = counter("Trames valides"), counter("Trames rejetées")
+        before_valid, before_rejected = counter("Valid frames"), counter("Rejected frames")
         await maybe_await(client.number_command(freq_entity.key, freq))
         await asyncio.sleep(args.dwell)
-        valid, rejected = counter("Trames valides"), counter("Trames rejetées")
+        valid, rejected = counter("Valid frames"), counter("Rejected frames")
         row = {
             "freq_mhz": freq,
             "trames_valides": valid,
@@ -80,8 +80,8 @@ async def main() -> int:
         }
         results.append(row)
         print(
-            f"{freq:8.3f} MHz : valides {valid} (+{row['delta_valides']}), "
-            f"rejetées {rejected} (+{row['delta_rejetees']})"
+            f"{freq:8.3f} MHz : valid {valid} (+{row['delta_valides']}), "
+            f"rejected {rejected} (+{row['delta_rejetees']})"
         )
 
     print(f"-> {atomic_write_json(args.out, results)}")

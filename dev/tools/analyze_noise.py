@@ -97,7 +97,7 @@ def main():
         p = 1.0 / 256
         entropy = -sum((c / len(allb)) * math.log2(c / len(allb))
                        for c in hist.values())
-        out["octets"] = {
+        out["bytes"] = {
             "total": len(allb),
             "valeurs_distinctes": len(hist),
             "entropie_bits": round(entropy, 3),
@@ -110,20 +110,20 @@ def main():
     verdict, raisons = "INDETERMINE", []
     if n == 0:
         verdict = "PAS_DE_PAQUET"
-        raisons.append("aucun paquet reçu pendant la capture")
+        raisons.append("no packet received during the capture")
     else:
         entetes_ok = sum(1 for f in frames if f["bytes"][0] == 0xAA and f["bytes"][1] == 0x00)
-        raisons.append("%d/%d paquets avec l'en-tête attendu AA 00" % (entetes_ok, n))
-        raisons.append("%d trames valides (checksum+compteur OK)" % oks)
+        raisons.append("%d/%d packets with the expected header AA 00" % (entetes_ok, n))
+        raisons.append("%d valid frames (checksum+counter OK)" % oks)
         rate = out.get("cadence_paquets_par_s")
         theo = out["faux_verrou_theorique_par_s"]["16 bits"]
         if rate is not None:
-            raisons.append("cadence %.3f paquet/s vs faux verrou 16 bits %.3f/s (32 bits %.2e/s)"
+            raisons.append("rate %.3f packet/s vs false 16-bit lock %.3f/s (32 bits %.2e/s)"
                            % (rate, theo, out["faux_verrou_theorique_par_s"]["32 bits"]))
             if oks == 0 and entetes_ok == 0 and rate > theo / 4:
                 verdict = "BRUIT_SEUL"
-                raisons.append("cadence compatible avec des faux verrous de syncword sur le bruit "
-                               "et aucune trame conforme -> aucun émetteur Vevor sur ce canal")
+                raisons.append("rate compatible with false syncword locks on noise "
+                               "and no conformant frame -> no Vevor transmitter on this channel")
             elif oks > 0:
                 verdict = "TRAMES_VALIDES"
             else:
@@ -138,9 +138,9 @@ def main():
         with open("logs/raw_frames.jsonl", "a") as fh:
             for f in frames:
                 fh.write(json.dumps({"source": args.logfile, **f}, ensure_ascii=False) + "\n")
-        print("Trames brutes ajoutées à logs/raw_frames.jsonl (%d lignes)" % n)
+        print("Raw frames appended to logs/raw_frames.jsonl (%d lines)" % n)
     print(json.dumps(out, indent=2, ensure_ascii=False))
-    print("\nRapport écrit dans", args.json)
+    print("\nReport written to", args.json)
     return 0 if verdict in ("TRAMES_VALIDES", "BRUIT_SEUL", "PAS_DE_PAQUET") else 1
 
 

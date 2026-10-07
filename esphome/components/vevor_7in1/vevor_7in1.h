@@ -66,7 +66,7 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // Reception watchdog settings, changeable from Home Assistant (the `number` entities of the
   // number/ sub-platform). The component owns them; the YAML only names and bounds them.
   float get_parameter(uint8_t p) const;
-  void set_parameter(uint8_t p, float valeur);
+  void set_parameter(uint8_t p, float value);
   // Put the station filter back in learning mode: the station's ID changes at every battery change,
   // so re-learning must never require a reflash.
   void reapprendre_station_id();
@@ -99,7 +99,7 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
     this->pref_reboots_ = global_preferences->make_preference<uint32_t>(0x7A1B5747u, true);
     this->pref_reboots_.load(&this->watchdog_reboots_);
     this->set_interval("watchdog", 20000, [this]() { this->watch_radio_(); });
-    // The bit period is no longer assumed: it is MEASURED on each burst (estimer_periode_x10), so
+    // The bit period is no longer assumed: it is MEASURED on each burst (estimate_period_x10), so
     // the decoder is independent of station and board. PERIOD_CANDIDATES is only a fallback if the
     // estimate is refused.
     ESP_LOGI(TAG,
@@ -191,7 +191,7 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   remote_receiver::RemoteReceiverComponent *receiver_{nullptr};
   Trigger<std::vector<uint8_t>> frame_trigger_;
   // No bit-period setting here on purpose: the period is MEASURED on every burst
-  // (estimer_periode_x10 in vevor_protocol.h), so a configured constant would be a knob nothing
+  // (estimate_period_x10 in vevor_protocol.h), so a configured constant would be a knob nothing
   // reads — and the value actually used is already logged for every frame.
   uint32_t frames_{0};
   // Sliding window of the reception rate: the station's counter and the arrival time of every

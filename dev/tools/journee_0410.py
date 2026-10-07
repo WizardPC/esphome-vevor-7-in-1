@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Journee complete du 04/10 : comptage des trames fabriquees, par tranches de 2 h."""
+"""Full day of 04/10: counting the fabricated frames, in 2-h slices."""
 import json, os, re, time, urllib.request, urllib.error, urllib.parse, collections, datetime as dt
 BASE = "http://192.168.2.104"
 TOKEN = open("/home/hermes/projets/vevor-7in1/.ha_token").read().strip()
@@ -16,7 +16,7 @@ def fetch(eid, t0, t1, essais=5):
                 return d if d else [[]]
         except Exception as ex:
             time.sleep(4)
-    print("    ECHEC", t0, t1)
+    print("    FAIL", t0, t1)
     return [[]]
 
 trames = []
@@ -29,14 +29,14 @@ for k in range(12):
            if re.match(r"^[0-9a-f]{2}( [0-9a-f]{2}){20}$", str(s["state"]))]
     got = [ (t, s) for t, s in got if t != (d0 + dt.timedelta(hours=2*k)).strftime("%Y-%m-%dT%H:%M:%S") or k == 0 ]
     trames += got
-    print("  %s -> %s : %d trames" % (t0[11:16], t1[11:16], len(got)))
+    print("  %s -> %s: %d frames" % (t0[11:16], t1[11:16], len(got)))
     time.sleep(0.5)
 
 bad = [t for t, s in trames if s.split()[8:11] == ["02", "80", "80"]]
-print("\nJOURNEE 04/10 : %d trames brutes (a partir de %s), %d en 02 80 80" % (len(trames), trames[0][0] if trames else "-", len(bad)))
+print("\nDAY 04/10: %d raw frames (from %s), %d in 02 80 80" % (len(trames), trames[0][0] if trames else "-", len(bad)))
 if bad:
-    print("  premiere %s  derniere %s" % (bad[0], bad[-1]))
-    print("  par heure UTC :", dict(sorted(collections.Counter(t[:13] for t in bad).items())))
+    print("  first %s  last %s" % (bad[0], bad[-1]))
+    print("  per hour UTC:", dict(sorted(collections.Counter(t[:13] for t in bad).items())))
 for trio in ("01 01 80", "01 80 80", "02 80 80", "01 01 00"):
     print("  b[8..10]==%s : %d" % (trio, sum(1 for t, s in trames if " ".join(s.split()[8:11]) == trio)))
 json.dump(trames, open("/home/hermes/projets/vevor-7in1/dev/state/nuit_20261005/journee_0410.json", "w"))

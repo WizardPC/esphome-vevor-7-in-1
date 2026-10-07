@@ -11,7 +11,7 @@ Without Home Assistant or hardware, it verifies:
      EXCEPTIONS below included, so a fresh divergence still fails;
   4. no identifier of the old project remains in an active line (`jardin_vevor_weather_station`,
      or `esp32_weather_*`);
-  5. the two « Réception » cards (age of the last frame, réception rate and its two terms) run on
+  5. the two "Reception" cards (age of the last frame, reception rate and its two terms) run on
      scenarios: fresh frame, missed frame, silent radio, unavailable entity, no measurement
      possible yet, and each colour band.
 
@@ -35,7 +35,7 @@ try:
     import yaml
     from jinja2 import Environment, Undefined
 except ImportError as exc:  # pragma: no cover - environment dependency
-    sys.exit(f"dépendance manquante ({exc}) — lancer avec .venv/bin/python")
+    sys.exit(f"missing dependency ({exc}) — run with .venv/bin/python")
 
 DEV = Path(__file__).resolve().parent.parent   # dev/
 ROOT = DEV.parent                               # repo root
@@ -65,7 +65,7 @@ if "--refresh" in sys.argv:
     anchor = next((state["entity_id"] for state in sorted(states, key=lambda s: s["entity_id"])
                    if state["entity_id"].endswith("_" + ANCRAGE)), None)
     if not anchor:
-        sys.exit(f"--refresh : aucune entité en « _{ANCRAGE} » dans HA — ancrage à revoir")
+        sys.exit(f"--refresh: no entity in \"_{ANCRAGE}\" in HA — anchor to review")
     prefix = anchor.split(".", 1)[1][: -(len(ANCRAGE) + 1)]
     ids = sorted(
         state["entity_id"] for state in states
@@ -74,30 +74,30 @@ if "--refresh" in sys.argv:
         and state["entity_id"].split(".", 1)[1][len(prefix) + 1:] not in EXCEPTIONS_HA
     )
     head = [
-        "# Entités réellement exposées par Home Assistant — relevé, pas déduction.",
+        "# Entities actually exposed by Home Assistant — measured, not inferred.",
         "#",
-        f"# Source     = API REST de Home Assistant, {HA_URL}/api/states",
-        f"# Relevé le  = {datetime.now().strftime('%d/%m/%Y %H:%M')} (heure locale)",
-        f"# Préfixe    = {prefix}   (lu, jamais dérivé)",
-        "# Rafraîchir = .venv/bin/python dev/tools/check_ha_card.py --refresh",
-        "# Vérifier   = .venv/bin/python dev/tools/check_ha_card.py  (étape 5 de run_tests.sh)",
+        f"# Source      = Home Assistant REST API, {HA_URL}/api/states",
+        f"# Measured on = {datetime.now().strftime('%d/%m/%Y %H:%M')} (local time)",
+        f"# Prefix      = {prefix}   (read, never derived)",
+        "# Refresh     = .venv/bin/python dev/tools/check_ha_card.py --refresh",
+        "# Check       = .venv/bin/python dev/tools/check_ha_card.py  (step 5 of run_tests.sh)",
         "#",
-        "# Ne figurent PAS ci-dessous, bien qu'attachées au même appareil : les compteurs d'utilité",
-        f"# créés par le propriétaire sur rain_total ({', '.join(EXCEPTIONS_HA)} — plateforme mesurée :",
-        "# utility_meter). Ce sont des helpers HA, pas des entités du firmware : les inclure ferait",
-        "# échouer l'égalité firmware <-> HA de l'étape 3.",
+        "# NOT listed below, although attached to the same device: the utility counters",
+        f"# created by the owner on rain_total ({', '.join(EXCEPTIONS_HA)} — measured platform:",
+        "# utility_meter). They are HA helpers, not firmware entities: including them would",
+        "# break the firmware <-> HA equality of step 3.",
         "#",
-        "# L'entity_id n'est pas déductible du firmware : le nom d'appareil se renomme dans Home",
-        "# Assistant et renomme tous les entity_id d'un coup. D'où cette liste MESURÉE, et la règle :",
-        "# la relire avant de toucher la carte.",
+        "# The entity_id is not derivable from the firmware: the device name is renamed in Home",
+        "# Assistant and renames all entity_ids at once. Hence this MEASURED list, and the rule:",
+        "# re-read it before touching the card.",
         "#",
-        "## Appareil",
+        "## Device",
         f"# device_prefix: {prefix}",
         "",
-        "## Entités",
+        "## Entities",
     ]
     ENTITIES.write_text("\n".join(head + ids) + "\n", encoding="utf-8")
-    print(f"--refresh : {len(ids)} entités relevées dans HA, préfixe {prefix} -> {ENTITIES}")
+    print(f"--refresh: {len(ids)} entities measured in HA, prefix {prefix} -> {ENTITIES}")
     sys.exit(0)
 FIRMWARE = ROOT / "esphome" / "vevor-7in1.yaml"
 NOW = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
@@ -108,7 +108,7 @@ failures: list[str] = []
 
 def check(condition: bool, message: str) -> bool:
     (echos if condition else failures).append(message)
-    print(("  OK   " if condition else "  ÉCHEC ") + message)
+    print(("  OK   " if condition else "  FAIL ") + message)
     return condition
 
 
@@ -123,7 +123,7 @@ raw = CARD.read_text(encoding="utf-8")
 try:
     card = yaml.safe_load(raw)
     assert isinstance(card, dict) and "cards" in card
-    print(f"1. YAML : carte '{card['type']}' chargée, {len(card['cards'])} cartes de premier niveau")
+    print(f"1. YAML: card '{card['type']}' loaded, {len(card['cards'])} top-level cards")
     echos.append("yaml")
 except Exception as exc:
     sys.exit(f"1. YAML invalide : {exc}")
@@ -139,8 +139,8 @@ reference = {
 # YAML name.
 probe = next((entity for entity in sorted(reference) if entity.endswith("_" + ANCRAGE)), None)
 if not probe:
-    sys.exit(f"2. docs/ha-entities.txt : aucune entité en « _{ANCRAGE} » — impossible d'en déduire "
-             "le préfixe d'appareil (mettre ANCRAGE à jour si le nom de l'entité a changé)")
+    sys.exit(f"2. docs/ha-entities.txt: no entity in \"_{ANCRAGE}\" — cannot derive "
+             "the device prefix (update ANCRAGE if the entity name changed)")
 prefix = probe.split(".", 1)[1][: -(len(ANCRAGE) + 1)]
 
 # EXCEPTIONS: entity ids HA did NOT derive from the device name, measured on the listing.
@@ -161,12 +161,12 @@ cited = sorted(set(re.findall(
 HELPERS = sorted(entity for entity in cited
                  if entity.split(".", 1)[1][len(prefix) + 1:] in EXCEPTIONS_HA)
 cited = [entity for entity in cited if entity not in HELPERS]
-print(f"2. Entités : appareil « {prefix} », {len(reference)} entités relevées dans HA, "
-      f"{len(cited)} citées par la carte, {len(HELPERS)} helpers HA déclarés → {HELPERS}")
+print(f"2. Entities: device \"{prefix}\", {len(reference)} entities measured in HA, "
+      f"{len(cited)} cited by the card, {len(HELPERS)} HA helpers declared → {HELPERS}")
 unknown = [entity for entity in cited if entity not in reference]
-check(not unknown, f"les entités citées existent toutes dans le relevé ({unknown or 'aucun écart'})")
+check(not unknown, f"all cited entities exist in the listing ({unknown or 'no divergence'})")
 unused = sorted(entity for entity in reference if entity not in cited)
-print(f"     relevé non cité par la carte (attendu : diag. et commandes) : {len(unused)} → {unused}")
+print(f"     listing not cited by the card (expected: diag. and commands): {len(unused)} → {unused}")
 
 # Negative control of THAT check, before trusting its green: the same extraction, on a copy with
 # one deliberately broken id, must fail — and it must fail ON THAT ID, not on the declared HA
@@ -179,7 +179,7 @@ cites_casse = sorted(set(re.findall(
 inconnus_casse = [entity for entity in cites_casse
                   if entity not in reference and entity not in HELPERS]
 check(any("tx_couner" in entity for entity in inconnus_casse),
-      f"controle négatif : l'identifiant cassé est bien détecté ({inconnus_casse[:1] or 'NON DÉTECTÉ'})")
+      f"negative control: the broken id is detected ({inconnus_casse[:1] or 'NOT DETECTED'})")
 
 # --------------------------------------------------------------------------- 3
 firmware = FIRMWARE.read_text(encoding="utf-8")
@@ -198,11 +198,11 @@ for line in firmware.splitlines():
 
 only_firmware = sorted(declared - reference)
 only_ha = sorted(reference - declared)
-print(f"3. Accord firmware / HA : {len(declared)} entités déclarées par esphome/vevor-7in1.yaml, "
-      f"{len(reference)} relevées dans HA")
+print(f"3. Firmware / HA agreement: {len(declared)} entities declared by esphome/vevor-7in1.yaml, "
+      f"{len(reference)} measured in HA")
 check(not only_firmware and not only_ha,
-      f"le relevé correspond au firmware (firmware seul : {only_firmware or 'aucune'} | "
-      f"HA seul : {only_ha or 'aucune'})")
+      f"the listing matches the firmware (firmware only: {only_firmware or 'none'} | "
+      f"HA only: {only_ha or 'none'})")
 
 # --------------------------------------------------------------------------- 4
 active = "\n".join(
@@ -214,7 +214,7 @@ active = "\n".join(
 # (dev/docs/ha-entities.txt), so the lookahead that used to spare it is gone as well.
 legacy = [line.strip() for line in active.splitlines()
           if re.search(r"jardin_vevor_weather_station|esp32_weather_", line)]
-check(not legacy, f"aucun identifiant de l'ancien projet dans les lignes actives ({legacy or 'aucun'})")
+check(not legacy, f"no identifier of the old project in the active lines ({legacy or 'none'})")
 
 # Option blocks live in comments and will be uncommented one day, so check they parse as YAML.
 blocks: list[str] = []
@@ -246,8 +246,8 @@ for block in blocks:
         yaml.safe_load(block)
     except Exception as exc:  # noqa: BLE001 - report the faulty text
         broken.append(f"{exc} → {block.splitlines()[0][:60]}")
-check(not broken, f"les {len(blocks)} blocs d'options commentés se chargent comme du YAML "
-                  f"({broken or 'aucun écart'})")
+check(not broken, f"the {len(blocks)} commented option blocks load as YAML "
+                  f"({broken or 'no divergence'})")
 
 
 # --------------------------------------------------------------------------- 5
@@ -293,9 +293,9 @@ def render(template: str, data: dict) -> str:
         is_state=lambda entity, value: states(entity) == value,
         now=lambda: NOW,
         relative_time=lambda when: f"{int((NOW - when).total_seconds() // 60)} minutes",
-        # `as_timestamp` : HA l'expose comme fonction ET comme filtre. La vignette « Dernière
-        # trame » s'en sert pour afficher l'heure exacte du dernier passage — un horodatage absolu
-        # ne dérive pas, contrairement à l'âge, qui est un instantané pris au rendu.
+        # `as_timestamp`: HA exposes it as a function AND as a filter. The last-frame tile
+        # uses it to display the exact time of the last passage — an absolute timestamp does not
+        # drift, unlike the age, which is a snapshot taken at render time.
         as_timestamp=lambda when: when.timestamp() if hasattr(when, "timestamp") else 0.0,
     )
     env.filters["timestamp_custom"] = lambda value, fmt="%H:%M:%S", local=True: (
@@ -303,23 +303,23 @@ def render(template: str, data: dict) -> str:
     return str(env.from_string(template).render()).strip()
 
 
-# Le bandeau de prévision de l'ancienne carte de référence n'est PAS dans cette carte : c'est celle
-# du propriétaire, et il ne l'affiche pas. Ses trois modèles et les 12 scénarios qui les vérifiaient
-# (docs/forecast-rules.md) ont été retirés avec les options commentées le 07/10/2026 ; ils restent
-# dans l'historique git (commit e169663 et avant) si l'on veut les reprendre un jour. Les fonctions
-# de rendu ci-dessus (State, States, render) servent, elles, au contrôle qui suit.
+# The forecast banner of the old reference card is NOT in this card: this is the owner's card,
+# and they do not display it. Its three templates and the 12 scenarios that checked them
+# (docs/forecast-rules.md) were removed with the commented options on 07/10/2026; they remain
+# in the git history (commit e169663 and earlier) if they are ever to be reinstated. The render
+# functions above (State, States, render) serve the check that follows.
 
 # --------------------------------------------------------------------------- 5
 # --------------------------------------------------------------------------- 5
-# Les encarts « Réception » sont trouvés par leur ENTITÉ, jamais par leur position : réordonner
-# la carte ne doit pas pouvoir rendre ce contrôle muet. Les modèles testés sont les chaînes
-# exactes extraites du YAML, exécutées avec les mêmes filtres Jinja que HA (section 5).
+# The "Reception" tiles are found by their ENTITY, never by their position: reordering
+# the card must not be able to make this check mute. The templates tested are the exact
+# strings extracted from the YAML, executed with the same Jinja filters as HA (section 5).
 print()
-print("5. Encarts « Réception » exécutés sur des scénarios (fraîcheur, taux de réception conforme)")
+print("5. \"Reception\" tiles executed on scenarios (freshness, conformant reception rate)")
 
 
 def encart(needle: str) -> dict:
-    """Le mushroom-template-card dont `entity` contient `needle` — exactement un attendu."""
+    """The mushroom-template-card whose `entity` contains `needle` — exactly one expected."""
     found: list[dict] = []
 
     def walk(node) -> None:
@@ -335,14 +335,14 @@ def encart(needle: str) -> dict:
 
     walk(card)
     if len(found) != 1:
-        sys.exit(f"6. {len(found)} encart(s) citant « {needle} » — exactement 1 attendu")
+        sys.exit(f"6. {len(found)} tile(s) citing \"{needle}\" — exactly 1 expected")
     return found[0]
 
 
 ENCART_AGE = encart("tx_counter")
-# Le taux est trouvé par SON entité, jamais par sa position ni par un ancien nom : la carte a
-# changé de mesure le 07/10/2026 (rapport OK/(OK+KO) -> reception_rate, la part des ÉMISSIONS de
-# la station réellement décodées).
+# The rate is found by ITS entity, never by its position nor by an old name: the card changed
+# its measure on 07/10/2026 (ratio OK/(OK+KO) -> reception_rate, the share of the station's
+# EMISSIONS actually decoded).
 ENCART_TAUX = encart("reception_rate")
 ENTITY_AGE = f"sensor.{prefix}_tx_counter"
 ENTITY_TAUX = f"sensor.{prefix}_reception_rate"
@@ -356,129 +356,129 @@ CHAMPS = ("primary", "secondary", "icon", "icon_color")
 def essai(label: str, entete: dict, data: dict, attendu: dict) -> None:
     got = {champ: render(entete[champ], data) for champ in CHAMPS}
     ok = all(got[champ] == attendu[champ] for champ in CHAMPS)
-    print(f"   {'OK  ' if ok else 'ÉCHEC'} {label}")
+    print(f"   {'OK  ' if ok else 'FAIL'} {label}")
     print(f"        → {got['primary']} | {got['secondary']}  "
           f"[{got['icon']} / {got['icon_color']}]")
     if ok:
         echos.append(label)
         return
-    print(f"        écart (obtenu, attendu) : "
+    print(f"        diff (got, expected): "
           f"{ {c: (got[c], attendu[c]) for c in CHAMPS if got[c] != attendu[c]} }")
     failures.append(label)
 
 
 def age_data(secondes, etat: str = "1234.0") -> dict:
-    """Jeu d'états pour l'encart de fraîcheur. `None` = entité absente (states.sensor.x → None)."""
+    """State set for the freshness tile. `None` = entity missing (states.sensor.x → None)."""
     if secondes is None:
         return {ENTITY_AGE: None}
     return {ENTITY_AGE: State(etat, NOW - timedelta(seconds=secondes))}
 
 
 def heure_de(secondes) -> str:
-    """L'heure que la carte affiche pour une trame arrivée il y a `secondes` — calculée avec la
-    même conversion que le filtre timestamp_custom, donc sans supposer le fuseau du poste."""
+    """The time the card displays for a frame that arrived `secondes` ago — computed with the
+    same conversion as the timestamp_custom filter, so without assuming the workstation timezone."""
     return datetime.fromtimestamp((NOW - timedelta(seconds=secondes)).timestamp()).strftime("%H:%M:%S")
 
 
 def verdict_fraicheur(secondes, texte: str) -> str:
-    """« Trame 1234 à 11:59:58 — Réception normale » : l'horodatage précède le verdict."""
+    """The card line: frame number, timestamp, then the verdict (timestamp first)."""
     return f"Trame 1234 à {heure_de(secondes)} — {texte}"
 
 
-print("   — âge de la dernière trame (référence « TX counter »)")
-essai("trame il y a 2 s — réception normale", ENCART_AGE, age_data(2),
+print("   — age of the last frame (reference \"TX counter\")")
+essai("frame 2 s ago — normal reception", ENCART_AGE, age_data(2),
       {"primary": "il y a 2 s", "secondary": verdict_fraicheur(2, "Réception normale"),
        "icon": "mdi:clock-check-outline", "icon_color": "green"})
-essai("trame il y a 35 s — dernière valeur du vert", ENCART_AGE, age_data(35),
+essai("frame 35 s ago — last green value", ENCART_AGE, age_data(35),
       {"primary": "il y a 35 s", "secondary": verdict_fraicheur(35, "Réception normale"),
        "icon": "mdi:clock-check-outline", "icon_color": "green"})
-essai("trame il y a 45 s — une trame manquée", ENCART_AGE, age_data(45),
+essai("frame 45 s ago — one missed frame", ENCART_AGE, age_data(45),
       {"primary": "il y a 45 s", "secondary": verdict_fraicheur(45, "Trame manquée"),
        "icon": "mdi:clock-alert-outline", "icon_color": "amber"})
-essai("trame il y a 61 s — le garde-fou ré-arme la radio", ENCART_AGE, age_data(61),
+essai("frame 61 s ago — the guard re-arms the radio", ENCART_AGE, age_data(61),
       {"primary": "il y a 1 min", "secondary": verdict_fraicheur(61, "Silence (ré-armement)"),
        "icon": "mdi:clock-alert-outline", "icon_color": "orange"})
-essai("trame il y a 200 s — silence, la carte redémarre", ENCART_AGE, age_data(200),
+essai("frame 200 s ago — silence, the board restarts", ENCART_AGE, age_data(200),
       {"primary": "il y a 3 min", "secondary": verdict_fraicheur(200, "Silence (reboot)"),
        "icon": "mdi:clock-remove-outline", "icon_color": "red"})
-essai("trame il y a 2 h — l'âge passe en heures", ENCART_AGE, age_data(7200),
+essai("frame 2 h ago — age switches to hours", ENCART_AGE, age_data(7200),
       {"primary": "il y a 2.0 h", "secondary": verdict_fraicheur(7200, "Silence (reboot)"),
        "icon": "mdi:clock-remove-outline", "icon_color": "red"})
-essai("entité absente — « inconnu », jamais « il y a 0 s »", ENCART_AGE, age_data(None),
+essai("entity missing — \"inconnu\", never \"il y a 0 s\"", ENCART_AGE, age_data(None),
       {"primary": "inconnu", "secondary": "Carte injoignable, ou entité absente",
        "icon": "mdi:help-circle-outline", "icon_color": "grey"})
-essai("entité indisponible — pas de fraîcheur affichée", ENCART_AGE,
+essai("entity unavailable — no freshness displayed", ENCART_AGE,
       {ENTITY_AGE: State("unavailable", NOW - timedelta(seconds=5))},
       {"primary": "inconnu", "secondary": "Carte injoignable, ou entité absente",
        "icon": "mdi:help-circle-outline", "icon_color": "grey"})
 
 
 def taux_data(taux: str, rd: str, re_: str, ok: str = "149", ko: str = "50") -> dict:
-    """États des cinq entités que la vignette de taux lit."""
+    """States of the five entities the rate tile reads."""
     return {ENTITY_TAUX: State(taux), ENTITY_RD: State(rd), ENTITY_RE: State(re_),
             ENTITY_OK: State(ok), ENTITY_KO: State(ko)}
 
 
-# La vignette est celle du propriétaire : son icône est FIXE (mdi:access-point), et ses mots sont
-# les siens — « trames produites par la station », « Indisponibilité », « Analyse... ». Les
-# attendus ci-dessous sont donc recopiés de la carte, pas d'une version idéale.
+# The tile is the owner's: its icon is FIXED (mdi:access-point), and its words are theirs —
+# the card text is French (see the expected values). The expected values below are therefore
+# copied from the card, not from an ideal version.
 ICONE = "mdi:access-point"
 CUMUL = " · cumul 149 / 199"
 
 
-print("   — taux de réception conforme (« Reception rate » et ses deux termes)")
-essai("100 % — aucune émission manquée, 30/30 (relevé du 07/10)", ENCART_TAUX,
+print("   — conformant reception rate (\"Reception rate\" and its two terms)")
+essai("100% — no missed emission, 30/30 (measured 07/10)", ENCART_TAUX,
       taux_data("100.0", "30", "30"),
       {"primary": "100.0 %",
        "secondary": "30 / 30 trames produites par la station, 30 dernières" + CUMUL,
        "icon": ICONE, "icon_color": "green"})
-essai("96,666… % — UNE émission manquée sur 30 (mesuré à 08:53 ce jour-là)", ENCART_TAUX,
+essai("96.666… % — ONE emission missed out of 30 (measured at 08:53 that day)", ENCART_TAUX,
       taux_data("96.6666641235352", "29", "30"),
       {"primary": "96.7 %",
        "secondary": "29 / 30 trames produites par la station, 30 dernières" + CUMUL,
        "icon": ICONE, "icon_color": "green"})
-essai("75 % — limite basse du vert", ENCART_TAUX, taux_data("75.0", "30", "40"),
+essai("75% — lower limit of green", ENCART_TAUX, taux_data("75.0", "30", "40"),
       {"primary": "75.0 %",
        "secondary": "30 / 40 trames produites par la station, 30 dernières" + CUMUL,
        "icon": ICONE, "icon_color": "amber"})
-essai("69,9 % — sous 70 %, le taux passe au rouge", ENCART_TAUX, taux_data("69.9", "16", "23"),
+essai("69.9% — below 70%, the rate turns red", ENCART_TAUX, taux_data("69.9", "16", "23"),
       {"primary": "69.9 %",
        "secondary": "16 / 23 trames produites par la station, 30 dernières" + CUMUL,
        "icon": ICONE, "icon_color": "red"})
-essai("64 % — la nuit du 06-07/10, émetteur tiers actif (mesuré)", ENCART_TAUX,
+essai("64% — the night of 06-07/10, third-party transmitter active (measured)", ENCART_TAUX,
       taux_data("64.0", "16", "25"),
       {"primary": "64.0 %",
        "secondary": "16 / 25 trames produites par la station, 30 dernières" + CUMUL,
        "icon": ICONE, "icon_color": "red"})
-essai("moins de 20 tentatives — le cumul n'est pas affiché", ENCART_TAUX,
+essai("fewer than 20 attempts — the cumulative total is not displayed", ENCART_TAUX,
       taux_data("100.0", "30", "30", ok="4", ko="1"),
       {"primary": "100.0 %",
        "secondary": "30 / 30 trames produites par la station, 30 dernières",
        "icon": ICONE, "icon_color": "green"})
-essai("première mesure impossible (0 émission comptée)", ENCART_TAUX, taux_data("unknown", "0", "0"),
+essai("first measurement impossible (0 emission counted)", ENCART_TAUX, taux_data("unknown", "0", "0"),
       {"primary": "en attente", "secondary": "Analyse... (deux trames requises)",
        "icon": ICONE, "icon_color": "blue-grey"})
-essai("compteurs indisponibles", ENCART_TAUX,
+essai("counters unavailable", ENCART_TAUX,
       taux_data("unavailable", "unavailable", "unavailable", "unavailable", "unavailable"),
       {"primary": "en attente", "secondary": "Indisponibilité",
        "icon": ICONE, "icon_color": "blue-grey"})
-essai("entités absentes de HA (states() rend « unknown »)", ENCART_TAUX, {},
+essai("entities missing from HA (states() returns \"unknown\")", ENCART_TAUX, {},
       {"primary": "en attente", "secondary": "Indisponibilité",
        "icon": ICONE, "icon_color": "blue-grey"})
 
 # --------------------------------------------------------------------------- 6
-# Icône de la vignette luminosité/UV : elle suit l'état du ciel, mesuré, et non une icône fixe.
-# Règle re-takene de dev/docs/forecast-rules.md (référence ciel clair Kittler/CIE, seuils 0,70 et
-# 0,35, élévation minimale 3°) — pas de seuils de lux bruts : à 3° d'élévation un ciel limpide ne
-# donne que ~4 500 lx contre ~80 000 à 40°, donc un seuil fixe déclarerait « nuageux » un ciel
-# dégagé au lever et au coucher. Choix du propriétaire (07/10/2026) : pas d'icône de nuit
-# partiellement nuageuse — le capteur rend 0 lx la nuit (8 relevés sur 8), il ne dit rien des nuages.
+# Icon of the brightness/UV tile: it follows the state of the sky, measured, not a fixed icon.
+# Rule re-taken from dev/docs/forecast-rules.md (Kittler/CIE clear-sky reference, thresholds 0.70
+# and 0.35, minimum elevation 3°) — no raw lux thresholds: at 3° elevation a clear sky gives
+# only ~4500 lx vs ~80000 at 40°, so a fixed threshold would declare a clear sky "cloudy"
+# at sunrise and sunset. Owner's choice (07/10/2026): no partly-cloudy night icon — the sensor
+# returns 0 lx at night (8 readings out of 8), it says nothing about clouds.
 print()
-print("6. Icône de la vignette luminosité/UV — état du ciel sur des scénarios")
+print("6. Icon of the brightness/UV tile — sky state on scenarios")
 ENCART_LUX = encart("illuminance")
 ENTITY_LUX = f"sensor.{prefix}_illuminance"
 ENTITY_UV = f"sensor.{prefix}_uv_index"
-# Référence ciel clair à 40° (Kittler/CIE) : base des scénarios, comme dans la carte.
+# Clear-sky reference at 40° (Kittler/CIE): basis of the scenarios, as in the card.
 clear_40 = 133800 * math.sin(math.radians(40)) ** 1.15
 
 
@@ -487,7 +487,7 @@ def lux_data(lux, elev, uv: str = "0") -> dict:
 
 
 def klx(lux) -> str:
-    """Ce que la vignette affiche en kilolux — même arrondi que la carte."""
+    """What the tile displays in kilolux — same rounding as the card."""
     return f"{round(float(lux) / 1000, 2)} klx"
 
 
@@ -503,18 +503,18 @@ def essai_icone(label, lux, elev, attendu_icone, uv: str = "0", couleur: str = "
            "icon": ICONES[attendu_icone], "icon_color": couleur})
 
 
-essai_icone("jour dégagé, 85 % de la référence (40°)", round(0.85 * clear_40), 40, "clair")
-essai_icone("ciel partagé, 50 % de la référence", round(0.50 * clear_40), 40, "partiel")
-essai_icone("ciel couvert, 10 % de la référence", round(0.10 * clear_40), 40, "couvert")
-essai_icone("soleil rasant (2°, sous le seuil de 3°) — nuit", 3000, 2, "nuit")
-essai_icone("nuit franche, 0 lx (soleil à -12,3°)", 0, -12.3, "nuit")
-essai_icone("luminosité indisponible en plein jour — icône d'aide, pas « couvert »",
+essai_icone("clear day, 85% of the reference (40°)", round(0.85 * clear_40), 40, "clair")
+essai_icone("partly cloudy, 50% of the reference", round(0.50 * clear_40), 40, "partiel")
+essai_icone("overcast, 10% of the reference", round(0.10 * clear_40), 40, "couvert")
+essai_icone("grazing sun (2°, below the 3° threshold) — night", 3000, 2, "nuit")
+essai_icone("clear night, 0 lx (sun at -12.3°)", 0, -12.3, "nuit")
+essai_icone("illuminance unavailable in full daylight — help icon, not \"couvert\"",
             "unavailable", 40, "absent")
-essai_icone("UV 6 en ciel couvert — la couleur suit l'UV, pas l'icône",
+essai_icone("UV 6 under overcast sky — the colour follows the UV, not the icon",
             round(0.10 * clear_40), 40, "couvert", uv="6", couleur="orange")
 
 print()
 if failures:
-    print(f"{len(failures)} ÉCHEC(S) : {failures}")
+    print(f"{len(failures)} FAILURE(S): {failures}")
     sys.exit(1)
-print(f"CONFORME — {len(echos)} contrôles, 0 échec")
+print(f"CONFORMANT — {len(echos)} checks, 0 failure")
