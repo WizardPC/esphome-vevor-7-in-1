@@ -1,4 +1,0 @@
-{"t": 1791226668.172, "h": "18:57:48", "ev": "debut", "reglage": "RX filter bandwidth", "cle": 3578382494, "depart": 100.0, "valeurs": [100.0, 162.0, 203.0, 232.0, 58.0], "secondes": 150.0}
-{"t": 1791226832.18, "h": "19:00:32", "ev": "valeur", "reglage": "RX filter bandwidth", "valeur": 100.0, "prise": true, "relu": 100.0, "dcaptures": 42, "dtrames": 0, "drejets": 0, "impulsions": 47, "rapport": 0.0, "ecarts": [], "secondes": 150.0}
-{"t": 1791226996.191, "h": "19:03:16", "ev": "valeur", "reglage": "RX filter bandwidth", "valeur": 162.0, "prise": true, "relu": 162.0, "dcaptures": 36, "dtrames": 2, "drejets": 65, "impulsions": 74, "rapport": 0.056, "ecarts": [20.0], "secondes": 150.0}
-{"t": 1791227160.291, "h": "19:06:00", "ev": "valeur", "reglage": "RX filter bandwidth", "valeur": 203.0, "prise": true, "relu": 203.0, "dcaptures": 10, "dtrames": 0, "drejets": 20, "impulsions": 68, "rapport": 0.0, "ecarts": [], "secondes": 150.1}

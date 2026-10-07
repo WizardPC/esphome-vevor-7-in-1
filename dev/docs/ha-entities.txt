@@ -1,24 +1,24 @@
 # Entities actually exposed by Home Assistant - a measurement, not an inference.
 #
-# Source     = API REST de Home Assistant, http://192.168.2.104/api/states
+# Source     = Home Assistant REST API, http://192.168.2.104/api/states
 # Measured on = 07/10/2026 09:51 (local time)
 # Prefix     = jardin_vevor_7_in_1_weather_station   (read, never derived)
 # Refresh    = .venv/bin/python dev/tools/check_ha_card.py --refresh
 # Verify     = .venv/bin/python dev/tools/check_ha_card.py  (step 5 of run_tests.sh)
 #
 # NOT listed below, although attached to the same device: the utility counters
-# créés par le propriétaire sur rain_total (rain_hour, rain_day, rain_week, rain_month, rain_year — plateforme mesurée :
+# created by the owner on rain_total (rain_hour, rain_day, rain_week, rain_month, rain_year — measured platform:
 # utility_meter). They are HA helpers, not firmware entities: including them would make
 # the firmware <-> HA equality check of step 3 fail.
 #
 # The entity_id cannot be derived from the firmware: the device name is renamed in Home
-# Assistant et renomme tous les entity_id d'un coup. D'où cette liste MESURÉE, et la règle :
-# la relire avant de toucher la carte.
+# Assistant and renames every entity_id at once. Hence this MEASURED list, and the rule:
+# re-read it before touching the card.
 #
-## Appareil
+## Device
 # device_prefix: jardin_vevor_7_in_1_weather_station
 
-## Entités
+## Entities
 binary_sensor.jardin_vevor_7_in_1_weather_station_station_battery_low
 button.jardin_vevor_7_in_1_weather_station_dump_pulses
 button.jardin_vevor_7_in_1_weather_station_re_apply_radio_config

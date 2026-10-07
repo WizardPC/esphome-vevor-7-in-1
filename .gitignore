@@ -30,9 +30,13 @@ __pycache__/
 *.tmp
 .tmp_*
 state/.tmp_entry.md
+# Raw measurement logs: data, not code. Produced by the campaign tools (capture_logs.sh);
+# they stay on disk, out of the repository.
+dev/state/panne_*.txt
+dev/state/*.jsonl
 
-# === Journaux de mesure bruts (2,4 Mo de captures) : hors dépôt par défaut.
-#     Les preuves retenues sont dans state/ (PROGRESS.md, DONE.md) et les rapports JSON.
+# === Raw measurement logs (2.4 MB of captures): out of the repository by default.
+#     The evidence kept in the repo lives in state/ (PROGRESS.md, DONE.md) and the JSON reports.
 logs/*
 !logs/.gitkeep
 
