@@ -464,8 +464,8 @@ void Vevor7in1::maj_fenetre_taux_(uint8_t compteur) {
 }
 
 float Vevor7in1::get_taux_reception() const {
-  if (this->nb_fenetre_ < 3) {
-    return NAN;   // pas encore de quoi mesurer : deux trames au minimum, trois pour un intervalle
+  if (this->nb_fenetre_ < 2) {
+    return NAN;   // pas encore de quoi mesurer : il faut au moins deux trames, donc un intervalle
   }
   const size_t premier = (this->tete_fenetre_ + FENETRE_TAUX - this->nb_fenetre_) % FENETRE_TAUX;
   uint32_t recues = 0;
