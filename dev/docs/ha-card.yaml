@@ -61,7 +61,8 @@ cards:
           {{ (states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(0) / 1000) | round(2) }} klx
         secondary: >-
           UV : {{ states('sensor.jardin_vevor_7_in_1_weather_station_uv_index') | float(0) | round(0) | int }} / 11+
-        icon: mdi:white-balance-sunny
+        icon: >-
+          {% set lux = states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(none) %}{% set elev = state_attr('sun.sun', 'elevation') | float(0) %}{% set clair = 133800 * (elev | sin) ** 1.15 if elev >= 3 else 0 %}{% set r = lux / clair if (lux is not none and clair > 1) else -1 %}{% if elev < 3 %}mdi:weather-night{% elif lux is none %}mdi:help-circle-outline{% elif r >= 0.70 %}mdi:weather-sunny{% elif r >= 0.35 %}mdi:weather-partly-cloudy{% else %}mdi:weather-cloudy{% endif %}
         icon_color: >-
           {% set uv = states('sensor.jardin_vevor_7_in_1_weather_station_uv_index') | float(0) %}
           {% if uv <= 2 %}green{% elif uv <= 5 %}yellow{% elif uv <= 7 %}orange{% else %}red{% endif %}

@@ -466,6 +466,53 @@ essai("entités absentes de HA (states() rend « unknown »)", ENCART_TAUX, {},
       {"primary": "en attente", "secondary": "Indisponibilité",
        "icon": ICONE, "icon_color": "blue-grey"})
 
+# --------------------------------------------------------------------------- 6
+# Icône de la vignette luminosité/UV : elle suit l'état du ciel, mesuré, et non une icône fixe.
+# Règle reprise de dev/docs/forecast-rules.md (référence ciel clair Kittler/CIE, seuils 0,70 et
+# 0,35, élévation minimale 3°) — pas de seuils de lux bruts : à 3° d'élévation un ciel limpide ne
+# donne que ~4 500 lx contre ~80 000 à 40°, donc un seuil fixe déclarerait « nuageux » un ciel
+# dégagé au lever et au coucher. Choix du propriétaire (07/10/2026) : pas d'icône de nuit
+# partiellement nuageuse — le capteur rend 0 lx la nuit (8 relevés sur 8), il ne dit rien des nuages.
+print()
+print("6. Icône de la vignette luminosité/UV — état du ciel sur des scénarios")
+ENCART_LUX = encart("illuminance")
+ENTITY_LUX = f"sensor.{prefix}_illuminance"
+ENTITY_UV = f"sensor.{prefix}_uv_index"
+# Référence ciel clair à 40° (Kittler/CIE) : base des scénarios, comme dans la carte.
+clear_40 = 133800 * math.sin(math.radians(40)) ** 1.15
+
+
+def lux_data(lux, elev, uv: str = "0") -> dict:
+    return {ENTITY_LUX: State(str(lux)), ENTITY_UV: State(uv), "_sun_elevation": elev}
+
+
+def klx(lux) -> str:
+    """Ce que la vignette affiche en kilolux — même arrondi que la carte."""
+    return f"{round(float(lux) / 1000, 2)} klx"
+
+
+ICONES = {"clair": "mdi:weather-sunny", "partiel": "mdi:weather-partly-cloudy",
+          "couvert": "mdi:weather-cloudy", "nuit": "mdi:weather-night",
+          "absent": "mdi:help-circle-outline"}
+
+
+def essai_icone(label, lux, elev, attendu_icone, uv: str = "0", couleur: str = "green") -> None:
+    essai(label, ENCART_LUX, lux_data(lux, elev, uv),
+          {"primary": klx(lux) if lux != "unavailable" else klx(0),
+           "secondary": f"UV : {int(float(uv))} / 11+",
+           "icon": ICONES[attendu_icone], "icon_color": couleur})
+
+
+essai_icone("jour dégagé, 85 % de la référence (40°)", round(0.85 * clear_40), 40, "clair")
+essai_icone("ciel partagé, 50 % de la référence", round(0.50 * clear_40), 40, "partiel")
+essai_icone("ciel couvert, 10 % de la référence", round(0.10 * clear_40), 40, "couvert")
+essai_icone("soleil rasant (2°, sous le seuil de 3°) — nuit", 3000, 2, "nuit")
+essai_icone("nuit franche, 0 lx (soleil à -12,3°)", 0, -12.3, "nuit")
+essai_icone("luminosité indisponible en plein jour — icône d'aide, pas « couvert »",
+            "unavailable", 40, "absent")
+essai_icone("UV 6 en ciel couvert — la couleur suit l'UV, pas l'icône",
+            round(0.10 * clear_40), 40, "couvert", uv="6", couleur="orange")
+
 print()
 if failures:
     print(f"{len(failures)} ÉCHEC(S) : {failures}")
