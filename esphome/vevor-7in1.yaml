@@ -122,9 +122,10 @@ remote_receiver:
   # RMT buffer (512 symbols hard limit, documented in dev/docs), and the receiver DIED — 8 hours
   # without a single frame, counters frozen, cured only by a full restart. Timeline proves it: last
   # frame at 21:37, the 8000us build flashed at 22:17, nothing since.
-  # 2000us is the compromise: the station's own frame stays whole (its internal gap is ~1100-1900us),
-  # while the interferer's 77 ms burst is split before it can reach 512 symbols.
-  idle: 2000us
+  # 1100us (the original value) is the only one PROVEN in service: it held a whole day (507 frames,
+  # ~30 stitched by the component). Neither 2000 nor 8000 splits the interferer burst - measured on
+  # 07/10, the RMT froze again at 2000us within minutes.
+  idle: 1100us
   receive_symbols: 512
   tolerance: 25%
 
