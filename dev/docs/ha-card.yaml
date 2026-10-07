@@ -1,189 +1,97 @@
 # =============================================================================
 # Carte Lovelace — Station Vevor 7-en-1 (868 MHz, ESP32-C3 SuperMini + CC1101)
 #
-# Adaptée de la carte « esp32_weather / jardin_vevor » aux entités réellement
-# publiées par esphome/vevor-7in1.yaml (dépôt WizardPC/esphome-vevor-7-in-1).
+# C'est la carte RÉELLEMENT EN SERVICE chez le propriétaire, versionnée ici comme référence du
+# projet (elle remplace la carte précédente, dont le bandeau de prévision devient l'option G en fin
+# de fichier, avec les options A à F déjà présentes).
 #
-# Préfixe des entités : RELEVÉ dans Home Assistant, pas déduit. L'appareil y est nommé
-# « Jardin Vevor 7 in 1 Weather Station », d'où `jardin_vevor_7_in_1_weather_station` (le
-# firmware, lui, déclare friendly_name « Vevor 7-in-1 weather station » et son commentaire
-# dit de renommer côté HA, pas ici). Un renommage d'appareil dans HA renomme les 21
-# entity_id d'un coup — d'où la règle : relire la liste réelle, versionnée dans
-# dev/docs/ha-entities.txt.
-# Autre nom d'appareil chez vous ? Remplacez le préfixe d'un coup :
+# Préfixe des entités : RELEVÉ dans Home Assistant, jamais déduit du firmware. L'appareil y est
+# nommé « Jardin Vevor 7 in 1 Weather Station », d'où `jardin_vevor_7_in_1_weather_station` (le
+# firmware, lui, déclare friendly_name « Vevor 7-in-1 weather station » et son commentaire dit de
+# renommer côté HA, pas ici). Liste mesurée : dev/docs/ha-entities.txt — la relire
+# (`.venv/bin/python dev/tools/check_ha_card.py --refresh`) après tout renommage d'appareil ou
+# nouvelle entité. Un renommage dans HA renomme tous les entity_id d'un coup.
+# Autre nom d'appareil chez vous ? Remplacez le préfixe partout :
 #     sed -i 's/jardin_vevor_7_in_1_weather_station/vevor_7in1/g' ha-card.yaml
-# Aucune exception depuis le 05/10/2026 — Illuminance est elle aussi revenue sous le préfixe
-# d'appareil : l'ancienne entrée de nœud ESPHome a été nettoyée dans HA et
-# `sensor.esp32_weather_illuminance` n'existe plus (absent de /api/states le 05/10/2026).
-# La carte pointait encore dessus : l'encart de luminosité et le bandeau lisaient 0 lx en
-# silence. L'entity_id est `sensor.jardin_vevor_7_in_1_weather_station_illuminance` —
-# relevé, pas déduit (dev/docs/ha-entities.txt).
 #
-# Correspondance avec l'ancienne carte :
-#   sensor.esp32_weather_outside_temperature  → sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature
-#   sensor.esp32_weather_outside_humidity     → sensor.jardin_vevor_7_in_1_weather_station_outdoor_humidity
-#   sensor.esp32_weather_illuminance          → sensor.jardin_vevor_7_in_1_weather_station_illuminance (lx, jusqu'à 327 670) — voir ci-dessus
-#   sensor.esp32_weather_uv_index             → sensor.jardin_vevor_7_in_1_weather_station_uv_index     (0…16, sans unité)
-#   sensor.esp32_weather_wind_speed           → sensor.jardin_vevor_7_in_1_weather_station_wind_speed
-#   sensor.esp32_weather_wind_gust            → sensor.jardin_vevor_7_in_1_weather_station_wind_gust
-#   sensor.esp32_weather_wind_direction       → sensor.jardin_vevor_7_in_1_weather_station_wind_direction  (degrés)
-#   binary_sensor.esp32_weather_weather_station_battery_low
-#                                             → binary_sensor.jardin_vevor_7_in_1_weather_station_station_battery_low
-#   sensor.jardin_vevor_weather_station_pluie_{horaire,jour,semaine,mois}
-#                                             → sensor.jardin_vevor_7_in_1_weather_station_rain_total (compteur CUMULÉ)
+# SECTION « RÉCEPTION » — ce qu'elle mesure, et ce qu'elle ne mesure pas
+#   * « Dernière trame » se lit sur `TX counter` : la SEULE entité déplacée à chaque trame (publiée
+#     dans le gestionnaire de trame du YAML). Les compteurs republiés par l'intervalle de 10 s ont
+#     un horodatage quantifié, et ESPHome ne republie pas une valeur identique.
+#     Seuils 35 / 60 / 180 s : 35 = cadence de 20 s plus gigue, 60 = ré-armement du garde-fou,
+#     180 = redémarrage de la carte. Les deux derniers sont les valeurs PAR DÉFAUT du composant
+#     (vevor_7in1.h — creneaux_avant_rearmement_ = 3 créneaux de 20 s, duree_max_avant_redemarrage_s_
+#     = 180) ; elles se règlent dans HA, entités « Watchdog ... ».
+#   * « Taux de réception » lit `reception_rate` : la part des ÉMISSIONS de la station réellement
+#     décodées, calculée par le composant d'après le compteur embarqué de la station (39 unités =
+#     une émission, soit 20 s), sur la fenêtre des 30 dernières trames décodées (≈10 min quand tout
+#     passe ; plus long quand ça se dégrade, le dénominateur n'existant qu'entre deux trames reçues).
+#     Ce n'est PAS le rapport OK/(OK+KO) : celui-ci mesurait la part des trames valides PARMI LES
+#     TENTATIVES, confondait « la station n'émet pas » avec « on ne l'entend pas », et laissait les
+#     captures d'un émetteur tiers gonfler « Rejected frames » — mesuré le 07/10/2026 : 39 rejets en
+#     30 min pour UNE SEULE émission de la station manquée.
+#     Ses DEUX TERMES sont affichés (`reception_window_decoded` / `reception_window_emitted`) : la
+#     carte écrit « 29 / 30 » et le pourcentage se vérifie au lieu de se croire sur parole.
+#     Bandes 90 / 70 % : un choix d'affichage, pas une vérité (nuit du 06-07/10 : 64 % avec
+#     l'émetteur tiers actif, 100 % une fois le canal rendu).
+#   * LIMITE ASSUMÉE : un template qui utilise now() n'est réévalué qu'au début de chaque minute
+#     (helpers/event.py — async_track_utc_time_change(..., second=0)) et à chaque changement d'état
+#     de l'entité citée. L'âge affiché est donc un INSTANTANÉ pris au rendu, pas un compteur qui
+#     défile ; le verdict, lui, reste juste à moins d'une minute près.
 #
-# Deux ruptures assumées par rapport à l'ancienne carte :
-#   1) le compteur de pluie est CUMULÉ (0,233 mm par bascule, depuis la remise à
-#      zéro) : il n'existe plus d'entités heure/jour/semaine/mois côté firmware.
-#      La version d'origine est reconstructible en HA (bloc « Option A » plus bas).
-#   2) la prévision suit dev/docs/forecast-rules.md (règles 2 à 5 de ce dépôt) au lieu
-#      de seuils fixes. La branche nocturne basée sur l'humidité est supprimée :
-#      l'humidité ne mesure pas la couverture nuageuse, donc la nuit la carte
-#      répond « Nuit » plutôt qu'un état plausible et faux.
-#
-# Troisième section, ajoutée le 05/10/2026 — « Réception ». Elle n'invente rien, elle ne lit
-# que des compteurs que le firmware publie déjà.
-# Mise à jour du 07/10/2026 : le taux n'est plus le rapport OK/(OK+KO) — la part des trames
-# valides PARMI LES TENTATIVES — mais `reception_rate`, la part des ÉMISSIONS de la station
-# réellement décodées, calculée par le composant sur le compteur embarqué de la station. Ses deux
-# termes sont publiés à part (`reception_window_decoded` et `reception_window_emitted`) pour que la
-# carte affiche « 29 / 30 » : le pourcentage se vérifie au lieu de se croire sur parole.
-#   1) Fraîcheur de la dernière trame. Référence retenue, `TX counter` — son `last_changed`
-#      est déplacé à CHAQUE trame décodée (publié dans le gestionnaire de trame du YAML).
-#      Mesuré le 05/10/2026 sur la carte en service, déplacement toutes les 20 s, en phase
-#      avec `Last raw frame`. Trois autres entités bougent aussi, mais moins bien —
-#      `Valid frames`, `RMT captures` et `Duplicates ignored` sont republiés par un
-#      `interval: 10s`, donc leur `last_changed` est quantifié à 10 s (retard mesuré de 1 à
-#      10 s selon la phase) et l'âge affiché peut lire jusqu'à ~30 s alors que la trame vient
-#      d'arriver. `Last verdict` est figé (toujours « ok ») et `Rain total` ne bouge qu'à la
-#      pluie — aucun des deux ne dit la fraîcheur. Seuils de couleur, 35 s (cadence de 20 s
-#      plus une tolérance de gigue), 60 s (le garde-fou ré-arme la radio après 3 créneaux
-#      muets) et 180 s (il redémarre la carte). Ces deux dernières valeurs sont les réglages
-#      compilés par défaut, modifiables dans HA (« Watchdog ... ») — si vous les changez,
-#      reportez-les ici.
-#   2) Taux de trames valides, `Valid frames` contre `Rejected frames`, cumulés depuis le
-#      démarrage de la carte. C'est le rapport que le README documente (« Rejected frames —
-#      the real noise counter »). Attention à ce qu'il compte — des CANDIDATS portant un mot
-#      de synchronisation qui ont échoué au décodage, pas les émissions de la station, une
-#      seule rafale pouvant en fournir plusieurs. Les doublons sont affichés à part et
-#      exclus du taux, c'est la même rafale livrée deux fois par le RMT, ni un succès ni un
-#      échec.
-# Limites assumées, écrites ici parce qu'elles ne se voient pas à l'écran.
-#   a) Les deux compteurs sont en RAM et repartent de 0 à chaque redémarrage de la carte
-#      (garde-fou, flashage, coupure), donc le taux est TOUJOURS « depuis le démarrage ».
-#      Mesuré sur les 24 h complètes des 04-05/10/2026, 24,8 % (2 111 valides / 6 394
-#      rejetés), compteurs remis à zéro 17 fois. Les seuils de couleur de la carte (30 % et
-#      15 %) sont choisis d'après ce relevé — ce n'est pas une cible du projet, c'est une
-#      ligne à ajuster chez vous.
-#   b) Une trame d'une AUTRE station est écartée par le filtre d'ID sans entrer dans ces deux
-#      compteurs (seul le journal de la carte la nomme) — elle n'apparaît dans aucun
-#      pourcentage.
-#   c) « Quelle part des trames émises ai-je reçue ? » demande une fenêtre de temps, donc un
-#      helper — voir l'option F en fin de fichier.
+# COMPTEURS DE PLUIE : heure / jour / semaine / mois viennent de compteurs d'UTILITÉ côté Home
+# Assistant (utility_meter sur `rain_total`), pas du firmware — celui-ci ne publie qu'un cumul.
+# Déclarés comme helpers du propriétaire dans dev/tools/check_ha_card.py et dans dev/docs/ha-entities.txt.
 # =============================================================================
-
 type: vertical-stack
 cards:
-  # --- Bandeau : état du ciel, estimé en HA à partir des mesures seules ---------
-  # Ce n'est PAS une prévision : la station n'émet aucune pression, donc aucun des six
-  # états ne peut être prévu depuis ses mesures (dev/docs/forecast-rules.md §1). Ce titre
-  # vient de l'ancienne carte ; « Ciel actuel (estimé) » dit ce que le bandeau fait.
-  #
-  # Détection de pluie — deux limites, mesurées :
-  #   1) la fenêtre de 20 min est lue sur le `last_changed` du compteur cumulé. Vérifié dans
-  #      la source de HA : `_attr_force_update = static_info.force_update`, soit False pour
-  #      nos capteurs — donc last_changed ne bouge que quand la valeur change réellement ;
-  #   2) une bascule isolée (0,233 mm) vaut 0,7 mm/h sur la fenêtre : la règle documentée la
-  #      classe donc « Pluvieux ». C'est une limite de RÉSOLUTION du pluviomètre, pas un bug :
-  #      avec ce compteur, une bascule isolée et une bruine réelle sont indistinguables.
-  #      Le garde `pluie_mm > 0` ci-dessous écarte au moins le cas « compteur remis à zéro » ;
-  #      pour exiger un vrai débit (et ignorer la bascule isolée), voir l'option B plus bas.
-  #      Diagnostic à faire dans HA → Outils de développement → Modèle :
-  #        compteur = {{ states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') }} mm
-  #        dernière bascule : {{ relative_time(states.sensor.jardin_vevor_7_in_1_weather_station_rain_total.last_changed) }}
-  - type: custom:mushroom-template-card
-    entity: sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature
-    primary: Ciel actuel (estimé)
-    secondary: >-
-      {% set t = states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature') | float(none) %}
-      {% set rafale = states('sensor.jardin_vevor_7_in_1_weather_station_wind_gust') | float(0) %}
-      {% set lux = states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(0) %}
-      {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
-      {% set pluie_mm = states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') | float(none) %}
-      {% set compteur = states.sensor.jardin_vevor_7_in_1_weather_station_rain_total %}
-      {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
-      {% set pluie = pluie_mm is not none and pluie_mm > 0 and depuis < 1200 %}
-      {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
-      {% if pluie and t is not none and t < 1 %}
-        Neigeux — {{ t }} °C, pluie en cours (alerte verglas du constructeur, < 1 °C)
-      {% elif pluie and rafale >= 40 %}
-        Orageux / Tempête — rafales {{ '%g' % rafale }} km/h
-      {% elif pluie %}
-        Pluvieux — dernière bascule il y a {{ (depuis / 60) | round(0) | int }} min
-      {% elif elev >= 3 and ciel_clair >= 1000 %}
-        {% set r = lux / ciel_clair %}
-        {% if r >= 0.70 %}Dégagé / Ensoleillé — {{ (r * 100) | round(0) | int }} % du ciel clair
-        {% elif r >= 0.35 %}Partiellement nuageux — {{ (r * 100) | round(0) | int }} % du ciel clair
-        {% else %}Nuageux — {{ (r * 100) | round(0) | int }} % du ciel clair{% endif %}
-      {% elif is_state('sun.sun', 'below_horizon') %}
-        Nuit — luminosité non interprétable sans soleil (soleil à {{ elev | round(1) }}°)
-      {% else %}
-        Indéterminé — mesures insuffisantes ({{ lux | round(0) | int }} lx)
-      {% endif %}
-    icon: >-
-      {% set t = states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature') | float(none) %}
-      {% set rafale = states('sensor.jardin_vevor_7_in_1_weather_station_wind_gust') | float(0) %}
-      {% set lux = states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(0) %}
-      {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
-      {% set pluie_mm = states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') | float(none) %}
-      {% set compteur = states.sensor.jardin_vevor_7_in_1_weather_station_rain_total %}
-      {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
-      {% set pluie = pluie_mm is not none and pluie_mm > 0 and depuis < 1200 %}
-      {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
-      {% if pluie and t is not none and t < 1 %}mdi:weather-snowy
-      {% elif pluie and rafale >= 40 %}mdi:weather-lightning-rainy
-      {% elif pluie %}mdi:weather-rainy
-      {% elif elev >= 3 and ciel_clair >= 1000 %}
-        {% set r = lux / ciel_clair %}
-        {% if r >= 0.70 %}mdi:weather-sunny
-        {% elif r >= 0.35 %}mdi:weather-partly-cloudy
-        {% else %}mdi:weather-cloudy{% endif %}
-      {% elif is_state('sun.sun', 'below_horizon') %}mdi:weather-night
-      {% else %}mdi:weather-cloudy-alert{% endif %}
-    icon_color: >-
-      {% set t = states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature') | float(none) %}
-      {% set rafale = states('sensor.jardin_vevor_7_in_1_weather_station_wind_gust') | float(0) %}
-      {% set lux = states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(0) %}
-      {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
-      {% set pluie_mm = states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') | float(none) %}
-      {% set compteur = states.sensor.jardin_vevor_7_in_1_weather_station_rain_total %}
-      {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
-      {% set pluie = pluie_mm is not none and pluie_mm > 0 and depuis < 1200 %}
-      {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
-      {% if pluie and t is not none and t < 1 %}cyan
-      {% elif pluie and rafale >= 40 %}deep-purple
-      {% elif pluie %}blue
-      {% elif elev >= 3 and ciel_clair >= 1000 %}
-        {% set r = lux / ciel_clair %}
-        {% if r >= 0.70 %}amber
-        {% elif r >= 0.35 %}orange
-        {% else %}blue-grey{% endif %}
-      {% elif is_state('sun.sun', 'below_horizon') %}indigo
-      {% else %}grey{% endif %}
-    badge_icon: >-
-      {% if is_state('binary_sensor.jardin_vevor_7_in_1_weather_station_station_battery_low', 'on') %}
-        mdi:battery-alert
-      {% endif %}
-    badge_color: red
-
-  # --- Température / humidité / luminosité / UV ---------------------------------
   - type: grid
     columns: 2
     square: false
     cards:
       - type: custom:mushroom-template-card
-        primary: '{{ states(''sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature'', 1) }} °C'
-        secondary: 'Humidité : {{ states(''sensor.jardin_vevor_7_in_1_weather_station_outdoor_humidity'') }} %'
+        entity: sensor.jardin_vevor_7_in_1_weather_station_tx_counter
+        primary: >-
+          {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
+          {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
+          {% if age is none %}inconnu {% elif age < 60 %}il y a {{ age | round(0) | int }} s {% elif age < 3600 %}il y a {{ (age / 60) | round(0) | int }} min {% else %}il y a {{ (age / 3600) | round(1) }} h {% endif %}
+        secondary: >-
+          {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
+          {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
+          {% if age is none %}Carte injoignable, ou entité absente {% else %}Trame {{ e.state | int }} à {{ as_timestamp(e.last_changed) | timestamp_custom('%H:%M:%S', true) }} — {% if age <= 35 %}Réception normale {% elif age <= 60 %}Trame manquée {% elif age <= 180 %}Silence (ré-armement) {% else %}Silence (reboot) {% endif %}{% endif %}
+        icon: >-
+          {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
+          {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
+          {% if age is none %}mdi:help-circle-outline {% elif age <= 35 %}mdi:clock-check-outline {% elif age <= 180 %}mdi:clock-alert-outline {% else %}mdi:clock-remove-outline {% endif %}
+        icon_color: >-
+          {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
+          {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
+          {% if age is none %}grey {% elif age <= 35 %}green {% elif age <= 60 %}amber {% elif age <= 180 %}orange {% else %}red {% endif %}
+      - type: custom:mushroom-template-card
+        entity: sensor.jardin_vevor_7_in_1_weather_station_reception_rate
+        primary: >-
+          {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
+          {% if r is none %}en attente {% else %}{{ r | round(1) }} % {% endif %}
+        secondary: >-
+          {% set rd = states('sensor.jardin_vevor_7_in_1_weather_station_reception_window_decoded') | float(none) %}
+          {% set re = states('sensor.jardin_vevor_7_in_1_weather_station_reception_window_emitted') | float(none) %}
+          {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
+          {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
+          {% set total = (ok + ko) if ok is not none and ko is not none else 0 %}
+          {% if rd is none or re is none %}Indisponibilité {% elif re | float(0) < 1 %}Analyse... (deux trames requises) {% else %}{{ rd | int }} / {{ re | int }} trames produites par la station, 30 dernières{% if total >= 20 %} · cumul {{ ok | int }} / {{ total | int }}{% endif %}{% endif %}
+        icon: mdi:access-point
+        icon_color: >-
+          {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
+          {% if r is none %}blue-grey {% elif r >= 90 %}green {% elif r >= 70 %}amber {% else %}red {% endif %}
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: custom:mushroom-template-card
+        primary: >-
+          {{ states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature', 1) }} °C
+        secondary: >-
+          Humidité : {{ states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_humidity') }} %
         icon: mdi:thermometer
         icon_color: >-
           {% set temp = states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature') | float(0) %}
@@ -193,16 +101,12 @@ cards:
         primary: >-
           {{ (states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(0) / 1000) | round(2) }} klx
         secondary: >-
-          Indice UV : {{ states('sensor.jardin_vevor_7_in_1_weather_station_uv_index') | float(0) | round(0) | int }} (0…16)
+          UV : {{ states('sensor.jardin_vevor_7_in_1_weather_station_uv_index') | float(0) | round(0) | int }} / 11+
         icon: mdi:white-balance-sunny
         icon_color: >-
           {% set uv = states('sensor.jardin_vevor_7_in_1_weather_station_uv_index') | float(0) %}
           {% if uv <= 2 %}green{% elif uv <= 5 %}yellow{% elif uv <= 7 %}orange{% else %}red{% endif %}
         entity: sensor.jardin_vevor_7_in_1_weather_station_illuminance
-
-  # --- 24 h de température et d'humidité ---------------------------------------
-  # points_per_hour: la station émet une trame toutes les 20 s (180/h) ; 6 points/h
-  # suffisent à garder la forme du signal sur 24 h sans charger la base.
   - type: custom:mini-graph-card
     entities:
       - entity: sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature
@@ -221,8 +125,6 @@ cards:
       state: false
       legend: true
       fill: fade
-
-  # --- Vent et course du soleil -------------------------------------------------
   - type: grid
     columns: 2
     square: false
@@ -297,18 +199,14 @@ cards:
             name: Soleil
             icon: mdi:sun-angle
             icon_color: yellow
-
-  # --- Pluie : le compteur est cumulé, il n'y a plus d'agrégats firmware --------
-  # « Cumul » = total depuis la remise à zéro (changement de piles).
-  # « Dernière bascule » = horodatage du dernier +0,233 mm : c'est exactement le
-  # critère « pluie en cours » utilisé par le bandeau (compteur qui a bougé).
   - type: grid
     columns: 2
     square: false
     cards:
       - type: custom:mushroom-template-card
         entity: sensor.jardin_vevor_7_in_1_weather_station_rain_total
-        primary: '{{ states(''sensor.jardin_vevor_7_in_1_weather_station_rain_total'', 1) }} mm'
+        primary: >-
+          {{ states('sensor.jardin_vevor_7_in_1_weather_station_rain_total', 1) }} mm
         secondary: Cumul depuis la remise à zéro
         icon: mdi:weather-pouring
         icon_color: light-blue
@@ -320,16 +218,42 @@ cards:
         secondary: Dernière bascule (+0,233 mm)
         icon: mdi:water-plus-outline
         icon_color: blue
-
-  # Cumul sur 7 jours : une marche à chaque averse. Pour des barres
-  # « pluie par jour », voir l'option A plus bas (utility_meter).
+  - type: grid
+    columns: 4
+    square: false
+    cards:
+      - type: custom:mushroom-entity-card
+        entity: sensor.jardin_vevor_7_in_1_weather_station_rain_hour
+        name: Heure
+        icon: mdi:weather-pouring
+        icon_color: light-blue
+        layout: vertical
+      - type: custom:mushroom-entity-card
+        entity: sensor.jardin_vevor_7_in_1_weather_station_rain_day
+        name: Jour
+        icon: mdi:calendar-week-begin
+        icon_color: light-blue
+        layout: vertical
+      - type: custom:mushroom-entity-card
+        entity: sensor.jardin_vevor_7_in_1_weather_station_rain_week
+        name: Semaine
+        icon: mdi:calendar-week
+        icon_color: light-blue
+        layout: vertical
+      - type: custom:mushroom-entity-card
+        entity: sensor.jardin_vevor_7_in_1_weather_station_rain_month
+        name: Mois
+        icon: mdi:calendar-weekend
+        icon_color: light-blue
+        layout: vertical
   - type: custom:mini-graph-card
     name: Cumul de pluie (7 jours)
     icon: mdi:weather-rainy
     entities:
-      - entity: sensor.jardin_vevor_7_in_1_weather_station_rain_total
+      - entity: sensor.jardin_vevor_7_in_1_weather_station_rain_day
         name: Cumul
         color: '#2196f3'
+    aggregate: max
     hours_to_show: 168
     points_per_hour: 1
     line_width: 2
@@ -340,103 +264,92 @@ cards:
       state: true
       labels: true
 
-  # --- Réception : fraîcheur de la dernière trame et taux de réception conforme ------
-  # Ce que ces deux cartes calculent, pourquoi la fraîcheur se lit sur « TX counter », ce
-  # que le taux compte exactement et ses limites : en-tête de ce fichier, section
-  # « Réception ». Aucun helper n'est nécessaire — que des compteurs du firmware.
-  - type: grid
-    columns: 2
-    square: false
-    cards:
-      # 1) Dernière trame : âge du `last_changed` de « TX counter ». Il est publié dans le
-      #    gestionnaire de trame (donc déplacé à chaque trame), contrairement aux compteurs
-      #    republiés par l'intervalle de 10 s.
-      #    Seuils : 35 s = normale (20 s de cadence + tolérance de gigue), 60 s = le
-      #    garde-fou ré-arme la radio, 180 s = il redémarre la carte. Les deux derniers sont
-      #    les réglages par défaut du firmware, modifiables dans HA (« Watchdog ... »).
-      - type: custom:mushroom-template-card
-        entity: sensor.jardin_vevor_7_in_1_weather_station_tx_counter
-        primary: >-
-          {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
-          {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
-          {% if age is none %}inconnu
-          {% elif age < 60 %}il y a {{ age | round(0) | int }} s
-          {% elif age < 3600 %}il y a {{ (age / 60) | round(0) | int }} min
-          {% else %}il y a {{ (age / 3600) | round(1) }} h
-          {% endif %}
-        secondary: >-
-          {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
-          {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
-          {% if age is none %}Carte injoignable, ou entité absente
-          {% elif age <= 35 %}Réception normale — 1 trame toutes les 20 s
-          {% elif age <= 60 %}Une trame manquée
-          {% elif age <= 180 %}Silence radio — ré-armement demandé à 60 s
-          {% else %}Silence radio — la carte redémarre à 180 s
-          {% endif %}
-        icon: >-
-          {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
-          {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
-          {% if age is none %}mdi:help-circle-outline
-          {% elif age <= 35 %}mdi:clock-check-outline
-          {% elif age <= 180 %}mdi:clock-alert-outline
-          {% else %}mdi:clock-remove-outline
-          {% endif %}
-        icon_color: >-
-          {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
-          {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
-          {% if age is none %}grey
-          {% elif age <= 35 %}green
-          {% elif age <= 60 %}amber
-          {% elif age <= 180 %}orange
-          {% else %}red
-          {% endif %}
-      # 2) Taux de réception conforme : la part des ÉMISSIONS de la station réellement décodées,
-      #    calculée par le composant (`reception_rate`) d'après le compteur embarqué de la station,
-      #    sur la fenêtre des 30 dernières trames décodées (≈10 min quand tout passe).
-      #    Ce n'est PAS le rapport OK/(OK+KO) : celui-ci mesurait la part des trames valides PARMI
-      #    LES TENTATIVES, confondait « la station n'émet pas » avec « on ne l'entend pas », et
-      #    laissait « Rejected frames » gonfler par les captures d'un émetteur tiers — mesuré le
-      #    07/10 : 39 rejets en 30 min pour UNE SEULE émission de la station manquée.
-      #    Ses deux termes sont affichés à dessein : « 29 / 30 » se lit sans avoir à croire le
-      #    pourcentage sur parole.
-      #    Seuils de couleur 90 % et 70 % : choix d'affichage, pas une vérité (nuit du 06-07/10,
-      #    64 % avec l'émetteur tiers actif contre 100 % une fois le canal rendu).
-      - type: custom:mushroom-template-card
-        entity: sensor.jardin_vevor_7_in_1_weather_station_reception_rate
-        primary: >-
-          {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
-          {% if r is none %}en attente
-          {% else %}{{ r | round(1) }} %
-          {% endif %}
-        secondary: >-
-          {% set rd = states('sensor.jardin_vevor_7_in_1_weather_station_reception_window_decoded') | float(none) %}
-          {% set re = states('sensor.jardin_vevor_7_in_1_weather_station_reception_window_emitted') | float(none) %}
-          {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
-          {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
-          {% set total = (ok + ko) if ok is not none and ko is not none else 0 %}
-          {% if rd is none or re is none %}Compteurs indisponibles
-          {% elif re | float(0) < 1 %}Deux trames requises pour une première mesure
-          {% else %}{{ rd | int }} / {{ re | int }} trames émises par la station reçues, sur les 30 dernières{% if total >= 20 %} · cumul depuis le démarrage : {{ ok | int }} / {{ total | int }}{% endif %}
-          {% endif %}
-        icon: >-
-          {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
-          {% if r is none %}mdi:help-circle-outline
-          {% elif r >= 90 %}mdi:check-circle-outline
-          {% elif r >= 70 %}mdi:alert-circle-outline
-          {% else %}mdi:close-circle-outline
-          {% endif %}
-        icon_color: >-
-          {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
-          {% if r is none %}blue-grey
-          {% elif r >= 90 %}green
-          {% elif r >= 70 %}amber
-          {% else %}red
-          {% endif %}
-
 # =============================================================================
 # OPTIONS — à ajouter seulement si vous les voulez (rien de tout ceci n'est
 # nécessaire pour que la carte ci-dessus fonctionne).
 # =============================================================================
+
+# -----------------------------------------------------------------------------
+# Option G — bandeau de prévision (règles : dev/docs/forecast-rules.md).
+# La carte en service ne l'affiche pas : ce bandeau était celui de la carte de référence
+# précédente. Le contrôle (dev/tools/check_ha_card.py, étape 5) continue de le tester
+# depuis cette version commentée, pour qu'il ne pourrisse pas en attendant d'être repris.
+#   - type: custom:mushroom-template-card
+#     entity: sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature
+#     primary: Ciel actuel (estimé)
+#     secondary: >-
+#       {% set t = states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature') | float(none) %}
+#       {% set rafale = states('sensor.jardin_vevor_7_in_1_weather_station_wind_gust') | float(0) %}
+#       {% set lux = states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(0) %}
+#       {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
+#       {% set pluie_mm = states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') | float(none) %}
+#       {% set compteur = states.sensor.jardin_vevor_7_in_1_weather_station_rain_total %}
+#       {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
+#       {% set pluie = pluie_mm is not none and pluie_mm > 0 and depuis < 1200 %}
+#       {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
+#       {% if pluie and t is not none and t < 1 %}
+#         Neigeux — {{ t }} °C, pluie en cours (alerte verglas du constructeur, < 1 °C)
+#       {% elif pluie and rafale >= 40 %}
+#         Orageux / Tempête — rafales {{ '%g' % rafale }} km/h
+#       {% elif pluie %}
+#         Pluvieux — dernière bascule il y a {{ (depuis / 60) | round(0) | int }} min
+#       {% elif elev >= 3 and ciel_clair >= 1000 %}
+#         {% set r = lux / ciel_clair %}
+#         {% if r >= 0.70 %}Dégagé / Ensoleillé — {{ (r * 100) | round(0) | int }} % du ciel clair
+#         {% elif r >= 0.35 %}Partiellement nuageux — {{ (r * 100) | round(0) | int }} % du ciel clair
+#         {% else %}Nuageux — {{ (r * 100) | round(0) | int }} % du ciel clair{% endif %}
+#       {% elif is_state('sun.sun', 'below_horizon') %}
+#         Nuit — luminosité non interprétable sans soleil (soleil à {{ elev | round(1) }}°)
+#       {% else %}
+#         Indéterminé — mesures insuffisantes ({{ lux | round(0) | int }} lx)
+#       {% endif %}
+#     icon: >-
+#       {% set t = states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature') | float(none) %}
+#       {% set rafale = states('sensor.jardin_vevor_7_in_1_weather_station_wind_gust') | float(0) %}
+#       {% set lux = states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(0) %}
+#       {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
+#       {% set pluie_mm = states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') | float(none) %}
+#       {% set compteur = states.sensor.jardin_vevor_7_in_1_weather_station_rain_total %}
+#       {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
+#       {% set pluie = pluie_mm is not none and pluie_mm > 0 and depuis < 1200 %}
+#       {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
+#       {% if pluie and t is not none and t < 1 %}mdi:weather-snowy
+#       {% elif pluie and rafale >= 40 %}mdi:weather-lightning-rainy
+#       {% elif pluie %}mdi:weather-rainy
+#       {% elif elev >= 3 and ciel_clair >= 1000 %}
+#         {% set r = lux / ciel_clair %}
+#         {% if r >= 0.70 %}mdi:weather-sunny
+#         {% elif r >= 0.35 %}mdi:weather-partly-cloudy
+#         {% else %}mdi:weather-cloudy{% endif %}
+#       {% elif is_state('sun.sun', 'below_horizon') %}mdi:weather-night
+#       {% else %}mdi:weather-cloudy-alert{% endif %}
+#     icon_color: >-
+#       {% set t = states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature') | float(none) %}
+#       {% set rafale = states('sensor.jardin_vevor_7_in_1_weather_station_wind_gust') | float(0) %}
+#       {% set lux = states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(0) %}
+#       {% set elev = state_attr('sun.sun', 'elevation') | float(-90) %}
+#       {% set pluie_mm = states('sensor.jardin_vevor_7_in_1_weather_station_rain_total') | float(none) %}
+#       {% set compteur = states.sensor.jardin_vevor_7_in_1_weather_station_rain_total %}
+#       {% set depuis = (now() - compteur.last_changed).total_seconds() if compteur is not none and compteur.last_changed else 999999999 %}
+#       {% set pluie = pluie_mm is not none and pluie_mm > 0 and depuis < 1200 %}
+#       {% set ciel_clair = 133800 * (elev | sin) ** 1.15 if elev > 0 else 0 %}
+#       {% if pluie and t is not none and t < 1 %}cyan
+#       {% elif pluie and rafale >= 40 %}deep-purple
+#       {% elif pluie %}blue
+#       {% elif elev >= 3 and ciel_clair >= 1000 %}
+#         {% set r = lux / ciel_clair %}
+#         {% if r >= 0.70 %}amber
+#         {% elif r >= 0.35 %}orange
+#         {% else %}blue-grey{% endif %}
+#       {% elif is_state('sun.sun', 'below_horizon') %}indigo
+#       {% else %}grey{% endif %}
+#     badge_icon: >-
+#       {% if is_state('binary_sensor.jardin_vevor_7_in_1_weather_station_station_battery_low', 'on') %}
+#         mdi:battery-alert
+#       {% endif %}
+#     badge_color: red
+#
+#   # --- Température / humidité / luminosité / UV ---------------------------------
 
 # Option A — retrouver Heure / Jour / Semaine / Mois et des barres par jour.
 # À mettre dans configuration.yaml : quatre compteurs d'énergie dérivés du cumul.

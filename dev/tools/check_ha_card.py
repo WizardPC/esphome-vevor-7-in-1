@@ -155,23 +155,31 @@ EXCEPTIONS: dict[str, str] = {}
 cited = sorted(set(re.findall(
     rf"\b(?:sensor|binary_sensor|text_sensor|number|button)\.{re.escape(prefix)}_[A-Za-z0-9_]+", raw))
     | {entity for entity in EXCEPTIONS.values() if entity in raw})
+# HELPERS: ids the CARD cites that are neither firmware entities nor HA-listing entries — the
+# owner's utility_meter counters on rain_total (kept out of the listing for the very same reason,
+# see EXCEPTIONS_HA). Declared, never worked around: the two checks below stay equality checks.
+HELPERS = sorted(entity for entity in cited
+                 if entity.split(".", 1)[1][len(prefix) + 1:] in EXCEPTIONS_HA)
+cited = [entity for entity in cited if entity not in HELPERS]
 print(f"2. Entités : appareil « {prefix} », {len(reference)} entités relevées dans HA, "
-      f"{len(cited)} citées par la carte")
+      f"{len(cited)} citées par la carte, {len(HELPERS)} helpers HA déclarés → {HELPERS}")
 unknown = [entity for entity in cited if entity not in reference]
 check(not unknown, f"les entités citées existent toutes dans le relevé ({unknown or 'aucun écart'})")
 unused = sorted(entity for entity in reference if entity not in cited)
 print(f"     relevé non cité par la carte (attendu : diag. et commandes) : {len(unused)} → {unused}")
 
 # Negative control of THAT check, before trusting its green: the same extraction, on a copy with
-# one deliberately broken id, must fail. A check whose failure mode was never exercised is an
-# untested claim.
+# one deliberately broken id, must fail — and it must fail ON THAT ID, not on the declared HA
+# helpers (they are legitimately outside the listing, so they are removed first). A check whose
+# failure mode was never exercised is an untested claim.
 casse = raw.replace("tx_counter", "tx_couner")
 cites_casse = sorted(set(re.findall(
     rf"\b(?:sensor|binary_sensor|text_sensor|number|button)\.{re.escape(prefix)}_[A-Za-z0-9_]+",
     casse)))
-inconnus_casse = [entity for entity in cites_casse if entity not in reference]
-check(bool(inconnus_casse),
-      f"controle négatif : un identifiant cassé est détecté ({inconnus_casse[:1] or 'NON DÉTECTÉ'})")
+inconnus_casse = [entity for entity in cites_casse
+                  if entity not in reference and entity not in HELPERS]
+check(any("tx_couner" in entity for entity in inconnus_casse),
+      f"controle négatif : l'identifiant cassé est bien détecté ({inconnus_casse[:1] or 'NON DÉTECTÉ'})")
 
 # --------------------------------------------------------------------------- 3
 firmware = FIRMWARE.read_text(encoding="utf-8")
@@ -285,12 +293,49 @@ def render(template: str, data: dict) -> str:
         is_state=lambda entity, value: states(entity) == value,
         now=lambda: NOW,
         relative_time=lambda when: f"{int((NOW - when).total_seconds() // 60)} minutes",
+        # `as_timestamp` : HA l'expose comme fonction ET comme filtre. La vignette « Dernière
+        # trame » s'en sert pour afficher l'heure exacte du dernier passage — un horodatage absolu
+        # ne dérive pas, contrairement à l'âge, qui est un instantané pris au rendu.
+        as_timestamp=lambda when: when.timestamp() if hasattr(when, "timestamp") else 0.0,
     )
+    env.filters["timestamp_custom"] = lambda value, fmt="%H:%M:%S", local=True: (
+        datetime.fromtimestamp(float(value)).strftime(fmt))
     return str(env.from_string(template).render()).strip()
 
 
-header = card["cards"][0]
-TEMPLATES = {"état": header["secondary"], "icône": header["icon"], "couleur": header["icon_color"]}
+def trouve_bandeau(racine):
+    """Le bandeau de prévision — repéré à son TEXTE, jamais à une position dans la carte."""
+    a_voir = list(racine) if isinstance(racine, list) else [racine]
+    while a_voir:
+        noeud = a_voir.pop(0)
+        if isinstance(noeud, dict):
+            if "clair" in str(noeud.get("secondary", "")):
+                return noeud
+            a_voir.extend(noeud.values())
+        elif isinstance(noeud, list):
+            a_voir.extend(noeud)
+    return None
+
+
+# La carte en service n'affiche pas le bandeau : il vit en option commentée (option G). Les
+# scénarios de prévision doivent continuer de tenir cette version-là, et le contrôle doit le dire
+# s'il ne trouve plus rien — un scénario qui disparaît en silence ne vaut rien.
+bandeau, origine = trouve_bandeau(card), "carte active"
+if bandeau is None:
+    for bloc in blocks:
+        try:
+            charge = yaml.safe_load(bloc)
+        except Exception:  # noqa: BLE001 - un bloc illisible est déjà signalé par l'étape 4
+            continue
+        bandeau = trouve_bandeau(charge)
+        if bandeau is not None:
+            origine = "option commentée (G)"
+            break
+if bandeau is None:
+    sys.exit("5. Bandeau de prévision introuvable — ni dans la carte active, ni dans les options "
+             "commentées. Le remettre, ou retirer les scénarios et le dire ici.")
+print(f"   (bandeau de prévision testé depuis la version : {origine})")
+TEMPLATES = {"état": bandeau["secondary"], "icône": bandeau["icon"], "couleur": bandeau["icon_color"]}
 clear_40 = 133800 * math.sin(math.radians(40)) ** 1.15  # clear-sky reference at 40 deg (sec. 6)
 ENTITY = {
     "temp": f"sensor.{prefix}_outdoor_temperature",
@@ -368,7 +413,7 @@ scenario("soleil rasant, référence < 1 000 lx — le rapport n'a plus de sens"
 # la carte ne doit pas pouvoir rendre ce contrôle muet. Les modèles testés sont les chaînes
 # exactes extraites du YAML, exécutées avec les mêmes filtres Jinja que HA (section 5).
 print()
-print("6. Encarts « Réception » exécutés sur des scénarios (fraîcheur, taux de trames valides)")
+print("6. Encarts « Réception » exécutés sur des scénarios (fraîcheur, taux de réception conforme)")
 
 
 def encart(needle: str) -> dict:
@@ -427,24 +472,35 @@ def age_data(secondes, etat: str = "1234.0") -> dict:
     return {ENTITY_AGE: State(etat, NOW - timedelta(seconds=secondes))}
 
 
+def heure_de(secondes) -> str:
+    """L'heure que la carte affiche pour une trame arrivée il y a `secondes` — calculée avec la
+    même conversion que le filtre timestamp_custom, donc sans supposer le fuseau du poste."""
+    return datetime.fromtimestamp((NOW - timedelta(seconds=secondes)).timestamp()).strftime("%H:%M:%S")
+
+
+def verdict_fraicheur(secondes, texte: str) -> str:
+    """« Trame 1234 à 11:59:58 — Réception normale » : l'horodatage précède le verdict."""
+    return f"Trame 1234 à {heure_de(secondes)} — {texte}"
+
+
 print("   — âge de la dernière trame (référence « TX counter »)")
 essai("trame il y a 2 s — réception normale", ENCART_AGE, age_data(2),
-      {"primary": "il y a 2 s", "secondary": "Réception normale — 1 trame toutes les 20 s",
+      {"primary": "il y a 2 s", "secondary": verdict_fraicheur(2, "Réception normale"),
        "icon": "mdi:clock-check-outline", "icon_color": "green"})
 essai("trame il y a 35 s — dernière valeur du vert", ENCART_AGE, age_data(35),
-      {"primary": "il y a 35 s", "secondary": "Réception normale — 1 trame toutes les 20 s",
+      {"primary": "il y a 35 s", "secondary": verdict_fraicheur(35, "Réception normale"),
        "icon": "mdi:clock-check-outline", "icon_color": "green"})
 essai("trame il y a 45 s — une trame manquée", ENCART_AGE, age_data(45),
-      {"primary": "il y a 45 s", "secondary": "Une trame manquée",
+      {"primary": "il y a 45 s", "secondary": verdict_fraicheur(45, "Trame manquée"),
        "icon": "mdi:clock-alert-outline", "icon_color": "amber"})
 essai("trame il y a 61 s — le garde-fou ré-arme la radio", ENCART_AGE, age_data(61),
-      {"primary": "il y a 1 min", "secondary": "Silence radio — ré-armement demandé à 60 s",
+      {"primary": "il y a 1 min", "secondary": verdict_fraicheur(61, "Silence (ré-armement)"),
        "icon": "mdi:clock-alert-outline", "icon_color": "orange"})
 essai("trame il y a 200 s — silence, la carte redémarre", ENCART_AGE, age_data(200),
-      {"primary": "il y a 3 min", "secondary": "Silence radio — la carte redémarre à 180 s",
+      {"primary": "il y a 3 min", "secondary": verdict_fraicheur(200, "Silence (reboot)"),
        "icon": "mdi:clock-remove-outline", "icon_color": "red"})
 essai("trame il y a 2 h — l'âge passe en heures", ENCART_AGE, age_data(7200),
-      {"primary": "il y a 2.0 h", "secondary": "Silence radio — la carte redémarre à 180 s",
+      {"primary": "il y a 2.0 h", "secondary": verdict_fraicheur(7200, "Silence (reboot)"),
        "icon": "mdi:clock-remove-outline", "icon_color": "red"})
 essai("entité absente — « inconnu », jamais « il y a 0 s »", ENCART_AGE, age_data(None),
       {"primary": "inconnu", "secondary": "Carte injoignable, ou entité absente",
@@ -461,48 +517,52 @@ def taux_data(taux: str, rd: str, re_: str, ok: str = "149", ko: str = "50") -> 
             ENTITY_OK: State(ok), ENTITY_KO: State(ko)}
 
 
-CUMUL = " · cumul depuis le démarrage : 149 / 199"
+# La vignette est celle du propriétaire : son icône est FIXE (mdi:access-point), et ses mots sont
+# les siens — « trames produites par la station », « Indisponibilité », « Analyse... ». Les
+# attendus ci-dessous sont donc recopiés de la carte, pas d'une version idéale.
+ICONE = "mdi:access-point"
+CUMUL = " · cumul 149 / 199"
 
 
 print("   — taux de réception conforme (« Reception rate » et ses deux termes)")
 essai("100 % — aucune émission manquée, 30/30 (relevé du 07/10)", ENCART_TAUX,
       taux_data("100.0", "30", "30"),
       {"primary": "100.0 %",
-       "secondary": "30 / 30 trames émises par la station reçues, sur les 30 dernières" + CUMUL,
-       "icon": "mdi:check-circle-outline", "icon_color": "green"})
+       "secondary": "30 / 30 trames produites par la station, 30 dernières" + CUMUL,
+       "icon": ICONE, "icon_color": "green"})
 essai("96,666… % — UNE émission manquée sur 30 (mesuré à 08:53 ce jour-là)", ENCART_TAUX,
       taux_data("96.6666641235352", "29", "30"),
       {"primary": "96.7 %",
-       "secondary": "29 / 30 trames émises par la station reçues, sur les 30 dernières" + CUMUL,
-       "icon": "mdi:check-circle-outline", "icon_color": "green"})
+       "secondary": "29 / 30 trames produites par la station, 30 dernières" + CUMUL,
+       "icon": ICONE, "icon_color": "green"})
 essai("75 % — limite basse du vert", ENCART_TAUX, taux_data("75.0", "30", "40"),
       {"primary": "75.0 %",
-       "secondary": "30 / 40 trames émises par la station reçues, sur les 30 dernières" + CUMUL,
-       "icon": "mdi:alert-circle-outline", "icon_color": "amber"})
+       "secondary": "30 / 40 trames produites par la station, 30 dernières" + CUMUL,
+       "icon": ICONE, "icon_color": "amber"})
 essai("69,9 % — sous 70 %, le taux passe au rouge", ENCART_TAUX, taux_data("69.9", "16", "23"),
       {"primary": "69.9 %",
-       "secondary": "16 / 23 trames émises par la station reçues, sur les 30 dernières" + CUMUL,
-       "icon": "mdi:close-circle-outline", "icon_color": "red"})
+       "secondary": "16 / 23 trames produites par la station, 30 dernières" + CUMUL,
+       "icon": ICONE, "icon_color": "red"})
 essai("64 % — la nuit du 06-07/10, émetteur tiers actif (mesuré)", ENCART_TAUX,
       taux_data("64.0", "16", "25"),
       {"primary": "64.0 %",
-       "secondary": "16 / 25 trames émises par la station reçues, sur les 30 dernières" + CUMUL,
-       "icon": "mdi:close-circle-outline", "icon_color": "red"})
+       "secondary": "16 / 25 trames produites par la station, 30 dernières" + CUMUL,
+       "icon": ICONE, "icon_color": "red"})
 essai("moins de 20 tentatives — le cumul n'est pas affiché", ENCART_TAUX,
       taux_data("100.0", "30", "30", ok="4", ko="1"),
       {"primary": "100.0 %",
-       "secondary": "30 / 30 trames émises par la station reçues, sur les 30 dernières",
-       "icon": "mdi:check-circle-outline", "icon_color": "green"})
+       "secondary": "30 / 30 trames produites par la station, 30 dernières",
+       "icon": ICONE, "icon_color": "green"})
 essai("première mesure impossible (0 émission comptée)", ENCART_TAUX, taux_data("unknown", "0", "0"),
-      {"primary": "en attente", "secondary": "Deux trames requises pour une première mesure",
-       "icon": "mdi:help-circle-outline", "icon_color": "blue-grey"})
+      {"primary": "en attente", "secondary": "Analyse... (deux trames requises)",
+       "icon": ICONE, "icon_color": "blue-grey"})
 essai("compteurs indisponibles", ENCART_TAUX,
       taux_data("unavailable", "unavailable", "unavailable", "unavailable", "unavailable"),
-      {"primary": "en attente", "secondary": "Compteurs indisponibles",
-       "icon": "mdi:help-circle-outline", "icon_color": "blue-grey"})
+      {"primary": "en attente", "secondary": "Indisponibilité",
+       "icon": ICONE, "icon_color": "blue-grey"})
 essai("entités absentes de HA (states() rend « unknown »)", ENCART_TAUX, {},
-      {"primary": "en attente", "secondary": "Compteurs indisponibles",
-       "icon": "mdi:help-circle-outline", "icon_color": "blue-grey"})
+      {"primary": "en attente", "secondary": "Indisponibilité",
+       "icon": ICONE, "icon_color": "blue-grey"})
 
 print()
 if failures:
