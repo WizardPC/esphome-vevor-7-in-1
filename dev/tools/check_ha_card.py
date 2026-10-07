@@ -49,6 +49,11 @@ ANCRAGE = "outdoor_temperature"
 # on rain_total. Helpers, not firmware entities — kept OUT of the listing, because the firmware <-> HA
 # comparison (step 3) must stay an equality.
 EXCEPTIONS_HA = ("rain_hour", "rain_day", "rain_week", "rain_month", "rain_year")
+# Declared by the firmware but not yet visible in HA, because the board has not been flashed with it
+# since. Deliberately kept APART from EXCEPTIONS_HA: those five are permanent (the owner's helpers),
+# these must be removed from here as soon as the listing reports them — otherwise the entry would
+# silently mask a genuine disappearance later. Printed on every run so it cannot go unnoticed.
+PENDING_FLASH = ("reset_reason",)
 
 # --------------------------------------------------------------------------- refresh
 # The listing is a MEASUREMENT: never derive it, always re-read it. This rewrites it from the live
@@ -196,10 +201,14 @@ for line in firmware.splitlines():
         slug = slugify(name.group(1))
         declared.add(EXCEPTIONS.get(slug, f"{ha_domain}.{prefix}_{slug}"))
 
-only_firmware = sorted(declared - reference)
+pending = sorted(entity for entity in declared - reference
+                 if entity.split(".", 1)[1][len(prefix) + 1:] in PENDING_FLASH)
+only_firmware = sorted(declared - reference - set(pending))
 only_ha = sorted(reference - declared)
 print(f"3. Firmware / HA agreement: {len(declared)} entities declared by esphome/vevor-7in1.yaml, "
       f"{len(reference)} measured in HA")
+print(f"     declared but not in HA yet (pending the next flash): {pending or 'none'}"
+      f"  — drop them from PENDING_FLASH once HA reports them")
 check(not only_firmware and not only_ha,
       f"the listing matches the firmware (firmware only: {only_firmware or 'none'} | "
       f"HA only: {only_ha or 'none'})")

@@ -252,6 +252,11 @@ number:
       then:
         - cc1101.set_fsk_deviation: !lambda "return x * 1000.0f;"
 
+# Diagnostic: names the reason for the previous restart (Brownout, Task Watchdog, Panic, ...).
+# A restart that leaves no line in the log is otherwise unattributable — the restarts of 07/10
+# (12:26, 12:38, 13:29, ~15:49) all ended with the log stream simply stopping.
+debug:
+
 sensor:
   - platform: template
     name: "Outdoor temperature"
@@ -372,3 +377,8 @@ text_sensor:
     name: "Last verdict"
     id: reason_sensor
     entity_category: diagnostic
+  # Why the ESP32 rebooted: the one word that ends a restart investigation (see `debug:` above).
+  - platform: debug
+    reset_reason:
+      name: "Reset reason"
+      entity_category: diagnostic
