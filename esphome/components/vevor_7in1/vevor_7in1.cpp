@@ -464,12 +464,40 @@ void Vevor7in1::maj_fenetre_taux_(uint8_t compteur) {
 }
 
 float Vevor7in1::get_taux_reception() const {
+  uint32_t recues = 0;
+  uint32_t emises = 0;
+  this->calculer_fenetre_taux_(recues, emises);
+  if (emises == 0u) {
+    return NAN;
+  }
+  return 100.0f * (float) recues / (float) emises;
+}
+
+uint32_t Vevor7in1::get_fenetre_recues() const {
+  uint32_t recues = 0;
+  uint32_t emises = 0;
+  this->calculer_fenetre_taux_(recues, emises);
+  return recues;
+}
+
+uint32_t Vevor7in1::get_fenetre_emises() const {
+  uint32_t recues = 0;
+  uint32_t emises = 0;
+  this->calculer_fenetre_taux_(recues, emises);
+  return emises;
+}
+
+// Le ratio est calcule ICI et nulle part ailleurs : le pourcentage et ses deux termes ne peuvent
+// pas diverger. `recues` compte les trames décodées qui ont mis à jour les mesures (elles sont
+// filtrées en amont sur le doublon puis sur l'identifiant de la station), `emises` celles que la
+// station a produites — que l'on ait entendu ou non : c'est tout l'intérêt du compteur embarqué.
+void Vevor7in1::calculer_fenetre_taux_(uint32_t &recues, uint32_t &emises) const {
+  recues = 0;
+  emises = 0;
   if (this->nb_fenetre_ < 2) {
-    return NAN;   // pas encore de quoi mesurer : il faut au moins deux trames, donc un intervalle
+    return;   // pas encore de quoi mesurer : il faut au moins deux trames, donc un intervalle
   }
   const size_t premier = (this->tete_fenetre_ + FENETRE_TAUX - this->nb_fenetre_) % FENETRE_TAUX;
-  uint32_t recues = 0;
-  uint32_t emissions = 0;
   for (size_t i = 0; i + 1 < this->nb_fenetre_; i++) {
     const size_t a = (premier + i) % FENETRE_TAUX;
     const size_t b = (premier + i + 1) % FENETRE_TAUX;
@@ -489,12 +517,8 @@ float Vevor7in1::get_taux_reception() const {
       n = 1u;
     }
     recues++;          // la trame d'arrivée de ce couple a bien été reçue
-    emissions += n;
+    emises += n;
   }
-  if (emissions == 0u) {
-    return NAN;
-  }
-  return 100.0f * (float) recues / (float) emissions;
 }
 
 }  // namespace vevor_7in1

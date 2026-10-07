@@ -1,64 +1,51 @@
 # Entités réellement exposées par Home Assistant — relevé, pas déduction.
 #
-# Provenance : /api/states du 05/10/2026 (heure de Paris), filtre « vevor », croisé avec la
-# liste que la carte déclare elle-même (API native ESPHome sur 172.16.0.205) — 24 entités
-# déclarées par le firmware, 24 retrouvées dans HA sous ce préfixe. Relevés précédents :
-# l'appareil s'est d'abord appelé « Jardin Station Vevor 7-en-1 » (préfixe
-# jardin_station_vevor_7_en_1), puis « Jardin Vevor 7 in 1 Weather Station ».
+# Source     = API REST de Home Assistant, http://192.168.2.104/api/states
+# Relevé le  = 07/10/2026 09:51 (heure locale)
+# Préfixe    = jardin_vevor_7_in_1_weather_station   (lu, jamais dérivé)
+# Rafraîchir = .venv/bin/python dev/tools/check_ha_card.py --refresh
+# Vérifier   = .venv/bin/python dev/tools/check_ha_card.py  (étape 5 de run_tests.sh)
 #
-# Pourquoi ce fichier existe : l'entity_id n'est pas déductible du firmware seul. Le nom
-# d'appareil est modifiable dans Home Assistant (le YAML, lui, déclare friendly_name
-# « Vevor 7-in-1 weather station » et son commentaire dit de renommer côté HA, pas ici) : tout
-# renommage d'appareil renomme les 24 entity_id d'un coup. check_ha_card.py vérifie la carte
-# contre CETTE liste, jamais contre une reconstruction.
+# Ne figurent PAS ci-dessous, bien qu'attachées au même appareil : les compteurs d'utilité
+# créés par le propriétaire sur rain_total (rain_hour, rain_day, rain_week, rain_month, rain_year — plateforme mesurée :
+# utility_meter). Ce sont des helpers HA, pas des entités du firmware : les inclure ferait
+# échouer l'égalité firmware <-> HA de l'étape 3.
 #
-# PLUS AUCUNE EXCEPTION depuis le 05/10/2026 : l'ancienne entrée de nœud ESPHome a été
-# nettoyée dans HA, et Illuminance est revenue sous le préfixe d'appareil
-# (sensor.jardin_vevor_7_in_1_weather_station_illuminance, plateforme « esphome »).
-# L'ancien sensor.esp32_weather_illuminance n'existe plus — absent de /api/states — alors que
-# la carte s'y référait encore : l'encart de luminosité et le bandeau lisaient 0 lx.
+# L'entity_id n'est pas déductible du firmware : le nom d'appareil se renomme dans Home
+# Assistant et renomme tous les entity_id d'un coup. D'où cette liste MESURÉE, et la règle :
+# la relire avant de toucher la carte.
 #
-# Ne sont PAS listés ici, bien qu'attachés au même appareil : cinq compteurs d'utilité créés
-# par le propriétaire, les entités « Rain Hour / Day / Week / Month / Year » de la carte
-# (rain_hour, rain_day, rain_week, rain_month, rain_year). Plateforme mesurée : utility_meter
-# (registre des entités de HA), source sensor.jardin_vevor_7_in_1_weather_station_rain_total.
-# Ce sont des helpers HA, pas des entités du firmware : les ajouter ferait échouer la
-# comparaison firmware ↔ HA du contrôle, qui doit rester une égalité.
-#
-# Rafraîchir après tout renommage, changement de nom d'appareil ou nouvelle entité :
-#   1. Home Assistant → Outils de développement → États, filtrer « vevor », coller les
-#      couples nom / entity_id ci-dessous (un par domaine : binary_sensor, sensor, …) ;
-#   2. .venv/bin/python dev/tools/check_ha_card.py   → doit rendre 0 échec.
-
 ## Appareil
 # device_prefix: jardin_vevor_7_in_1_weather_station
 
-## Mesures
-sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature     # Outdoor temperature
-sensor.jardin_vevor_7_in_1_weather_station_outdoor_humidity       # Outdoor humidity
-sensor.jardin_vevor_7_in_1_weather_station_illuminance            # Illuminance (lx)
-sensor.jardin_vevor_7_in_1_weather_station_uv_index               # UV index
-sensor.jardin_vevor_7_in_1_weather_station_wind_speed             # Wind speed
-sensor.jardin_vevor_7_in_1_weather_station_wind_gust              # Wind gust
-sensor.jardin_vevor_7_in_1_weather_station_wind_direction         # Wind direction (°)
-sensor.jardin_vevor_7_in_1_weather_station_rain_total             # Rain total (compteur cumulé)
-
-## État et diagnostic
-binary_sensor.jardin_vevor_7_in_1_weather_station_station_battery_low  # Station battery low
-sensor.jardin_vevor_7_in_1_weather_station_station_id             # Station ID
-sensor.jardin_vevor_7_in_1_weather_station_tx_counter             # TX counter
-sensor.jardin_vevor_7_in_1_weather_station_valid_frames           # Valid frames
-sensor.jardin_vevor_7_in_1_weather_station_rejected_frames        # Rejected frames
-sensor.jardin_vevor_7_in_1_weather_station_rmt_captures           # RMT captures
-sensor.jardin_vevor_7_in_1_weather_station_duplicates_ignored     # Duplicates ignored
-sensor.jardin_vevor_7_in_1_weather_station_last_raw_frame         # Last raw frame
-sensor.jardin_vevor_7_in_1_weather_station_last_verdict           # Last verdict
-
-## Commandes et réglages
-number.jardin_vevor_7_in_1_weather_station_cc1101_frequency       # CC1101 frequency (MHz)
-number.jardin_vevor_7_in_1_weather_station_station_id_0_learn     # Station ID (0 = learn)
-number.jardin_vevor_7_in_1_weather_station_watchdog_silent_slots_before_re_arm  # Watchdog silent slots before re-arm (x20 s)
-number.jardin_vevor_7_in_1_weather_station_watchdog_max_silence_before_restart  # Watchdog max silence before restart (s)
-button.jardin_vevor_7_in_1_weather_station_dump_pulses            # Dump pulses
-button.jardin_vevor_7_in_1_weather_station_re_apply_radio_config  # Re-apply radio config
-button.jardin_vevor_7_in_1_weather_station_restart_board          # Restart board
+## Entités
+binary_sensor.jardin_vevor_7_in_1_weather_station_station_battery_low
+button.jardin_vevor_7_in_1_weather_station_dump_pulses
+button.jardin_vevor_7_in_1_weather_station_re_apply_radio_config
+button.jardin_vevor_7_in_1_weather_station_restart_board
+number.jardin_vevor_7_in_1_weather_station_cc1101_frequency
+number.jardin_vevor_7_in_1_weather_station_data_rate
+number.jardin_vevor_7_in_1_weather_station_fsk_deviation
+number.jardin_vevor_7_in_1_weather_station_rx_filter_bandwidth
+number.jardin_vevor_7_in_1_weather_station_station_id_0_learn
+number.jardin_vevor_7_in_1_weather_station_watchdog_max_silence_before_restart
+number.jardin_vevor_7_in_1_weather_station_watchdog_silent_slots_before_re_arm
+sensor.jardin_vevor_7_in_1_weather_station_duplicates_ignored
+sensor.jardin_vevor_7_in_1_weather_station_illuminance
+sensor.jardin_vevor_7_in_1_weather_station_last_raw_frame
+sensor.jardin_vevor_7_in_1_weather_station_last_verdict
+sensor.jardin_vevor_7_in_1_weather_station_outdoor_humidity
+sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature
+sensor.jardin_vevor_7_in_1_weather_station_rain_total
+sensor.jardin_vevor_7_in_1_weather_station_reception_rate
+sensor.jardin_vevor_7_in_1_weather_station_reception_window_decoded
+sensor.jardin_vevor_7_in_1_weather_station_reception_window_emitted
+sensor.jardin_vevor_7_in_1_weather_station_rejected_frames
+sensor.jardin_vevor_7_in_1_weather_station_rmt_captures
+sensor.jardin_vevor_7_in_1_weather_station_station_id
+sensor.jardin_vevor_7_in_1_weather_station_tx_counter
+sensor.jardin_vevor_7_in_1_weather_station_uv_index
+sensor.jardin_vevor_7_in_1_weather_station_valid_frames
+sensor.jardin_vevor_7_in_1_weather_station_wind_direction
+sensor.jardin_vevor_7_in_1_weather_station_wind_gust
+sensor.jardin_vevor_7_in_1_weather_station_wind_speed

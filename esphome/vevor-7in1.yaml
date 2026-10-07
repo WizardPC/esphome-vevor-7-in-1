@@ -187,6 +187,8 @@ interval:
           id(rejected_sensor).publish_state(id(vevor_rx).get_rejected());
           id(duplicates_sensor).publish_state(id(vevor_rx).get_duplicates());
           id(taux_reception_sensor).publish_state(id(vevor_rx).get_taux_reception());
+          id(fenetre_recues_sensor).publish_state(id(vevor_rx).get_fenetre_recues());
+          id(fenetre_emises_sensor).publish_state(id(vevor_rx).get_fenetre_emises());
 
 button:
   # Instruments de diagnostic. Le composant les possède (platform: vevor_7in1) : le YAML ne fait
@@ -397,6 +399,19 @@ sensor:
     unit_of_measurement: "%"
     state_class: measurement
     accuracy_decimals: 1
+    entity_category: diagnostic
+  # The two TERMS of the ratio above, exposed so the dashboard can verify it rather than only show
+  # it: frames decoded in the window, and frames the station produced over that same window (its own
+  # counter, 39 units = one emission). "29 / 30" then reads straight off the card.
+  - platform: template
+    name: "Reception window decoded"
+    id: fenetre_recues_sensor
+    accuracy_decimals: 0
+    entity_category: diagnostic
+  - platform: template
+    name: "Reception window emitted"
+    id: fenetre_emises_sensor
+    accuracy_decimals: 0
     entity_category: diagnostic
   # Re-arms triggered by the FAST criterion (a capture too short to hold a burst) — as opposed to the
   # slow criterion (a whole silent slot). NOT SHIPPED YET: see the comment on seuil_impulsions above.

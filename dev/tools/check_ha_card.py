@@ -41,6 +41,64 @@ DEV = Path(__file__).resolve().parent.parent   # dev/
 ROOT = DEV.parent                               # repo root
 CARD = DEV / "docs" / "ha-card.yaml"
 ENTITIES = DEV / "docs" / "ha-entities.txt"
+HA_URL = "http://192.168.2.104"
+# ANCHOR: entity-id suffix used to find the device-name prefix in the listing. One constant for
+# both selecting and trimming the probe, so the two uses cannot diverge. Must match the YAML name.
+ANCRAGE = "outdoor_temperature"
+# Entity ids Home Assistant did NOT derive from the device name: the owner's utility_meter helpers
+# on rain_total. Helpers, not firmware entities — kept OUT of the listing, because the firmware <-> HA
+# comparison (step 3) must stay an equality.
+EXCEPTIONS_HA = ("rain_hour", "rain_day", "rain_week", "rain_month", "rain_year")
+
+# --------------------------------------------------------------------------- refresh
+# The listing is a MEASUREMENT: never derive it, always re-read it. This rewrites it from the live
+# instance and is the only thing a device rename needs (then re-run without --refresh).
+if "--refresh" in sys.argv:
+    import json
+    import urllib.request
+    from datetime import datetime
+
+    token = (DEV.parent / ".ha_token").read_text(encoding="utf-8").strip()
+    request = urllib.request.Request(HA_URL + "/api/states",
+                                     headers={"Authorization": "Bearer " + token})
+    states = json.load(urllib.request.urlopen(request, timeout=30))
+    anchor = next((state["entity_id"] for state in sorted(states, key=lambda s: s["entity_id"])
+                   if state["entity_id"].endswith("_" + ANCRAGE)), None)
+    if not anchor:
+        sys.exit(f"--refresh : aucune entité en « _{ANCRAGE} » dans HA — ancrage à revoir")
+    prefix = anchor.split(".", 1)[1][: -(len(ANCRAGE) + 1)]
+    ids = sorted(
+        state["entity_id"] for state in states
+        if state["entity_id"].split(".", 1)[0] in ("sensor", "binary_sensor", "number", "button")
+        and state["entity_id"].split(".", 1)[1].startswith(prefix + "_")
+        and state["entity_id"].split(".", 1)[1][len(prefix) + 1:] not in EXCEPTIONS_HA
+    )
+    head = [
+        "# Entités réellement exposées par Home Assistant — relevé, pas déduction.",
+        "#",
+        f"# Source     = API REST de Home Assistant, {HA_URL}/api/states",
+        f"# Relevé le  = {datetime.now().strftime('%d/%m/%Y %H:%M')} (heure locale)",
+        f"# Préfixe    = {prefix}   (lu, jamais dérivé)",
+        "# Rafraîchir = .venv/bin/python dev/tools/check_ha_card.py --refresh",
+        "# Vérifier   = .venv/bin/python dev/tools/check_ha_card.py  (étape 5 de run_tests.sh)",
+        "#",
+        "# Ne figurent PAS ci-dessous, bien qu'attachées au même appareil : les compteurs d'utilité",
+        f"# créés par le propriétaire sur rain_total ({', '.join(EXCEPTIONS_HA)} — plateforme mesurée :",
+        "# utility_meter). Ce sont des helpers HA, pas des entités du firmware : les inclure ferait",
+        "# échouer l'égalité firmware <-> HA de l'étape 3.",
+        "#",
+        "# L'entity_id n'est pas déductible du firmware : le nom d'appareil se renomme dans Home",
+        "# Assistant et renomme tous les entity_id d'un coup. D'où cette liste MESURÉE, et la règle :",
+        "# la relire avant de toucher la carte.",
+        "#",
+        "## Appareil",
+        f"# device_prefix: {prefix}",
+        "",
+        "## Entités",
+    ]
+    ENTITIES.write_text("\n".join(head + ids) + "\n", encoding="utf-8")
+    print(f"--refresh : {len(ids)} entités relevées dans HA, préfixe {prefix} -> {ENTITIES}")
+    sys.exit(0)
 FIRMWARE = ROOT / "esphome" / "vevor-7in1.yaml"
 NOW = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
 
@@ -76,9 +134,9 @@ reference = {
     for line in ENTITIES.read_text(encoding="utf-8").splitlines()
     if line.split("#")[0].strip()
 }
-# ANCHOR: entity-id suffix used to find the device-name prefix in the listing. One constant for
-# both selecting and trimming the probe, so the two uses cannot diverge. Must match the YAML name.
-ANCRAGE = "outdoor_temperature"
+# ANCHOR: entity-id suffix used to find the device-name prefix in the listing. Its value lives at
+# the top of this file (the --refresh path needs it before the listing is read). Must match the
+# YAML name.
 probe = next((entity for entity in sorted(reference) if entity.endswith("_" + ANCRAGE)), None)
 if not probe:
     sys.exit(f"2. docs/ha-entities.txt : aucune entité en « _{ANCRAGE} » — impossible d'en déduire "
@@ -103,6 +161,17 @@ unknown = [entity for entity in cited if entity not in reference]
 check(not unknown, f"les entités citées existent toutes dans le relevé ({unknown or 'aucun écart'})")
 unused = sorted(entity for entity in reference if entity not in cited)
 print(f"     relevé non cité par la carte (attendu : diag. et commandes) : {len(unused)} → {unused}")
+
+# Negative control of THAT check, before trusting its green: the same extraction, on a copy with
+# one deliberately broken id, must fail. A check whose failure mode was never exercised is an
+# untested claim.
+casse = raw.replace("tx_counter", "tx_couner")
+cites_casse = sorted(set(re.findall(
+    rf"\b(?:sensor|binary_sensor|text_sensor|number|button)\.{re.escape(prefix)}_[A-Za-z0-9_]+",
+    casse)))
+inconnus_casse = [entity for entity in cites_casse if entity not in reference]
+check(bool(inconnus_casse),
+      f"controle négatif : un identifiant cassé est détecté ({inconnus_casse[:1] or 'NON DÉTECTÉ'})")
 
 # --------------------------------------------------------------------------- 3
 firmware = FIRMWARE.read_text(encoding="utf-8")
@@ -324,11 +393,16 @@ def encart(needle: str) -> dict:
 
 
 ENCART_AGE = encart("tx_counter")
-ENCART_TAUX = encart("valid_frames")
+# Le taux est trouvé par SON entité, jamais par sa position ni par un ancien nom : la carte a
+# changé de mesure le 07/10/2026 (rapport OK/(OK+KO) -> reception_rate, la part des ÉMISSIONS de
+# la station réellement décodées).
+ENCART_TAUX = encart("reception_rate")
 ENTITY_AGE = f"sensor.{prefix}_tx_counter"
+ENTITY_TAUX = f"sensor.{prefix}_reception_rate"
+ENTITY_RD = f"sensor.{prefix}_reception_window_decoded"
+ENTITY_RE = f"sensor.{prefix}_reception_window_emitted"
 ENTITY_OK = f"sensor.{prefix}_valid_frames"
 ENTITY_KO = f"sensor.{prefix}_rejected_frames"
-ENTITY_DUP = f"sensor.{prefix}_duplicates_ignored"
 CHAMPS = ("primary", "secondary", "icon", "icon_color")
 
 
@@ -381,44 +455,54 @@ essai("entité indisponible — pas de fraîcheur affichée", ENCART_AGE,
        "icon": "mdi:help-circle-outline", "icon_color": "grey"})
 
 
-def taux_data(ok: str, ko: str, doublons: str = "0") -> dict:
-    return {ENTITY_OK: State(ok), ENTITY_KO: State(ko), ENTITY_DUP: State(doublons)}
+def taux_data(taux: str, rd: str, re_: str, ok: str = "149", ko: str = "50") -> dict:
+    """États des cinq entités que la vignette de taux lit."""
+    return {ENTITY_TAUX: State(taux), ENTITY_RD: State(rd), ENTITY_RE: State(re_),
+            ENTITY_OK: State(ok), ENTITY_KO: State(ko)}
 
 
-print("   — taux de trames valides (« Valid frames » / « Rejected frames »)")
-essai("37 valides / 21 rejetés — le relevé du 05/10/2026", ENCART_TAUX,
-      taux_data("37", "21", "34"),
-      {"primary": "63.8 %",
-       "secondary": "OK 37 · KO 21 (36.2 %) · doublons 34 — depuis le démarrage de la carte",
+CUMUL = " · cumul depuis le démarrage : 149 / 199"
+
+
+print("   — taux de réception conforme (« Reception rate » et ses deux termes)")
+essai("100 % — aucune émission manquée, 30/30 (relevé du 07/10)", ENCART_TAUX,
+      taux_data("100.0", "30", "30"),
+      {"primary": "100.0 %",
+       "secondary": "30 / 30 trames émises par la station reçues, sur les 30 dernières" + CUMUL,
        "icon": "mdi:check-circle-outline", "icon_color": "green"})
-essai("30 % pile — limite basse du vert", ENCART_TAUX, taux_data("30", "70"),
-      {"primary": "30.0 %",
-       "secondary": "OK 30 · KO 70 (70.0 %) · doublons 0 — depuis le démarrage de la carte",
+essai("96,666… % — UNE émission manquée sur 30 (mesuré à 08:53 ce jour-là)", ENCART_TAUX,
+      taux_data("96.6666641235352", "29", "30"),
+      {"primary": "96.7 %",
+       "secondary": "29 / 30 trames émises par la station reçues, sur les 30 dernières" + CUMUL,
        "icon": "mdi:check-circle-outline", "icon_color": "green"})
-essai("15 % pile — limite basse de l'ambre", ENCART_TAUX, taux_data("15", "85"),
-      {"primary": "15.0 %",
-       "secondary": "OK 15 · KO 85 (85.0 %) · doublons 0 — depuis le démarrage de la carte",
+essai("75 % — limite basse du vert", ENCART_TAUX, taux_data("75.0", "30", "40"),
+      {"primary": "75.0 %",
+       "secondary": "30 / 40 trames émises par la station reçues, sur les 30 dernières" + CUMUL,
        "icon": "mdi:alert-circle-outline", "icon_color": "amber"})
-essai("9,1 % — sous 15 %, le taux passe au rouge", ENCART_TAUX, taux_data("5", "50"),
-      {"primary": "9.1 %",
-       "secondary": "OK 5 · KO 50 (90.9 %) · doublons 0 — depuis le démarrage de la carte",
+essai("69,9 % — sous 70 %, le taux passe au rouge", ENCART_TAUX, taux_data("69.9", "16", "23"),
+      {"primary": "69.9 %",
+       "secondary": "16 / 23 trames émises par la station reçues, sur les 30 dernières" + CUMUL,
        "icon": "mdi:close-circle-outline", "icon_color": "red"})
-essai("4 trames — le taux n'a pas encore de sens", ENCART_TAUX, taux_data("3", "1"),
-      {"primary": "en attente",
-       "secondary": "Moins de 20 trames depuis le démarrage — le taux n'a pas encore de sens",
+essai("64 % — la nuit du 06-07/10, émetteur tiers actif (mesuré)", ENCART_TAUX,
+      taux_data("64.0", "16", "25"),
+      {"primary": "64.0 %",
+       "secondary": "16 / 25 trames émises par la station reçues, sur les 30 dernières" + CUMUL,
+       "icon": "mdi:close-circle-outline", "icon_color": "red"})
+essai("moins de 20 tentatives — le cumul n'est pas affiché", ENCART_TAUX,
+      taux_data("100.0", "30", "30", ok="4", ko="1"),
+      {"primary": "100.0 %",
+       "secondary": "30 / 30 trames émises par la station reçues, sur les 30 dernières",
+       "icon": "mdi:check-circle-outline", "icon_color": "green"})
+essai("première mesure impossible (0 émission comptée)", ENCART_TAUX, taux_data("unknown", "0", "0"),
+      {"primary": "en attente", "secondary": "Deux trames requises pour une première mesure",
        "icon": "mdi:help-circle-outline", "icon_color": "blue-grey"})
 essai("compteurs indisponibles", ENCART_TAUX,
-      taux_data("unavailable", "unavailable", "unavailable"),
+      taux_data("unavailable", "unavailable", "unavailable", "unavailable", "unavailable"),
       {"primary": "en attente", "secondary": "Compteurs indisponibles",
        "icon": "mdi:help-circle-outline", "icon_color": "blue-grey"})
 essai("entités absentes de HA (states() rend « unknown »)", ENCART_TAUX, {},
       {"primary": "en attente", "secondary": "Compteurs indisponibles",
        "icon": "mdi:help-circle-outline", "icon_color": "blue-grey"})
-essai("doublons indisponibles — affichés « ? » sans casser le taux", ENCART_TAUX,
-      taux_data("100", "2", "unavailable"),
-      {"primary": "98.0 %",
-       "secondary": "OK 100 · KO 2 (2.0 %) · doublons ? — depuis le démarrage de la carte",
-       "icon": "mdi:check-circle-outline", "icon_color": "green"})
 
 print()
 if failures:

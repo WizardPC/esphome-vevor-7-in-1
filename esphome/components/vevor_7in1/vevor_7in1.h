@@ -175,6 +175,12 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // pendant huit heures de panne de réception. C'est donc lui qui dit combien d'émissions ont été
   // manquées, pas le temps écoulé qui suppose une cadence parfaite.
   float get_taux_reception() const;
+  // LES DEUX TERMES de ce ratio, exposés séparément pour que le tableau de bord puisse le
+  // VÉRIFIER et pas seulement l'afficher : `recues` = trames décodées dans la fenêtre (celles qui
+  // ont mis à jour les mesures), `emises` = trames produites par la station sur la MÊME fenêtre,
+  // d'après son propre compteur. Le pourcentage n'est que le rapport des deux.
+  uint32_t get_fenetre_recues() const;
+  uint32_t get_fenetre_emises() const;
 
  protected:
   // Stitches the end of the previous capture to the start of the current one, merging the two
@@ -196,6 +202,8 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   size_t nb_fenetre_{0};
   size_t tete_fenetre_{0};
   void maj_fenetre_taux_(uint8_t compteur);
+  // One single place computes the ratio; the three public accessors lean on it.
+  void calculer_fenetre_taux_(uint32_t &recues, uint32_t &emises) const;
   uint32_t captures_{0};
   uint32_t rejected_{0};
   uint32_t duplicates_{0};

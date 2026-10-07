@@ -43,6 +43,11 @@
 #
 # Troisième section, ajoutée le 05/10/2026 — « Réception ». Elle n'invente rien, elle ne lit
 # que des compteurs que le firmware publie déjà.
+# Mise à jour du 07/10/2026 : le taux n'est plus le rapport OK/(OK+KO) — la part des trames
+# valides PARMI LES TENTATIVES — mais `reception_rate`, la part des ÉMISSIONS de la station
+# réellement décodées, calculée par le composant sur le compteur embarqué de la station. Ses deux
+# termes sont publiés à part (`reception_window_decoded` et `reception_window_emitted`) pour que la
+# carte affiche « 29 / 30 » : le pourcentage se vérifie au lieu de se croire sur parole.
 #   1) Fraîcheur de la dernière trame. Référence retenue, `TX counter` — son `last_changed`
 #      est déplacé à CHAQUE trame décodée (publié dans le gestionnaire de trame du YAML).
 #      Mesuré le 05/10/2026 sur la carte en service, déplacement toutes les 20 s, en phase
@@ -335,10 +340,10 @@ cards:
       state: true
       labels: true
 
-  # --- Réception : fraîcheur de la dernière trame et taux de trames valides ---------
+  # --- Réception : fraîcheur de la dernière trame et taux de réception conforme ------
   # Ce que ces deux cartes calculent, pourquoi la fraîcheur se lit sur « TX counter », ce
-  # que les pourcentages comptent exactement et leurs limites : en-tête de ce fichier,
-  # section « Réception ». Aucun helper n'est nécessaire — que des compteurs du firmware.
+  # que le taux compte exactement et ses limites : en-tête de ce fichier, section
+  # « Réception ». Aucun helper n'est nécessaire — que des compteurs du firmware.
   - type: grid
     columns: 2
     square: false
@@ -385,43 +390,46 @@ cards:
           {% elif age <= 180 %}orange
           {% else %}red
           {% endif %}
-      # 2) Taux de trames valides : « Valid frames » contre « Rejected frames », depuis le
-      #    démarrage de la carte (les deux compteurs repartent de 0 à chaque redémarrage).
-      #    Sous 20 trames, un pourcentage ne veut rien dire : la carte l'écrit.
-      #    Seuils de couleur 30 % et 15 %, choisis d'après le relevé de 24 h des
-      #    04-05/10/2026 (24,8 % — voir l'en-tête) : à ajuster sur cette seule ligne.
+      # 2) Taux de réception conforme : la part des ÉMISSIONS de la station réellement décodées,
+      #    calculée par le composant (`reception_rate`) d'après le compteur embarqué de la station,
+      #    sur la fenêtre des 30 dernières trames décodées (≈10 min quand tout passe).
+      #    Ce n'est PAS le rapport OK/(OK+KO) : celui-ci mesurait la part des trames valides PARMI
+      #    LES TENTATIVES, confondait « la station n'émet pas » avec « on ne l'entend pas », et
+      #    laissait « Rejected frames » gonfler par les captures d'un émetteur tiers — mesuré le
+      #    07/10 : 39 rejets en 30 min pour UNE SEULE émission de la station manquée.
+      #    Ses deux termes sont affichés à dessein : « 29 / 30 » se lit sans avoir à croire le
+      #    pourcentage sur parole.
+      #    Seuils de couleur 90 % et 70 % : choix d'affichage, pas une vérité (nuit du 06-07/10,
+      #    64 % avec l'émetteur tiers actif contre 100 % une fois le canal rendu).
       - type: custom:mushroom-template-card
-        entity: sensor.jardin_vevor_7_in_1_weather_station_valid_frames
+        entity: sensor.jardin_vevor_7_in_1_weather_station_reception_rate
         primary: >-
-          {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
-          {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
-          {% set total = (ok + ko) if ok is not none and ko is not none else 0 %}
-          {% if total < 20 %}en attente{% else %}{{ (ok / total * 100) | round(1) }} %{% endif %}
+          {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
+          {% if r is none %}en attente
+          {% else %}{{ r | round(1) }} %
+          {% endif %}
         secondary: >-
+          {% set rd = states('sensor.jardin_vevor_7_in_1_weather_station_reception_window_decoded') | float(none) %}
+          {% set re = states('sensor.jardin_vevor_7_in_1_weather_station_reception_window_emitted') | float(none) %}
           {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
           {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
-          {% set dup = states('sensor.jardin_vevor_7_in_1_weather_station_duplicates_ignored') | float(none) %}
           {% set total = (ok + ko) if ok is not none and ko is not none else 0 %}
-          {% if ok is none or ko is none %}Compteurs indisponibles
-          {% elif total < 20 %}Moins de 20 trames depuis le démarrage — le taux n'a pas encore de sens
-          {% else %}OK {{ ok | int }} · KO {{ ko | int }} ({{ (ko / total * 100) | round(1) }} %) · doublons {{ (dup | int) if dup is not none else '?' }} — depuis le démarrage de la carte
+          {% if rd is none or re is none %}Compteurs indisponibles
+          {% elif re | float(0) < 1 %}Deux trames requises pour une première mesure
+          {% else %}{{ rd | int }} / {{ re | int }} trames émises par la station reçues, sur les 30 dernières{% if total >= 20 %} · cumul depuis le démarrage : {{ ok | int }} / {{ total | int }}{% endif %}
           {% endif %}
         icon: >-
-          {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
-          {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
-          {% set total = (ok + ko) if ok is not none and ko is not none else 0 %}
-          {% if total < 20 %}mdi:help-circle-outline
-          {% elif (ok / total * 100) >= 30 %}mdi:check-circle-outline
-          {% elif (ok / total * 100) >= 15 %}mdi:alert-circle-outline
+          {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
+          {% if r is none %}mdi:help-circle-outline
+          {% elif r >= 90 %}mdi:check-circle-outline
+          {% elif r >= 70 %}mdi:alert-circle-outline
           {% else %}mdi:close-circle-outline
           {% endif %}
         icon_color: >-
-          {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
-          {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
-          {% set total = (ok + ko) if ok is not none and ko is not none else 0 %}
-          {% if total < 20 %}blue-grey
-          {% elif (ok / total * 100) >= 30 %}green
-          {% elif (ok / total * 100) >= 15 %}amber
+          {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
+          {% if r is none %}blue-grey
+          {% elif r >= 90 %}green
+          {% elif r >= 70 %}amber
           {% else %}red
           {% endif %}
 
@@ -666,8 +674,13 @@ cards:
 #       labels: true
 
 # =============================================================================
-# Option F — ce que la section « Réception » ne peut pas dire, « quelle part des trames ÉMISES
-# ai-je reçue ? », et des compteurs qui survivent aux redémarrages de la carte.
+# Option F — des compteurs qui survivent aux redémarrages de la carte.
+#
+# RÉSOLU LE 07/10/2026 : la question d'origine (« quelle part des trames ÉMISES ai-je reçue ? »)
+# n'a plus besoin d'un helper reconstruit ici — le firmware la calcule et la publie :
+# `reception_rate`, avec ses deux termes `reception_window_decoded` et `reception_window_emitted`
+# (voir la section « Réception » plus haut). Ce qui suit garde une autre utilité : les compteurs
+# OK/KO, eux, repartent de 0 à chaque redémarrage, et un compteur d'utilité y survit.
 #
 # Pourquoi un helper. Les deux compteurs du firmware vivent en RAM et repartent de 0 à chaque
 # redémarrage de la carte (mesuré 17 fois sur les 24 h des 04-05/10/2026, garde-fou de silence et
