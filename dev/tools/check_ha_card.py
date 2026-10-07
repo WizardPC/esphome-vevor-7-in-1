@@ -11,12 +11,12 @@ Without Home Assistant or hardware, it verifies:
      EXCEPTIONS below included, so a fresh divergence still fails;
   4. no identifier of the old project remains in an active line (`jardin_vevor_weather_station`,
      or `esp32_weather_*`);
-  5. the three banner templates (state, icon, colour) run on numeric scenarios and match the
-     verdict expected by `docs/forecast-rules.md`, including the honest "night", "not enough
-     measurements" and "rain sensor unavailable" cases;
-  6. the two « Réception » cards (age of the last frame, valid-frame ratio) run on scenarios:
-     fresh frame, missed frame, silent radio, unavailable entity, counters too small for a
-     percentage to mean anything, and duplicates unavailable.
+  5. the two « Réception » cards (age of the last frame, réception rate and its two terms) run on
+     scenarios: fresh frame, missed frame, silent radio, unavailable entity, no measurement
+     possible yet, and each colour band.
+
+The forecast banner of the previous reference card is no longer part of the card: it left with the
+commented options on 07/10/2026 (see the note where its code used to be, and the git history).
 
 Usage:   .venv/bin/python tools/check_ha_card.py
 Exit:    0 if all conforms, 1 otherwise (each discrepancy is printed).
@@ -303,117 +303,19 @@ def render(template: str, data: dict) -> str:
     return str(env.from_string(template).render()).strip()
 
 
-def trouve_bandeau(racine):
-    """Le bandeau de prévision — repéré à son TEXTE, jamais à une position dans la carte."""
-    a_voir = list(racine) if isinstance(racine, list) else [racine]
-    while a_voir:
-        noeud = a_voir.pop(0)
-        if isinstance(noeud, dict):
-            if "clair" in str(noeud.get("secondary", "")):
-                return noeud
-            a_voir.extend(noeud.values())
-        elif isinstance(noeud, list):
-            a_voir.extend(noeud)
-    return None
+# Le bandeau de prévision de l'ancienne carte de référence n'est PAS dans cette carte : c'est celle
+# du propriétaire, et il ne l'affiche pas. Ses trois modèles et les 12 scénarios qui les vérifiaient
+# (docs/forecast-rules.md) ont été retirés avec les options commentées le 07/10/2026 ; ils restent
+# dans l'historique git (commit e169663 et avant) si l'on veut les reprendre un jour. Les fonctions
+# de rendu ci-dessus (State, States, render) servent, elles, au contrôle qui suit.
 
-
-# La carte en service n'affiche pas le bandeau : il vit en option commentée (option G). Les
-# scénarios de prévision doivent continuer de tenir cette version-là, et le contrôle doit le dire
-# s'il ne trouve plus rien — un scénario qui disparaît en silence ne vaut rien.
-bandeau, origine = trouve_bandeau(card), "carte active"
-if bandeau is None:
-    for bloc in blocks:
-        try:
-            charge = yaml.safe_load(bloc)
-        except Exception:  # noqa: BLE001 - un bloc illisible est déjà signalé par l'étape 4
-            continue
-        bandeau = trouve_bandeau(charge)
-        if bandeau is not None:
-            origine = "option commentée (G)"
-            break
-if bandeau is None:
-    sys.exit("5. Bandeau de prévision introuvable — ni dans la carte active, ni dans les options "
-             "commentées. Le remettre, ou retirer les scénarios et le dire ici.")
-print(f"   (bandeau de prévision testé depuis la version : {origine})")
-TEMPLATES = {"état": bandeau["secondary"], "icône": bandeau["icon"], "couleur": bandeau["icon_color"]}
-clear_40 = 133800 * math.sin(math.radians(40)) ** 1.15  # clear-sky reference at 40 deg (sec. 6)
-ENTITY = {
-    "temp": f"sensor.{prefix}_outdoor_temperature",
-    "rafale": f"sensor.{prefix}_wind_gust",
-    "lux": EXCEPTIONS.get("illuminance", f"sensor.{prefix}_illuminance"),
-    "pluie": f"sensor.{prefix}_rain_total",
-}
-
-
-def scenario(label, *, t, lux, elev, rafale, pluie, il_y_a, attendu, icone, couleur, horizon="above_horizon"):
-    data = {
-        ENTITY["temp"]: State(str(t)),
-        ENTITY["rafale"]: State(str(rafale)),
-        ENTITY["lux"]: State(str(lux)),
-        ENTITY["pluie"]: State(str(pluie), NOW - timedelta(seconds=il_y_a)),
-        "sun.sun": State(horizon),
-        "_sun_elevation": elev,
-    }
-    got = {k: render(v, data) for k, v in TEMPLATES.items()}
-    ok = (
-        got["état"].startswith(attendu)
-        and got["icône"] == icone
-        and got["couleur"] == couleur
-    )
-    print(f"   {'OK  ' if ok else 'ÉCHEC'} {label}")
-    print(f"        → {got['état']}  [{got['icône']} / {got['couleur']}]")
-    if not ok:
-        print(f"        attendu : {attendu} / {icone} / {couleur}")
-        failures.append(label)
-    else:
-        echos.append(label)
-    return ok
-
-
-print("5. Modèles du bandeau exécutés sur des scénarios (verdicts de docs/forecast-rules.md)")
-scenario("pluie en cours, 1,4 °C", t=1.4, lux=1000, elev=40, rafale=18, pluie=59.2, il_y_a=180,
-         attendu="Pluvieux", icone="mdi:weather-rainy", couleur="blue")
-scenario("pluie et gel — alerte verglas du manuel (< 1 °C)", t=0.4, lux=1000, elev=40, rafale=12,
-         pluie=59.2, il_y_a=300, attendu="Neigeux", icone="mdi:weather-snowy", couleur="cyan")
-scenario("pluie et rafales 52 km/h", t=8.0, lux=1000, elev=40, rafale=52, pluie=60.1, il_y_a=60,
-         attendu="Orageux", icone="mdi:weather-lightning-rainy", couleur="deep-purple")
-scenario("sec, 85 % de la référence ciel clair (≥ 0,70)", t=21.0, lux=round(0.85 * clear_40), elev=40,
-         rafale=15, pluie=59.2, il_y_a=3600, attendu="Dégagé", icone="mdi:weather-sunny", couleur="amber")
-scenario("sec, 50 % de la référence (≥ 0,35)", t=21.0, lux=round(0.50 * clear_40), elev=40,
-         rafale=15, pluie=59.2, il_y_a=3600, attendu="Partiellement",
-         icone="mdi:weather-partly-cloudy", couleur="orange")
-scenario("sec, 10 % de la référence", t=21.0, lux=round(0.10 * clear_40), elev=40, rafale=15,
-         pluie=59.2, il_y_a=3600, attendu="Nuageux", icone="mdi:weather-cloudy", couleur="blue-grey")
-scenario("nuit, soleil à -12,3° — réponse honnête, pas d'estimation", t=14.0, lux=0, elev=-12.3,
-         rafale=8, pluie=59.2, il_y_a=3600, attendu="Nuit", icone="mdi:weather-night",
-         couleur="indigo", horizon="below_horizon")
-scenario("capteur de pluie indisponible — pas de pluie annoncée", t=21.0, lux=round(0.85 * clear_40),
-         elev=40, rafale=15, pluie="unavailable", il_y_a=60, attendu="Dégagé",
-         icone="mdi:weather-sunny", couleur="amber")
-scenario("dernière bascule il y a 25 min — la fenêtre de 20 min est close", t=21.0,
-         lux=round(0.85 * clear_40), elev=40, rafale=15, pluie=59.2, il_y_a=1500, attendu="Dégagé",
-         icone="mdi:weather-sunny", couleur="amber")
-# Signalé le 03/10 : le bandeau annonçait « Pluvieux » sans pluie. Le compteur remis à zéro
-# (démarrage, changement de piles, ré-ajout de l'entité dans HA) rendait last_changed récent.
-scenario("compteur remis à zéro (0,0 mm) modifié il y a 1 min — pas de pluie", t=21.0,
-         lux=round(0.85 * clear_40), elev=40, rafale=15, pluie=0.0, il_y_a=60, attendu="Dégagé",
-         icone="mdi:weather-sunny", couleur="amber")
-# Limite de RÉSOLUTION assumée du pluviomètre (0,233 mm par bascule), pas un défaut : avec ce
-# compteur, une bascule isolée et une bruine réelle sont indistinguables. C'est ce que règle
-# l'option B de la carte (seuil de débit), au prix d'un écart affiché au tableau §5.
-scenario("UNE bascule isolée (0,233 mm) il y a 3 min — classée « Pluvieux » par la règle §4",
-         t=21.0, lux=round(0.85 * clear_40), elev=40, rafale=15, pluie=0.233, il_y_a=180,
-         attendu="Pluvieux", icone="mdi:weather-rainy", couleur="blue")
-scenario("soleil rasant, référence < 1 000 lx — le rapport n'a plus de sens", t=21.0, lux=600,
-         elev=0.5, rafale=15, pluie=59.2, il_y_a=3600, attendu="Indéterminé",
-         icone="mdi:weather-cloudy-alert", couleur="grey")
-
-# --------------------------------------------------------------------------- 6
+# --------------------------------------------------------------------------- 5
+# --------------------------------------------------------------------------- 5
 # Les encarts « Réception » sont trouvés par leur ENTITÉ, jamais par leur position : réordonner
 # la carte ne doit pas pouvoir rendre ce contrôle muet. Les modèles testés sont les chaînes
 # exactes extraites du YAML, exécutées avec les mêmes filtres Jinja que HA (section 5).
 print()
-print("6. Encarts « Réception » exécutés sur des scénarios (fraîcheur, taux de réception conforme)")
+print("5. Encarts « Réception » exécutés sur des scénarios (fraîcheur, taux de réception conforme)")
 
 
 def encart(needle: str) -> dict:
