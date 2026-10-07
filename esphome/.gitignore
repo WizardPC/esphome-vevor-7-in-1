@@ -3,5 +3,7 @@
 # You can modify this file to suit your needs.
 /.esphome/
 /secrets.yaml
-# Sauvegarde locale de secrets.yaml : jamais dans le depot, meme par inadvertance.
+# Local backup of secrets.yaml: never in the repo, not even by accident.
 /.secrets-backup
+# Per-owner flash files (local configuration, secrets by reference).
+/panrahk-flash.yaml

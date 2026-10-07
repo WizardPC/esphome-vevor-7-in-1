@@ -1,61 +1,60 @@
-# Copie LOCALE du composant `cc1101` d'ESPHome — pourquoi elle existe
+# LOCAL copy of ESPHome's `cc1101` component — why it exists
 
-Ce dossier est une copie de `esphome/components/cc1101` d'ESPHome **2026.9.1**, déclarée en
-`external_components` dans `esphome/vevor-7in1.yaml` pour **prendre le pas** sur le composant natif.
+This folder is a copy of `esphome/components/cc1101` from ESPHome **2026.9.1**, declared in
+`external_components` in `esphome/vevor-7in1.yaml` so that it **takes precedence** over the native
+component.
 
-## Modifications locales
+## Local changes
 
-Toutes les retouches sont marquées `MODIFICATION LOCALE` dans le code : **10 marquages au total**
-(8 blocs dans `cc1101.cpp`, 2 déclarations dans `cc1101.h`). Elles portent sur :
+Every change is marked `LOCAL CHANGE` in the code: **10 markers in total** (8 blocks in
+`cc1101.cpp`, 2 declarations in `cc1101.h`). They cover:
 
-1. **identité relue avec réessais** : 4 essais à 50 ms dans `configure()`, puis jusqu'à **60
-   relectures non bloquantes à 250 ms (≈ 15 s)** traitées depuis `loop()` — jamais de boucle
-   bloquante dans `setup()`, qui déclencherait le watchdog — avec **journal de `CHIP_RDYn`** ;
-2. **écriture de registre VÉRIFIÉE**, réécrite jusqu'à prise (4 essais), plus un **bloc de
-   contrôle** des 8 registres clés (FREQ2/1/0, MDMCFG4/3/2, PKTCTRL0, IOCFG0) ;
-3. **`delay(20)` de stabilisation** avant l'entrée en RX, et **contrôle de la calibration VCO
-   (`FSCAL1`)** après l'entrée en RX ;
-4. **`enter_calibrated_` réessaie le verrouillage PLL** (`PLL_LOCK_RETRIES = 3`) au lieu
-   d'abandonner sur un dépassement de délai ;
-5. **cadence SPI rétablie à `DATA_RATE_1MHZ`** (contre les 200 kHz d'une itération antérieure, où
-   la puce ne sortait qu'un flux de bruit).
+1. **identity re-read with retries**: 4 attempts 50 ms apart in `configure()`, then up to **60
+   non-blocking re-reads 250 ms apart (≈ 15 s)** handled from `loop()` — never a blocking loop in
+   `setup()`, which would trip the watchdog — with **`CHIP_RDYn` logging**;
+2. **VERIFIED register write**, retried until taken (4 attempts), plus a **check block** over the
+   8 key registers (FREQ2/1/0, MDMCFG4/3/2, PKTCTRL0, IOCFG0);
+3. **`delay(20)` settling** before entering RX, and a **VCO calibration check (`FSCAL1`)** after
+   entering RX;
+4. **`enter_calibrated_` retries the PLL lock** (`PLL_LOCK_RETRIES = 3`) instead of giving up on a
+   timeout;
+5. **SPI clock restored to `DATA_RATE_1MHZ`** (against the 200 kHz of an earlier iteration, where
+   the chip only emitted a stream of noise).
 
-## Pourquoi la relecture d'identité
+## Why the identity re-read
 
-La version d'origine lit `PARTNUM` puis `VERSION` **une seule fois**, puis appelle `mark_failed()` :
-sur ce montage, un démarrage sur deux se levait avec `Chip ID: 0xFFFF` (toutes les lectures SPI à
-0xFF) et la carte restait muette **toute la session**. Or la datasheet CC1101 (SWRS061I) dit :
-- §10.1 : `CHIP_RDYn` (bit s7 du status byte) « reste haut jusqu'à ce que l'alimentation ET le
-  quartz soient stabilisés » — et pendant ce temps l'en-tête SPI renvoie `0xFF` sur SO ;
-- §4.9 + Table 18 : la rampe d'alimentation doit faire 5 ms de 0 à 1,8 V, sinon l'état de la puce est
-  indéterminé jusqu'à un `SRES` (et la séquence de reset complète n'est requise qu'à la première mise
-  sous tension : §19.1.2).
+The original version reads `PARTNUM` then `VERSION` **once**, then calls `mark_failed()`: on this
+wiring, one boot in two came up with `Chip ID: 0xFFFF` (every SPI read at 0xFF) and the board stayed
+mute **for the whole session**. Yet the CC1101 datasheet (SWRS061I) says:
+- §10.1: `CHIP_RDYn` (bit s7 of the status byte) "stays high until power AND crystal are settled" —
+  and meanwhile the SPI header returns `0xFF` on SO;
+- §4.9 + Table 18: the power ramp must do 5 ms from 0 to 1.8 V, otherwise the chip's state is
+  undefined until an `SRES` (and the full reset sequence is only required on first power-up:
+  §19.1.2).
 
-Donc `0xFFFF` ne veut pas dire « câblage faux » mais « puce pas prête ». RadioLib, la bibliothèque de
-référence, boucle 10 relectures espacées de 10 ms pour cette raison (jgromes/RadioLib,
-`CC1101.cpp`). Ici : 4 essais à 50 ms, puis jusqu'à 60 relectures à 250 ms (≈ 15 s) depuis `loop()`
-avant d'abandonner, et **journal de `CHIP_RDYn`** à chaque tentative, ce qui départage les deux
-causes :
+So `0xFFFF` does not mean "wrong wiring" but "chip not ready". RadioLib, the reference library, loops
+10 re-reads 10 ms apart for that very reason (jgromes/RadioLib, `CC1101.cpp`). Here: 4 attempts 50 ms
+apart, then up to 60 re-reads 250 ms apart (≈ 15 s) from `loop()` before giving up, with
+**`CHIP_RDYn` logged** on every attempt, which tells the two causes apart:
 
-| Journal | Lecture |
+| Log | Reading |
 |---|---|
-| `CHIP_RDYn HAUT = alimentation ou quartz pas prêts` | côté matériel (alimentation, quartz, POR) |
-| `CHIP_RDYn bas = puce prête, donc liaison SPI en cause` | côté câblage (MISO/MOSI/CS, masse) |
+| `CHIP_RDYn HIGH = power or crystal not ready` | hardware side (power, crystal, POR) |
+| `CHIP_RDYn low = chip ready, so the SPI link is at fault` | wiring side (MISO/MOSI/CS, ground) |
 
-## Maintenance du fork
+## Maintaining the fork
 
-- **Version de base** : ESPHome **2026.9.1** (`esphome version`). C'est la seule référence ; le
-  dossier n'est pas un paquet versionné, donc à chaque montée de version d'ESPHome les correctifs
-  amont **ne sont pas récupérés automatiquement**.
-- **Source de vérité pour le diff** : le composant natif installé, pour que l'écart reste lisible —
-  p. ex. `.venv/lib/python3.13/site-packages/esphome/components/cc1101/`.
-- **Retrouver les modifications** : `grep -rn "MODIFICATION LOCALE" esphome/components/cc1101/`
-  liste les 10 marquages (8 blocs dans `cc1101.cpp`, 2 dans `cc1101.h`).
-- **Rejouer les modifications** après une montée d'ESPHome : comparer le dossier local au composant
-  natif de la nouvelle version (`diff -ru <natif> esphome/components/cc1101/`), puis reporter les
-  blocs marqués. Il n'existe **pas** de fichier de patch : les blocs `MODIFICATION LOCALE` tiennent
-  lieu de jeu de hunks. Si l'écart devient difficile à suivre, générer un `diff -u` (natif → local)
-  et le déposer dans ce dossier.
-- **Contrôle minimal après mise à jour** : `configure()` doit journaliser l'identité
-  (`CC1101 trouvé…`), le « contrôle des écritures » doit être conforme sur les 8 registres, et la
-  cadence SPI doit rester `DATA_RATE_1MHZ`.
+- **Base version**: ESPHome **2026.9.1** (`esphome version`). It is the only reference; the folder is
+  not a versioned package, so on every ESPHome upgrade the upstream fixes are **not picked up
+  automatically**.
+- **Source of truth for the diff**: the installed native component, so the gap stays readable —
+  e.g. `.venv/lib/python3.13/site-packages/esphome/components/cc1101/`.
+- **Finding the changes**: `grep -rn "LOCAL CHANGE" esphome/components/cc1101/` lists the 10 markers
+  (8 blocks in `cc1101.cpp`, 2 in `cc1101.h`).
+- **Replaying the changes** after an ESPHome upgrade: compare the local folder with the native
+  component of the new version (`diff -ru <native> esphome/components/cc1101/`), then carry the
+  marked blocks over. There is **no** patch file: the `LOCAL CHANGE` blocks stand in for a hunk set.
+  If the gap becomes hard to follow, generate a `diff -u` (native → local) and drop it in this
+  folder.
+- **Minimal check after an update**: `configure()` must log the identity (`CC1101 found...`), the
+  "write check" must conform over the 8 registers, and the SPI clock must stay `DATA_RATE_1MHZ`.
