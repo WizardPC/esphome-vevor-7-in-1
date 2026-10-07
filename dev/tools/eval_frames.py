@@ -220,7 +220,7 @@ def main() -> int:
         else:
             report["findings"].append(
                 f"ID {sid}: avance du compteur TX conforme au temps écoulé sur {len(fr)} trame(s) "
-                f"(~{TX_TICKS_PER_S} tick/s ; {duplicates} doublon(s) de livraison RMT, "
+                f"(~{TX_TICKS_PER_S} tick/s ; {duplicates} duplicate(s) de livraison RMT, "
                 f"{missed} rafale(s) manquée(s))")
         rain = [x["rain_mm"] for x in fr]
         if any(y < x for x, y in zip(rain, rain[1:])):
@@ -310,7 +310,7 @@ def main() -> int:
 
     print("\n=== RÉSUMÉ ===", file=sys.stderr)
     print(
-        f"trames={len(frames)} valides={len(valid)} "
+        f"frames={len(frames)} valides={len(valid)} "
         f"(checksum KO={report['checksum_fail']}, compteur KO={report['counter_fail']}) "
         f"verdict={report['verdict']} (seuil {args.min_valid})",
         file=sys.stderr,

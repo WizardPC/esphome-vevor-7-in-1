@@ -18,7 +18,7 @@ VevorBouton = vevor_7in1_ns.class_(
     "VevorBouton", button.Button, cg.Parented.template(Vevor7in1)
 )
 
-# Identifiant côté composant (voir VevorBouton dans vevor_bouton.h).
+# Component-side identifier (see VevorBouton in vevor_bouton.h).
 BOUTONS = {
     "dump_pulses": 0,
     "reapply_radio": 1,

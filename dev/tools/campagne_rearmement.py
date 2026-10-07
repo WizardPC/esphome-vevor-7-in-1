@@ -45,8 +45,8 @@ NOM_REDEMARRAGE = re.compile(r"watchdog\s+max\s+silence", re.I)
 
 RE_TRAME = re.compile(r"V7IN1 OK (\{.*\})")
 RE_COMPTEURS = re.compile(
-    r"captures=(\d+) \(\+(\d+)\), trames=(\d+), rejets=(\d+), réparées=(\d+)"
-    r"(?: \(dont (\d+) refusées\))?.*dernières impulsions=(\d+), plus longue=(\d+)")
+    r"captures=(\d+) \(\+(\d+)\), frames=(\d+), rejects=(\d+), repaired=(\d+)"
+    r"(?: \(dont (\d+) refusées\))?.*dernières pulses=(\d+), longest=(\d+)")
 RE_REARMEMENT = re.compile(r"ré-armement radio (\d+) \(un tous les (\d+) créneaux\)")
 RE_REDEMARRAGE = re.compile(r"redémarrage n°(\d+)")
 RE_MUET = re.compile(r"aucune trame depuis (\d+) s")
@@ -112,9 +112,9 @@ class Phase:
             m = RE_COMPTEURS.search(ligne)
             if m:
                 self.note("compteurs", captures=int(m.group(1)), delta=int(m.group(2)),
-                          trames=int(m.group(3)), rejets=int(m.group(4)),
+                          frames=int(m.group(3)), rejects=int(m.group(4)),
                           reparees=int(m.group(5)), refusees=int(m.group(6) or 0),
-                          dernieres_impulsions=int(m.group(7)), plus_longue=int(m.group(8)))
+                          dernieres_pulses=int(m.group(7)), plus_longue=int(m.group(8)))
                 continue
             m = RE_REARMEMENT.search(ligne)
             if m:
@@ -257,7 +257,7 @@ async def phase_async(a) -> None:
                              if phase.derniere_trame else None)
                     print(f"[{phase.etiquette}] {phase.trames} trames, dernier écart={ecart} s, "
                           f"seuils confirmés={phase.regles_confirmes or 'en attente'}", flush=True)
-                    phase.note("bilan", trames=phase.trames, ecart_s=ecart)
+                    phase.note("bilan", frames=phase.trames, ecart_s=ecart)
                 await asyncio.sleep(2)
         except Exception as exc:
             phase.note("flux_perdu", detail=repr(exc)[:200])
@@ -267,7 +267,7 @@ async def phase_async(a) -> None:
         if not phase.arret_demande:
             await asyncio.sleep(5)
 
-    phase.note("phase_fin", trames=phase.trames,
+    phase.note("phase_fin", frames=phase.trames,
                seuils_confirmes=phase.regles_confirmes)
     print(f"[{phase.etiquette}] FIN — {phase.trames} trames, "
           f"seuils confirmés={phase.regles_confirmes}", flush=True)

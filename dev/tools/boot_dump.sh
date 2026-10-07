@@ -41,5 +41,5 @@ fi
 
 wait "$LOOP"
 echo "=== lignes de configuration trouvées ==="
-grep -ah "CC1101:\|Chip ID\|Frequency:\|Channel:\|Modulation\|Symbol Rate\|Filter Bandwidth\|Output Power\|CS Pin\|SPI bus\|CLK Pin\|SDI Pin\|SDO Pin\|Pin: GPIO\|Filter out\|Signal is done\|Receive symbols\|RMT symbols\|Extracteur de trames\|période bit\|polarité\|Over-The-Air\|Encryption\|Failed to enter RX\|PLL\|calibrat\|V7IN1 BOOT\|Successfully" \
+grep -ah "CC1101:\|Chip ID\|Frequency:\|Channel:\|Modulation\|Symbol Rate\|Filter Bandwidth\|Output Power\|CS Pin\|SPI bus\|CLK Pin\|SDI Pin\|SDO Pin\|Pin: GPIO\|Filter out\|Signal is done\|Receive symbols\|RMT symbols\|frame extractor\|bit period\|polarity\|Over-The-Air\|Encryption\|Failed to enter RX\|PLL\|calibrat\|V7IN1 BOOT\|Successfully" \
   "$ROOT"/logs/bootdump_*.log 2>/dev/null | sed 's/^\[[0-9:]*\] //' | sort -u

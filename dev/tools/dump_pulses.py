@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Press the board's "Dump impulsions" button and return the raw durations.
+"""Press the board's "Dump pulses" button and return the raw durations.
 
 The native API does not replay log history, and the first seconds' captures are already past by
 the time the API is reachable. The component keeps a pending request (`request_raw_dump()`) and
@@ -53,11 +53,11 @@ async def main() -> int:
     await maybe_await(client.subscribe_states(on_state))
     await asyncio.sleep(1)
 
-    button = by_name.get("Dump impulsions")
+    button = by_name.get("Dump pulses")
     if button is None:
-        raise SystemExit("bouton « Dump impulsions » introuvable (firmware à reflasher ?)")
+        raise SystemExit("bouton « Dump pulses » introuvable (firmware à reflasher ?)")
     await maybe_await(client.button_command(button.key))
-    print("bouton « Dump impulsions » appuyé — attente de la prochaine capture…")
+    print("bouton « Dump pulses » appuyé — attente de la prochaine capture…")
 
     await asyncio.sleep(args.seconds)
 
@@ -70,7 +70,7 @@ async def main() -> int:
         print(f"  {name:20s} = {getattr(st, 'state', '(jamais publié)')}")
 
     for text in lines:
-        if any(k in text for k in ("capture #", "impulsions", "trame extraite", "V7IN1",
+        if any(k in text for k in ("capture #", "pulses", "trame extraite", "V7IN1",
                                    "GDO0", "PLL", "RX state")):
             print("  LOG:", text.strip()[:300])
     print(f"-> {out}")

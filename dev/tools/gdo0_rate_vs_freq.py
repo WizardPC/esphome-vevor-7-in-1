@@ -21,8 +21,8 @@ import statistics
 import sys
 
 TRANS_RE = re.compile(r"sonde GDO0 : (\d+) transition\(s\) en (\d+) us")
-CAP_RE = re.compile(r"captures=(\d+) \(\+(\d+)\), trames=(\d+), dernières impulsions=(\d+), plus longue=(\d+)")
-NOIMP_RE = re.compile(r"aucune impulsion depuis (\d+) s \(captures=(\d+), trames=(\d+)\)")
+CAP_RE = re.compile(r"captures=(\d+) \(\+(\d+)\), frames=(\d+), dernières pulses=(\d+), longest=(\d+)")
+NOIMP_RE = re.compile(r"aucune impulsion depuis (\d+) s \(captures=(\d+), frames=(\d+)\)")
 EXTRACT_RE = re.compile(r"trame extraite")
 FREQ_RE = re.compile(r"gdo0_freq_([0-9.]+)\.log$")
 
@@ -43,7 +43,7 @@ def analyse(path: pathlib.Path) -> dict:
         "captures_fin": int(caps[-1][0]) if caps else None,
         "captures_delta": sum(int(c[1]) for c in caps),
         "trames_fin": int(caps[-1][2]) if caps else 0,
-        "impulsions_max": max((int(c[4]) for c in caps), default=None),
+        "pulses_max": max((int(c[4]) for c in caps), default=None),
         "extractions": len(EXTRACT_RE.findall(txt)),
         "lignes_sans_impulsion": len(NOIMP_RE.findall(txt)),
     }
@@ -69,7 +69,7 @@ def main() -> int:
               f"{r['transitions_moy'] if r['transitions_moy'] is not None else '-':>11}  "
               f"{r['transitions_min'] if r['transitions_min'] is not None else '-':>7}  "
               f"{r['transitions_max'] if r['transitions_max'] is not None else '-':>7}  "
-              f"{r['captures_delta']:>8}  {r['impulsions_max'] if r['impulsions_max'] is not None else '-':>10}  "
+              f"{r['captures_delta']:>8}  {r['pulses_max'] if r['pulses_max'] is not None else '-':>10}  "
               f"{r['extractions']:>11}")
 
     moyennes = [r["transitions_moy"] for r in rows if r["transitions_moy"] is not None]

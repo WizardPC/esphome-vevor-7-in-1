@@ -147,7 +147,7 @@ def main() -> int:
         if args.txt:
             atomic_write_text(args.txt, "\n".join(out_lines) + "\n")
         if res["verdict"] == "FAIL":
-            print("# VERDICT : FAIL (repris du rapport) — " + "; ".join(res["motifs_fail"]),
+            print("# VERDICT : FAIL (re-taken du rapport) — " + "; ".join(res["motifs_fail"]),
                   file=sys.stderr)
             return 1
         print("# AUCUNE TRAME : mesure faite, résultat négatif (code 0)", file=sys.stderr)
@@ -203,7 +203,7 @@ def main() -> int:
         "raisons_rejet_firmware": Counter(r["raison"] for r in rejects).most_common(5),
         "ids": sorted({f.get("id") for f in frames}),
         "temperature_C": span_of("temp_c"),
-        "humidite_pct": span_of("humidity"),
+        "humidity_pct": span_of("humidity"),
         "vent_kmh": span_of("wind_kmh"),
         "rafale_kmh": span_of("gust_kmh"),
         "wind_dir_deg": span_of("wind_dir_deg"),
@@ -238,7 +238,7 @@ def main() -> int:
     say(f"rejets FIRMWARE : {len(rejects)} {res['raisons_rejet_firmware'] if rejects else ''} "
         f"(≠ verdict du décodeur indépendant)")
     say(f"station(s) : {[hex(i) for i in res['ids'] if i is not None]}")
-    say(f"T {res['temperature_C']} °C | H {res['humidite_pct']} % | vent {res['vent_kmh']} | "
+    say(f"T {res['temperature_C']} °C | H {res['humidity_pct']} % | vent {res['vent_kmh']} | "
         f"rafale {res['rafale_kmh']} | direction {res['wind_dir_deg']} ° | pluie {res['pluie_mm']} mm "
         f"| UV {res['uv']} | lux {res['lux']}")
     say(f"valeurs hors plage : {res['valeurs_hors_plage'] or 'aucune'}")

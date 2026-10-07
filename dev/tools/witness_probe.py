@@ -4,7 +4,7 @@
 The witness firmware exposes an unauthenticated web server on port 80 with two streams:
   - /        : state page (HTML)
   - /events  : SSE state stream (uptime + all entities) AND, in clear, the device log lines
-               — including "Salve RF recue : N impulsions" and the decoded frames.
+               — including "Salve RF recue : N pulses" and the decoded frames.
 
 It is the only way to know, WITHOUT touching the board, whether the witness firmware decodes the
 station at this instant and place. It is a control measurement when the board runs the witness

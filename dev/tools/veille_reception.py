@@ -5,7 +5,7 @@ But : ne plus jamais rater une panne de décodage. Le script
   - souscrit au journal de la carte par l'API ESPHome (sans chiffrement) et l'archive tel quel ;
   - surveille l'arrivée des trames ;
   - quand la réception casse (aucune trame publiée pendant PANNE_S secondes) alors que la carte
-    reçoit toujours des captures, il appuie LUI-MÊME sur « Dump pulses » pour vider les impulsions
+    reçoit toujours des captures, il appuie LUI-MÊME sur « Dump pulses » pour vider les pulses
     brutes des rafales en cause, et écrit un instantané du journal à cet instant.
 
 Leçons du 05/10/2026 (les trois premières étaient des bugs réels, constatés en service) :
@@ -45,7 +45,7 @@ HOST = "172.16.0.205"
 PORT = 6053
 NOM_BOUTON_VIDAGE = "Dump pulses"
 PANNE_S = 240                  # aucune trame pendant 4 min alors que des captures arrivent
-IMMOBILE_S = 900               # aucune capture du tout pendant 15 min : carte muette, inutile d'insister
+IMMOBILE_S = 900               # aucune capture du tout pendant 15 min : carte mute, inutile d'insister
 REESSAI_S = 300                # ne pas redemander un vidage plus d'une fois par tranche de 5 min
 VIDAGE_PERIODIQUE_S = 600      # vidage de courtoisie toutes les 10 min de silence
 CANARI_S = 45                  # aucune ligne du tout : la carte publie toutes les ~20 s, donc deux
@@ -89,7 +89,7 @@ class Veille:
             self.derniere_capture = time.time()
 
     def _vider(self, raison: str) -> None:
-        """Appuie sur « Dump pulses ». Le faire est le SEUL moyen d'obtenir les impulsions brutes.
+        """Appuie sur « Dump pulses ». Le faire est le SEUL moyen d'obtenir les pulses brutes.
 
         L'appui part dans un thread : `button_command` est synchrone, et l'appeler directement dans
         la boucle asyncio la gelait (sans rien lever) — c'est la panne de veille constatée deux fois
@@ -98,7 +98,7 @@ class Veille:
         if self.cli is None or self.dump_key is None:
             self.ligne(f"### {raison} — vidage IMPOSSIBLE (bouton inconnu)")
             return
-        self.ligne(f"### {raison} — vidage des impulsions demandé")
+        self.ligne(f"### {raison} — vidage des pulses demandé")
 
         def appuyer() -> None:
             try:

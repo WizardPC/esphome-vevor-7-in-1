@@ -54,13 +54,13 @@ CC1101Component::CC1101Component() {
   this->state_.RX_TIME = 7;
   this->state_.CCA_MODE = 3;
   this->state_.PO_TIMEOUT = 1;
-  // MODIFICATION LOCALE — BW/4 -> BW/2 (05/10/2026). La compensation de fréquence recentre le
-  // tranchant de décision du démodulateur, mais seulement dans cette fenêtre : BW/4 = ±40 kHz avec
-  // un filtre de 162 kHz. Or DEUX quartz dérivent (la station et la nôtre) et leur somme dépasse
-  // cette marge : la puce ne recentre plus, le rapport cyclique se déforme, et le décodeur refuse
-  // des trames dont il a pourtant trouvé le mot de synchronisation — 60 rejets et 0 trame mesurés
-  // à 868,35 le 05/10 au soir, là où le même réglage donnait 7 trames vingt minutes plus tôt.
-  // BW/2 porte la fenêtre à ±81 kHz. Voir dev/state/CAMPAGNE_20261005.md.
+  // LOCAL CHANGE — BW/4 -> BW/2 (05/10/2026). Frequency compensation re-centres the
+  // demodulator's decision edge, but only within that window: BW/4 = ±40 kHz with a 162 kHz
+  // filter. Yet TWO crystals drift (the station's and ours) and their sum exceeds that margin:
+  // the chip stops re-centring, the duty cycle distorts, and the decoder refuses frames whose
+  // sync word it had nonetheless found — 60 rejects and 0 frames measured at 868.35 on the
+  // evening of 05/10, where the same setting gave 7 frames twenty minutes earlier.
+  // BW/2 widens the window to ±81 kHz. See dev/state/CAMPAGNE_20261005.md.
   this->state_.FOC_LIMIT = 3;
   this->state_.FOC_POST_K = 1;
   this->state_.FOC_PRE_K = 2;
@@ -129,9 +129,9 @@ void CC1101Component::setup() {
     // for at most 15 s (budget 60), never exceeding the watchdog.
     this->retry_budget_ = 60;
     this->next_retry_ms_ = millis() + 250;
-    ESP_LOGW(TAG, "puce absente du bus SPI au démarrage — %u relectures non bloquantes prévues "
-                  "(la datasheet dit que CHIP_RDYn reste haut tant que l'alimentation et le quartz "
-                  "ne sont pas stabilisés)", (unsigned) this->retry_budget_);
+    ESP_LOGW(TAG, "chip absent from the SPI bus at boot — %u non-blocking re-reads planned "
+                  "(the datasheet says CHIP_RDYn stays high while power and the crystal "
+                  "are not settled)", (unsigned) this->retry_budget_);
     return;
   }
   if (this->is_failed()) {
@@ -183,20 +183,20 @@ void CC1101Component::configure() {
     this->read_(Register::VERSION);
     this->chip_id_ = encode_uint16(this->state_.PARTNUM, this->state_.VERSION);
     if (this->state_.VERSION != 0 && this->state_.PARTNUM != 0xFF) {
-      ESP_LOGI(TAG, "CC1101 trouvé après %u relecture(s) : Chip ID: 0x%04X (status 0x%02X, CHIP_RDYn haut %u fois)",
+      ESP_LOGI(TAG, "CC1101 found after %u re-read(s) : Chip ID: 0x%04X (status 0x%02X, CHIP_RDYn haut %u fois)",
                (unsigned) tentatives, this->chip_id_, status, (unsigned) chip_rdy_haute);
       break;
     }
     ESP_LOGW(TAG, "CC1101 muet sur le SPI — lecture %u/4 (Chip ID: 0x%04X, status 0x%02X) : %s",
              (unsigned) tentatives, this->chip_id_, status,
-             (status & 0x80) != 0 ? "CHIP_RDYn HAUT = alimentation ou quartz pas prêts"
-                                  : "CHIP_RDYn bas = puce prête, donc liaison SPI en cause");
+             (status & 0x80) != 0 ? "CHIP_RDYn HIGH = power or crystal not ready"
+                                  : "CHIP_RDYn low = chip ready, so the SPI link is at fault");
     delay(50);
   }
   if (this->state_.VERSION == 0 || this->state_.PARTNUM == 0xFF) {
     // No mark_failed() here: the failure may be transient (chip not ready, see CHIP_RDYn).
     // setup() decides instead — non-blocking re-reads from loop(), 15 s budget.
-    ESP_LOGE(TAG, "identité CC1101 illisible après %u relectures (%u fois CHIP_RDYn haut)",
+    ESP_LOGE(TAG, "CC1101 identity unreadable after %u re-reads (%u times CHIP_RDYn high)",
              (unsigned) tentatives, (unsigned) chip_rdy_haute);
     return;
   }
@@ -236,10 +236,10 @@ void CC1101Component::configure() {
     if (!pris) {
       non_prises++;
       this->state_.regs()[i] = voulu;
-      ESP_LOGW(TAG, "registre 0x%02X NON PRIS apres 4 essais (voulu 0x%02X)", i, voulu);
+      ESP_LOGW(TAG, "register 0x%02X NOT TAKEN after 4 attempts (wanted 0x%02X)", i, voulu);
     }
   }
-  ESP_LOGI(TAG, "configuration : %u registre(s) repris apres relecture, %u definitivement non pris",
+  ESP_LOGI(TAG, "configuration: %u register(s) re-taken after a re-read, %u definitely not taken",
            (unsigned) reprises, (unsigned) non_prises);
   this->set_output_power(this->output_power_requested_);
 
@@ -268,10 +268,10 @@ void CC1101Component::configure() {
       }
     }
     if (ecarts == 0) {
-      ESP_LOGI(TAG, "controle des ecritures : les %u registres surveilles sont conformes",
+      ESP_LOGI(TAG, "write check: the %u watched registers conform",
                (unsigned) (sizeof(surveilles) / sizeof(surveilles[0])));
     } else {
-      ESP_LOGE(TAG, "controle des ecritures : %u registre(s) NON pris — la configuration radio n'est "
+      ESP_LOGE(TAG, "write check: %u register(s) NOT taken — the radio configuration is not "
                     "pas celle demandee", (unsigned) ecarts);
     }
   }
@@ -299,7 +299,7 @@ void CC1101Component::configure() {
     const uint8_t marc = this->state_.MARC_STATE;
     if (fscal1 == 0x3F) {
       ESP_LOGE(TAG, "CALIBRATION VCO ECHOUEE : FSCAL1=0x3F (FSCAL2=0x%02X FSCAL0=0x%02X, "
-                    "MARCSTATE=0x%02X) — puce configuree mais incapable de demoduler",
+                    "MARCSTATE=0x%02X) — chip configured but unable to demodulate",
                fscal2, fscal0, marc);
     } else {
       ESP_LOGI(TAG, "calibration VCO : FSCAL1=0x%02X (valide), FSCAL2=0x%02X, FSCAL0=0x%02X, "
@@ -333,20 +333,20 @@ void CC1101Component::retry_radio_init_() {
   this->chip_id_ = encode_uint16(this->state_.PARTNUM, this->state_.VERSION);
 
   if (this->state_.VERSION != 0 && this->state_.PARTNUM != 0xFF) {
-    ESP_LOGI(TAG, "CC1101 trouvé après relecture (Chip ID: 0x%04X, status 0x%02X) — configuration",
+    ESP_LOGI(TAG, "CC1101 found after a re-read (Chip ID: 0x%04X, status 0x%02X) — configuration",
              this->chip_id_, status);
     this->configure();  // full configuration + RX entry
     this->retry_budget_ = 0;
     return;
   }
-  ESP_LOGW(TAG, "puce toujours muette sur le SPI (Chip ID: 0x%04X, status 0x%02X) : %s — "
-                "relectures restantes %u",
+  ESP_LOGW(TAG, "chip still mute on the SPI (Chip ID: 0x%04X, status 0x%02X): %s — "
+                "re-reads left %u",
            this->chip_id_, status,
-           (status & 0x80) != 0 ? "CHIP_RDYn HAUT = alimentation ou quartz pas prêts"
-                                : "CHIP_RDYn bas = puce prête, liaison SPI en cause",
+           (status & 0x80) != 0 ? "CHIP_RDYn HIGH = power or crystal not ready"
+                                : "CHIP_RDYn low = chip ready, so the SPI link is at fault",
            (unsigned) this->retry_budget_);
   if (this->retry_budget_ == 0) {
-    ESP_LOGE(TAG, "échec définitif : puce absente du bus SPI après 15 s de relectures");
+    ESP_LOGE(TAG, "final failure: chip absent from the SPI bus after 15 s of re-reads");
     this->mark_failed();
     this->disable_loop();
   }
@@ -497,7 +497,7 @@ bool CC1101Component::enter_calibrated_(State target_state, Command cmd) {
   for (uint8_t retries = PLL_LOCK_RETRIES; retries > 0; retries--) {
     this->strobe_(cmd);
     if (!this->wait_for_state_(target_state, 250)) {
-      ESP_LOGW(TAG, "etat %u non atteint en 250 ms, nouvel essai", static_cast<unsigned>(target_state));
+      ESP_LOGW(TAG, "state %u not reached within 250 ms, retrying", static_cast<unsigned>(target_state));
       delay(10);
       this->enter_idle_();
       continue;

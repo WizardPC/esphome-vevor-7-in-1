@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Presses a NAMED board button and returns the logs of the following window.
 
-Generalizes `dump_pulses.py` (which only presses "Dump impulsions"): any named button can be
+Generalizes `dump_pulses.py` (which only presses "Dump pulses"): any named button can be
 pressed without reflashing. The exact press time is logged to slice the window.
 
 Usage:

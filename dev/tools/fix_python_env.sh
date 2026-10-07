@@ -37,4 +37,4 @@ rm -rf /tmp/venvtest
 "$ROOT/.venv/bin/python" -m venv /tmp/venvtest
 /tmp/venvtest/bin/pip --version && echo "TEST VENV: OK"
 rm -rf /tmp/venvtest
-echo "== réparation terminée =="
+echo "== repairation terminée =="

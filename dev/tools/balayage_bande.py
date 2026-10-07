@@ -41,9 +41,9 @@ FREQ_REPLI = re.compile(r"fr[ée]quence|frequency", re.I)
 FREQ_EXCLU = re.compile(r"offset", re.I)
 
 RE_TRAME = re.compile(r"V7IN1 OK (\{.*\})")
-RE_COMPTEURS = re.compile(r"captures=(\d+) \(\+(\d+)\), trames=(\d+), rejets=(\d+)")
+RE_COMPTEURS = re.compile(r"captures=(\d+) \(\+(\d+)\), frames=(\d+), rejects=(\d+)")
 CAPTEURS = {"rmt captures": "captures", "valid frames": "trames",
-            "rejected frames": "rejets", "duplicates ignored": "doublons"}
+            "rejected frames": "rejets", "duplicates ignored": "duplicates"}
 
 
 class Mesure:
@@ -188,7 +188,7 @@ async def balayer(a) -> int:
         print(f"  {mhz:.4f} MHz ({lignes['ecart_khz']:+5d} kHz) : "
               f"rafales +{lignes['dcaptures']}, trames +{lignes['dtrames']}, "
               f"rejets +{lignes['drejets']}, rapport={lignes['rapport']}"
-              + ("" if pris else "  [FRÉQUENCE NON PRISE]"), flush=True)
+              + ("" if pris else "  [FRÉQUENCE NOT TAKENE]"), flush=True)
 
     # On rend la fréquence de départ : l'outil ne doit pas laisser la carte décalée.
     await maybe_await(cli.number_command(cible.key, a.centre))

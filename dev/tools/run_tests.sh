@@ -28,7 +28,7 @@ echo "=== 1. selfcheck de l'encodeur (reproduit-il la trame de rtl_433 ?) ==="
 echo "=== 2. génération des trames de test ==="
 "$DEV_PY" "$DEV/tests/frames.py" --vectors || exit 1
 
-echo "=== 2b. génération des scénarios d'impulsions (chaîne asynchrone) ==="
+echo "=== 2b. génération des scénarios d'pulses (chaîne asynchrone) ==="
 "$DEV_PY" "$DEV/tests/frames.py" --pulses || exit 1
 
 echo "=== 2c. génération des rafales RÉELLES (vecteurs de régression du dump) ==="

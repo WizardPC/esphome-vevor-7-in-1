@@ -3,7 +3,7 @@
 
 Unlike scan_freq.py (written for packet mode and its RSSI), this sweep uses only what the
 asynchronous path actually publishes: the "Trames valides / Trames rejetées" counters and the
-component heartbeats ("captures=…, trames=…, plus longue=…"), read through the native API.
+component heartbeats ("captures=…, frames=…, longest=…"), read through the native API.
 Capture rate and pulse durations are NOT signal criteria (noise produces just as many): only
 decoding a frame counts.
 

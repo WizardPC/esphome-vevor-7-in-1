@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Le compteur TX avance-t-il de +39 par emission ? Et que dit-il aux reprises apres un trou ?"""
+"""Le compteur TX avance-t-il de +39 par emission ? Et que dit-il aux re-takenes apres un trou ?"""
 import json, os, re, datetime as dt, collections
 D = "/home/hermes/projets/vevor-7in1/dev/state/nuit_20261005"
 P = "jardin_vevor_7_in_1_weather_station_"
@@ -17,7 +17,7 @@ for i in range(1, len(post)):
     d[(round(dt_s), delta)] += 1
 print("== (intervalle s, delta compteur TX) les plus frequents ==")
 for k, v in d.most_common(12): print("   %s : %d" % (k, v))
-print("\n== reprises apres un trou > 300 s ==")
+print("\n== re-takenes apres un trou > 300 s ==")
 for i in range(1, len(post)):
     dt_s = (T(post[i][0]) - T(post[i-1][0])).total_seconds()
     if dt_s > 300:

@@ -9,7 +9,7 @@ Le pilote enregistre cc1101.set_symbol_rate / set_fsk_deviation / set_filter_ban
 change SANS recompiler, du moment que l'entité correspondante est déclarée dans le YAML.
 
 Métrique principale : le RAPPORT DE DÉCODAGE (trames / rafales), continu et insensible à la position
-dans le temps. Secondaires : les rejets, les réparations, l'écart entre trames (la station émet toutes
+dans le temps. Secondaires : les rejets, les repairs, l'écart entre trames (la station émet toutes
 les 20 s) et l'état des compteurs internes publiés par la carte.
 
 Chaque valeur est posée, RELUE (une écriture non prise ne doit pas compter comme un essai), laissée à
@@ -42,10 +42,10 @@ ETAT = DEV / "state"
 
 RE_TRAME = re.compile(r"V7IN1 OK (\{.*\})")
 RE_COMPTEURS = re.compile(
-    r"captures=(\d+) \(\+(\d+)\), trames=(\d+), rejets=(\d+), réparées=(\d+)"
-    r"(?: \(dont (\d+) refusées\))?.*dernières impulsions=(\d+), plus longue=(\d+)")
+    r"captures=(\d+) \(\+(\d+)\), frames=(\d+), rejects=(\d+), repaired=(\d+)"
+    r"(?: \(dont (\d+) refusées\))?.*dernières pulses=(\d+), longest=(\d+)")
 CAPTEURS = {"rmt captures": "captures", "valid frames": "trames",
-            "rejected frames": "rejets", "duplicates ignored": "doublons"}
+            "rejected frames": "rejets", "duplicates ignored": "duplicates"}
 
 # (nom d'entité, valeurs à essayer, secondes par valeur, unité)
 SERIE = [
@@ -87,8 +87,8 @@ class Balayage:
             m = RE_COMPTEURS.search(ligne)
             if m:
                 self.compteurs.update(captures=int(m.group(1)), trames_c=int(m.group(3)),
-                                      rejets=int(m.group(4)), reparees=int(m.group(5)),
-                                      impulsions=int(m.group(7)))
+                                      rejects=int(m.group(4)), reparees=int(m.group(5)),
+                                      pulses=int(m.group(7)))
 
     def sur_etat(self, etat) -> None:
         nom = (self.noms_cles.get(etat.key, "") or "").strip().lower()
@@ -220,14 +220,14 @@ async def balayer(reglage: str, valeurs: list[float], secondes: float, etiquette
         ecarts = b.ecarts[ec0:]
         res = {"reglage": reglage, "valeur": valeur, "prise": pris, "relu": relu,
                "dcaptures": dc, "dtrames": dt, "drejets": dr,
-               "impulsions": apres.get("impulsions"),
+               "pulses": apres.get("pulses"),
                "rapport": round(dt / dc, 3) if dc else None,
                "ecarts": ecarts, "secondes": round(time.time() - t0, 1)}
         resultats.append(res)
         b.note(ev="valeur", **res)
         print(f"  {reglage} = {valeur} : rafales +{dc}, trames +{dt}, rejets +{dr}, "
               f"rapport={res['rapport']}, écarts={ecarts}"
-              + ("" if pris else "  [VALEUR NON PRISE]"), flush=True)
+              + ("" if pris else "  [VALEUR NOT TAKENE]"), flush=True)
 
     await maybe_await(cli.number_command(cible.key, float(depart if depart is not None else valeurs[0])))
     await asyncio.sleep(1.5)

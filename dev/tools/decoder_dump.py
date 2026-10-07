@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Decode off-board the raw durations returned by the "Dump impulsions" button.
+"""Decode off-board the raw durations returned by the "Dump pulses" button.
 
 When the board receives pulses (capture counter rises) but publishes no frame, the question is
 whether the RAW stream holds a valid frame — i.e. whether the fault is in the firmware assembler
@@ -19,7 +19,7 @@ Usage:
  dev/tools/decoder_dump.py logs/dump_brut.log [--json logs/dump_decode.json]
 
 Return codes: 0 at least one capture read ("0 valid frame" is a negative result); 2 technical
-error (unreadable file); 3 empty measurement: no capture (no "capture #"/"impulsions" line).
+error (unreadable file); 3 empty measurement: no capture (no "capture #"/"pulses" line).
 """
 
 from __future__ import annotations
@@ -38,8 +38,8 @@ PERIODS = (90, 88, 89, 87)          # same candidates as the firmware
 MAX_RUN_BITS = 64
 FRAME_BYTES = 21
 
-DUMP_RE = re.compile(r"impulsions \[(\d+)-(\d+)\] sur (\d+) : (.+)$")
-CAPTURE_RE = re.compile(r"capture #(\d+) : (\d+) impulsions, de (-?\d+) us à (-?\d+) us")
+DUMP_RE = re.compile(r"pulses \[(\d+)-(\d+)\] sur (\d+) : (.+)$")
+CAPTURE_RE = re.compile(r"capture #(\d+) : (\d+) pulses, de (-?\d+) us à (-?\d+) us")
 
 
 def lit_dumps(chemin: pathlib.Path) -> list[list[int]]:
@@ -102,7 +102,7 @@ def porte_de_plausibilite(b: bytes):
     if (((x[11] & 0x0F) << 8) | x[12]) > 359:
         return "direction"
     if b[7] > 100:
-        return "humidite"
+        return "humidity"
     temp_c = (((b[5] << 8) | b[6]) - 500) * 0.1
     if temp_c < -40.0 or temp_c > 60.0:
         return "temperature"
@@ -145,7 +145,7 @@ def main() -> int:
 
     if not captures:
         print(f"# MESURE NULLE — aucune capture dans {args.dump} : rien n'a été mesuré "
-              "(ni « capture # », ni « impulsions »)", file=sys.stderr)
+              "(ni « capture # », ni « pulses »)", file=sys.stderr)
         return RC_MESURE_NULLE
 
     print(f"{len(captures)} capture(s) lue(s) dans {args.dump}")

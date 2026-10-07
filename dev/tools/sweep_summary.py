@@ -3,7 +3,7 @@
 
 Each step is judged on what matters: the number of frames REALLY extracted from the demodulated
 stream (component "trame extraite" line), not the RMT capture count — noise produces those too.
-The "captures" and "plus longue" counters are reported to diagnose the instrument, not to
+The "captures" and "longest" counters are reported to diagnose the instrument, not to
 conclude about the signal.
 
 Usage:
@@ -18,7 +18,7 @@ import re
 import sys
 
 FREQ_RE = re.compile(r"sweepas_([0-9.]+)\.log$")
-CAP_RE = re.compile(r"captures=(\d+) \(\+(\d+)\), trames=(\d+), dernières impulsions=(\d+), plus longue=(\d+)")
+CAP_RE = re.compile(r"captures=(\d+) \(\+(\d+)\), frames=(\d+), dernières pulses=(\d+), longest=(\d+)")
 
 
 def analyse(p: pathlib.Path) -> dict:
@@ -35,7 +35,7 @@ def analyse(p: pathlib.Path) -> dict:
         "captures_fin": int(caps[-1][0]) if caps else None,
         "captures_delta": sum(int(c[1]) for c in caps),
         "trames_compteur": int(caps[-1][2]) if caps else 0,
-        "impulsions_max": max((int(c[4]) for c in caps), default=None),
+        "pulses_max": max((int(c[4]) for c in caps), default=None),
         "horodatage_debut": lignes[0][1:9] if lignes and lignes[0].startswith("[") else None,
         "horodatage_fin": lignes[-1][1:9] if lignes and lignes[-1].startswith("[") else None,
     }
@@ -53,7 +53,7 @@ def main() -> int:
     print(f"{'MHz':>8}  {'extraites':>9}  {'capt.delta':>10}  {'imp.max':>8}  {'debut':>8}  {'fin':>8}")
     for r in rows:
         print(f"{r['freq_mhz'] if r['freq_mhz'] is not None else '-':>8}  {r['extraites']:>9}  "
-              f"{r['captures_delta']:>10}  {r['impulsions_max'] if r['impulsions_max'] is not None else '-':>8}  "
+              f"{r['captures_delta']:>10}  {r['pulses_max'] if r['pulses_max'] is not None else '-':>8}  "
               f"{r['horodatage_debut'] or '-':>8}  {r['horodatage_fin'] or '-':>8}")
 
     total_ext = sum(r["extraites"] for r in rows)

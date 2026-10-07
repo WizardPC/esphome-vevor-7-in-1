@@ -35,7 +35,7 @@ for s in segs:
         for i in range(4): tot[i] += row[i]
     print("  %-21s %-21s %5g %6g %6g %5g %s%s" % (t0, t1, row[0], row[1], row[2], row[3],
           "", "  [AVANT reflash]" if avant else ""))
-print("\nTOTAL depuis le reflash : valides=%g rejetees=%g captures=%g doublons=%g" % tuple(tot))
+print("\nTOTAL depuis le reflash : valides=%g rejetees=%g captures=%g duplicates=%g" % tuple(tot))
 print("  rejets/captures = %.3f   ; rejets/valides = %.2f" % (tot[1]/tot[2] if tot[2] else 0, tot[1]/tot[0] if tot[0] else 0))
 
 # idem avant le reflash, sur la meme base (dernier segment non redemarre : 18:00->22:24)

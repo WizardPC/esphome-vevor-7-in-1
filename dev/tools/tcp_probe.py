@@ -49,7 +49,7 @@ def main() -> int:
         time.sleep(max(0.0, args.interval - (time.monotonic() - t0)))
 
     total = ok + fail
-    print("# bilan: %d/%d OK, %d echecs, plus longue serie OK=%d" % (ok, total, fail, best),
+    print("# bilan: %d/%d OK, %d echecs, longest serie OK=%d" % (ok, total, fail, best),
           flush=True)
     if fail and ok:
         print("# lien INSTABLE (joignable par intermittence)", flush=True)

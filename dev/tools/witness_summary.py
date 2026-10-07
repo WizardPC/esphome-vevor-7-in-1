@@ -15,9 +15,9 @@ import statistics
 import sys
 from pathlib import Path
 
-BURST = re.compile(r"Salve RF recue\s*:\s*(\d+) impulsions \((.*?)\)")
+BURST = re.compile(r"Salve RF recue\s*:\s*(\d+) pulses \((.*?)\)")
 DECODE = re.compile(r"\[([0-9A-Fa-f]{4})\]\s*(.*)$")
-CUT = re.compile(r"Trame coupee reconstruite avec succes \((\d+) \+ (\d+) impulsions, extra=(-?\d+) us\)")
+CUT = re.compile(r"Trame coupee reconstruite avec succes \((\d+) \+ (\d+) pulses, extra=(-?\d+) us\)")
 
 
 def main() -> int:
@@ -35,7 +35,7 @@ def main() -> int:
     print(f"rafales RF         : {len(bursts)}")
     if bursts:
         lengths = [b[0] for b in bursts]
-        print(f"  impulsions       : min={min(lengths)} max={max(lengths)} "
+        print(f"  pulses       : min={min(lengths)} max={max(lengths)} "
               f"med={statistics.median(lengths):.0f} (rafale utile mesurée le 30/09 à 18:41 : 166-174)")
         print(f"  premières rafales: ")
         for n, head in bursts[:6]:

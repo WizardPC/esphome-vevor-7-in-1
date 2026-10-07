@@ -26,13 +26,13 @@ prev = None
 for t, f, v in F:
     if not f["cks"]: flags.append((t, "somme invalide", f))
     if f["gust"] < f["wind"] - 0.5: flags.append((t, "rafale < vent (%.1f / %.1f)" % (f["wind"], f["gust"]), f))
-    if f["hum"] > 100 or f["hum"] < 30: flags.append((t, "humidite %d" % f["hum"], f))
+    if f["hum"] > 100 or f["hum"] < 30: flags.append((t, "humidity %d" % f["hum"], f))
     if f["dir"] > 359: flags.append((t, "direction %d" % f["dir"], f))
     if f["uv"] < 0 or f["uv"] > 16: flags.append((t, "uv %d" % f["uv"], f))
     if f["lux"] == 0 and 8 <= int(t[11:13]) < 15: flags.append((t, "lux 0 en journee", f))
     if prev:
         if abs(f["temp"] - prev["temp"]) > 10: flags.append((t, "saut temperature %.1f -> %.1f" % (prev["temp"]/10, f["temp"]/10), f))
-        if abs(f["hum"] - prev["hum"]) > 8: flags.append((t, "saut humidite %d -> %d" % (prev["hum"], f["hum"]), f))
+        if abs(f["hum"] - prev["hum"]) > 8: flags.append((t, "saut humidity %d -> %d" % (prev["hum"], f["hum"]), f))
         if f["rain"] < prev["rain"] - 0.01: flags.append((t, "pluie en baisse %.1f -> %.1f" % (prev["rain"], f["rain"]), f))
         if f["id"] != prev["id"]: flags.append((t, "id different %d -> %d" % (prev["id"], f["id"]), f))
         if f["uv"] != prev["uv"] and abs(f["uv"] - prev["uv"]) > 2: flags.append((t, "uv %d -> %d" % (prev["uv"], f["uv"]), f))

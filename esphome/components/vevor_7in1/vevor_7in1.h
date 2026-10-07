@@ -81,14 +81,14 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
     this->creneaux_muets_ = 0;
     this->rearmements_ = 0;
     if (this->radio_ != nullptr) {
-      ESP_LOGW(TAG, "ré-armement radio demandé depuis Home Assistant");
+      ESP_LOGW(TAG, "radio re-arm requested from Home Assistant");
       this->radio_->reset();
     }
   }
 
   void setup() override {
     if (this->receiver_ == nullptr) {
-      ESP_LOGE(TAG, "aucun remote_receiver associé : le composant ne peut rien recevoir");
+      ESP_LOGE(TAG, "no remote_receiver attached: the component cannot receive anything");
       this->mark_failed();
       return;
     }
@@ -98,13 +98,13 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
     // The 20 s slot is the station's transmission period.
     this->pref_reboots_ = global_preferences->make_preference<uint32_t>(0x7A1B5747u, true);
     this->pref_reboots_.load(&this->reboots_veille_);
-    this->set_interval("veille", 20000, [this]() { this->surveiller_radio_(); });
+    this->set_interval("watchdog", 20000, [this]() { this->surveiller_radio_(); });
     // The bit period is no longer assumed: it is MEASURED on each burst (estimer_periode_x10), so
     // the decoder is independent of station and board. PERIOD_CANDIDATES is only a fallback if the
     // estimate is refused.
     ESP_LOGI(TAG,
-             "enregistré comme dumper PRIMAIRE (période bit MESURÉE sur la rafale ; repli : %u "
-             "valeurs de %d à %d us ; deux polarités testées à chaque capture)",
+             "registered as PRIMARY dumper (bit period MEASURED on the burst; fallback: %u "
+             "values from %d to %d us; both polarities tried on every capture)",
              (unsigned) vevor::PERIOD_CANDIDATE_COUNT,
              (int) vevor::PERIOD_CANDIDATES[vevor::PERIOD_CANDIDATE_COUNT - 1],
              (int) vevor::PERIOD_CANDIDATES[0]);
@@ -113,19 +113,19 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   void loop() override;
 
   void dump_config() override {
-    ESP_LOGCONFIG(TAG, "Extracteur de trames Vevor 7-en-1 :");
-    ESP_LOGCONFIG(TAG, "  période bit : MESURÉE sur chaque rafale (repli : %u valeurs de %d à %d us)",
+    ESP_LOGCONFIG(TAG, "Vevor 7-in-1 frame extractor:");
+    ESP_LOGCONFIG(TAG, "  bit period: MEASURED on every burst (fallback: %u values from %d to %d us)",
                   (unsigned) vevor::PERIOD_CANDIDATE_COUNT,
                   (int) vevor::PERIOD_CANDIDATES[vevor::PERIOD_CANDIDATE_COUNT - 1],
                   (int) vevor::PERIOD_CANDIDATES[0]);
-    ESP_LOGCONFIG(TAG, "  polarité : les deux essayées à chaque capture");
-    ESP_LOGCONFIG(TAG, "  réparations bornées : 1 bit d'en-tête, puis 1 bit inséré dans la charge "
-                       "(validées par somme + compteur + porte de plausibilité)");
+    ESP_LOGCONFIG(TAG, "  polarity: both tried on every capture");
+    ESP_LOGCONFIG(TAG, "  bounded repairs: 1 header bit, then 1 bit inserted in the payload "
+                       "(validated by checksum + counter + plausibility gate)");
     ESP_LOGCONFIG(TAG, "  recollage : uniquement si la capture est un MORCEAU de rafale "
                        "(< %d impulsions)", (int) vevor::MAX_FRAGMENT_TIMINGS);
-    ESP_LOGCONFIG(TAG, "  captures reçues : %u, trames extraites : %u, candidats rejetés : %u, "
-                       "doublons ignorés : %u, trames réparées : %u (dont %u refusées par le "
-                       "garde-fou de continuité)",
+    ESP_LOGCONFIG(TAG, "  captures received: %u, frames extracted: %u, candidates rejected: %u, "
+                       "duplicates ignored: %u, repaired frames: %u (%u refused by the "
+                       "continuity guard)",
                   (unsigned) this->captures_, (unsigned) this->frames_,
                   (unsigned) this->rejected_, (unsigned) this->duplicates_,
                   (unsigned) this->repairs_, (unsigned) this->repairs_rejetees_);
@@ -168,17 +168,17 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // those triggered by a whole silent slot: telling them apart is what makes the fix measurable.
   uint32_t get_rearmements_surdite() const { return this->rearmements_surdite_; }
 
-  // Taux de réception conforme, en pourcent : la part des ÉMISSIONS de la station réellement
-  // décodées sur la fenêtre des FENETRE_TAUX dernières trames (NaN tant qu'il n'y a pas de quoi
-  // mesurer). Repose sur le compteur de la station : il avance de 39 unités toutes les 20 s
-  // (mesuré : 1 unité = 0,513 s) et ne saute JAMAIS de valeur — vérifié sur 589 trames, y compris
-  // pendant huit heures de panne de réception. C'est donc lui qui dit combien d'émissions ont été
-  // manquées, pas le temps écoulé qui suppose une cadence parfaite.
+  // Conform reception rate, in percent: the share of the station's EMISSIONS actually decoded
+  // over the last FENETRE_TAUX frames (NaN while there is not enough to measure). It relies on the
+  // station's counter: it advances 39 units every 20 s (measured: 1 unit = 0.513 s) and NEVER
+  // skips a value — verified on 589 frames, including eight hours of reception outage. It is
+  // therefore the counter that says how many emissions were missed, not elapsed time, which
+  // assumes a perfect cadence.
   float get_taux_reception() const;
-  // LES DEUX TERMES de ce ratio, exposés séparément pour que le tableau de bord puisse le
-  // VÉRIFIER et pas seulement l'afficher : `recues` = trames décodées dans la fenêtre (celles qui
-  // ont mis à jour les mesures), `emises` = trames produites par la station sur la MÊME fenêtre,
-  // d'après son propre compteur. Le pourcentage n'est que le rapport des deux.
+  // The TWO TERMS of that ratio, exposed separately so a dashboard can VERIFY it
+  // rather than only display it: `recues` = frames decoded in the window (the ones that
+  // updated the measurements), `emises` = frames the station produced over the SAME window,
+  // according to its own counter. The percentage is only their ratio.
   uint32_t get_fenetre_recues() const;
   uint32_t get_fenetre_emises() const;
 
@@ -194,8 +194,8 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // (estimer_periode_x10 in vevor_protocol.h), so a configured constant would be a knob nothing
   // reads — and the value actually used is already logged for every frame.
   uint32_t frames_{0};
-  // Fenêtre glissante du taux de réception : le compteur de la station et l'instant d'arrivée de
-  // chaque trame décodée. 30 trames = 10 minutes : assez pour lisser, assez court pour réagir.
+  // Sliding window of the reception rate: the station's counter and the arrival time of every
+  // decoded frame. 30 frames = 10 minutes: enough to smooth, short enough to react.
   static constexpr size_t FENETRE_TAUX = 30;
   uint8_t compteurs_fenetre_[FENETRE_TAUX]{};
   uint32_t instants_fenetre_[FENETRE_TAUX]{};

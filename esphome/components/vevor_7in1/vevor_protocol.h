@@ -105,7 +105,7 @@ inline bool decode(const uint8_t *in, Frame &out, const char **reason) {
   // never come out marked valid (it used to be set before the plausibility gate).
   out.valid = false;
   if (in[0] != 0xAA || in[1] != 0x00) {
-    *reason = "en-tete";
+    *reason = "header";
     return false;
   }
   if (!checksum_ok(in)) {
@@ -113,7 +113,7 @@ inline bool decode(const uint8_t *in, Frame &out, const char **reason) {
     return false;
   }
   if (!counter_ok(in)) {
-    *reason = "compteur_tx";
+    *reason = "tx_counter";
     return false;
   }
 
@@ -150,7 +150,7 @@ inline bool decode(const uint8_t *in, Frame &out, const char **reason) {
     return false;
   }
   if (out.humidity > 100) {
-    *reason = "humidite";
+    *reason = "humidity";
     return false;
   }
   if (out.temp_c < -40.0f || out.temp_c > 60.0f) {
@@ -162,7 +162,7 @@ inline bool decode(const uint8_t *in, Frame &out, const char **reason) {
   // legitimate 180 km/h frame is not refused; see the WIND_LIMIT_KMH comment.
   if (out.wind_kmh > WIND_LIMIT_KMH + WIND_LIMIT_MARGE_KMH ||
       out.gust_kmh > WIND_LIMIT_KMH + WIND_LIMIT_MARGE_KMH) {
-    *reason = "vent";
+    *reason = "wind";
     return false;
   }
   if (out.uv_index < 0 || out.uv_index > 16) {
@@ -431,8 +431,8 @@ inline bool find_frame_candidate(const uint8_t *bits, size_t bit_count, uint8_t 
 // a lost bit comes from a pulse whose duration was rounded DOWN, so the recovered bit can only
 // EXTEND the run of the preceding bit: same level. The first version searched an insertion of ANY
 // value at ANY position, and `decode()` cannot tell a wrong position from the right one when the
-// byte sum happens to be preserved — the checksum is a plain sum (professionally: "une trame peut
-// passer en-tête + checksum + compteur et être FAUSSE"). Measured on a zero-wind frame
+// byte sum happens to be preserved — the checksum is a plain sum (professionally: "a frame can
+// pass header + checksum + counter and still be WRONG"). Measured on a zero-wind frame
 // (b[8..10] = 01 01 00): 14 of the ~168 loss positions produced a checksum-valid, plausible frame
 // with wind 46.0 km/h and gust 102.4 km/h (b[8..10] = 02 80 80) — because
 // 0x01+0x01+0x00 = 0x02+0x80+0x80 (mod 256), so checksum, counter and the whole plausibility gate

@@ -98,7 +98,7 @@ async def scan(dev: Device, start: float, stop: float, step: float,
         }
         results.append(row)
         print(
-            f"{mhz:8.3f} MHz  trames={int(row['frames']):3d} "
+            f"{mhz:8.3f} MHz  frames={int(row['frames']):3d} "
             f"(valides={int(row['valid']):3d} rejetées={int(row['rejected']):3d})  "
             f"rssi_max={row['rssi_max']}  rssi_moy={row['rssi_mean']}",
             flush=True,

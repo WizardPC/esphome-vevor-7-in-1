@@ -30,7 +30,7 @@ CONF_ON_FRAME = "on_frame"
 # "Station ID" sensor publishes it: 33995 = 0x84cb.
 CONF_STATION_ID = "station_id"
 
-# Identifiant du composant parent, réutilisé par les sous-plateformes (number/).
+# Parent component id, reused by the sub-platforms (number/).
 CONF_VEVOR_7IN1_ID = "vevor_7in1_id"
 
 vevor_7in1_ns = cg.esphome_ns.namespace("vevor_7in1")
@@ -47,8 +47,8 @@ CONFIG_SCHEMA = (
             cv.Required(CONF_RECEIVER_ID): cv.use_id(
                 remote_receiver.RemoteReceiverComponent
             ),
-            # La radio, pour que le garde-fou puisse la ré-armer (cc1101.reset) : la politique est
-            # dans le composant, le YAML ne fait que désigner la radio.
+            # The radio, so the watchdog can re-arm it (cc1101.reset): the policy lives in the
+            # component, the YAML only points at the radio.
             cv.Optional(CONF_RADIO_ID): cv.use_id(cc1101.CC1101Component),
             cv.Optional(CONF_STATION_ID, default=0): cv.int_range(min=0, max=0xFFFF),
             cv.Optional(CONF_ON_FRAME): automation.validate_automation(single=True),

@@ -12,9 +12,9 @@
 namespace esphome {
 namespace vevor_7in1 {
 
-// `number::Number` hérite seulement d'EntityBase, qui n'a PAS de setup() : pour publier l'état
-// initial, il faut mélanger aussi Component — c'est ce que fait le composant `template` d'ESPHome
-// (TemplateNumber : number::Number, PollingComponent). Erreur mesurée sinon, à la compilation :
+// `number::Number` inherits only from EntityBase, which has NO setup(): to publish the initial
+// state it must also mix in Component — which is what ESPHome's `template` component does
+// (TemplateNumber: number::Number, PollingComponent). Measured error otherwise, at compile time:
 // « setup() marked 'override', but does not override ».
 class VevorParametre : public number::Number, public Component, public Parented<Vevor7in1> {
  public:

@@ -70,7 +70,7 @@ async def run(host: str, port: int, key: str, mhz: float, seconds: float) -> int
         pris = got is not None and abs(float(got) - mhz) <= 0.001
     except (TypeError, ValueError):
         pris = False
-    print(horodate(f"relecture de {cible.name} : {got!r}"))
+    print(horodate(f"re-read de {cible.name} : {got!r}"))
     await asyncio.sleep(seconds)
     await cli.disconnect()
 

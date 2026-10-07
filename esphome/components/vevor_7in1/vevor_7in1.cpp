@@ -8,13 +8,13 @@ namespace esphome {
 namespace vevor_7in1 {
 
 void Vevor7in1::dump_receiver_config_() {
-  ESP_LOGI(TAG, "=== configuration effective du remote_receiver (re-journalisée) ===");
+  ESP_LOGI(TAG, "=== effective remote_receiver configuration (re-logged) ===");
   this->receiver_->dump_config();
   if (this->receiver_->is_failed()) {
-    ESP_LOGE(TAG, "RECEPTEUR EN ECHEC (is_failed) : aucune capture ne peut arriver, quoi qu'on "
-                  "fasse côté décodeur — c'est un problème d'allocation/config du RMT");
+    ESP_LOGE(TAG, "RECEIVER FAILED (is_failed): no capture can arrive, whatever the "
+                  "decoder does — this is an RMT allocation/config problem");
   } else {
-    ESP_LOGI(TAG, "récepteur opérationnel (is_failed=false)");
+    ESP_LOGI(TAG, "receiver operational (is_failed=false)");
   }
 }
 
@@ -40,15 +40,15 @@ void Vevor7in1::loop() {
   this->heartbeats_++;
 
   if (this->reported_captures_ == this->captures_) {
-    ESP_LOGD(TAG, "aucune rafale depuis %u s (captures=%u, trames=%u, rejets=%u) — normal",
+    ESP_LOGD(TAG, "no burst for %u s (captures=%u, frames=%u, rejects=%u) — normal",
              (unsigned) (HEARTBEAT_MS / 1000), (unsigned) this->captures_, (unsigned) this->frames_,
              (unsigned) this->rejected_);
     return;
   }
 
   ESP_LOGI(TAG,
-           "captures=%u (+%u), trames=%u, rejets=%u, réparées=%u (dont %u refusées), "
-           "pluie_refusee=%u, dernières impulsions=%u, plus longue=%u",
+           "captures=%u (+%u), frames=%u, rejects=%u, repaired=%u (%u refused), "
+           "rain_refused=%u, last pulses=%u, longest=%u",
            (unsigned) this->captures_, (unsigned) (this->captures_ - this->reported_captures_),
            (unsigned) this->frames_, (unsigned) this->rejected_, (unsigned) this->repairs_,
            (unsigned) this->repairs_rejetees_, (unsigned) this->rain_rejected_,
@@ -99,7 +99,7 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
         longest = d;
       }
     }
-    ESP_LOGI(TAG, "capture #%u : %u impulsions, de %d us à %d us", (unsigned) this->captures_,
+    ESP_LOGI(TAG, "capture #%u: %u pulses, from %d us to %d us", (unsigned) this->captures_,
              (unsigned) timings.size(), (int) shortest, (int) longest);
 
     // 64 durations do NOT cover a Vevor burst (~176 symbols): logging up to 512 durations, in
@@ -114,7 +114,7 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
         tranche += std::to_string(timings[i]);
       }
       const size_t fin = (debut + 63 < a_dumper) ? debut + 63 : a_dumper - 1;
-      ESP_LOGI(TAG, "  impulsions [%u-%u] sur %u : %s", (unsigned) debut, (unsigned) fin,
+      ESP_LOGI(TAG, "  pulses [%u-%u] of %u: %s", (unsigned) debut, (unsigned) fin,
                (unsigned) a_dumper, tranche.c_str());
     }
     if (this->dump_restants_ > 0) {
@@ -184,7 +184,7 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
         // which is exactly what we want to understand.
         const std::string octets = vevor::hex_bytes(raw, vevor::FRAME_BYTES);
         ESP_LOGW(TAG,
-                 "pluie refusée : %.1f mm alors que la trame précédente en donnait %.1f mm (hausse "
+                 "rain refused: %.1f mm while the previous frame gave %.1f mm (rise "
                  "physiquement impossible) — bruts : %s",
                  f.rain_mm, derniere, octets.c_str());
         return false;
@@ -204,8 +204,8 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
     if (vevor::decode(raw, f, &raison) && reference && !vevor::continuite_ok(f, precedente)) {
       this->repairs_rejetees_++;
       ESP_LOGD(TAG,
-               "trame réparée REFUSÉE par le garde-fou de continuité (station ou mesures "
-               "incohérentes avec la trame précédente)");
+               "repaired frame REFUSED by the continuity guard (station or measurements "
+               "inconsistent with the previous frame)");
       return false;
     }
     this->repairs_++;
@@ -217,7 +217,7 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   if (this->has_last_frame_ && (uint32_t) (millis() - this->last_frame_ms_) < DUP_WINDOW_MS &&
       memcmp(this->last_frame_, raw, vevor::FRAME_BYTES) == 0) {
     this->duplicates_++;
-    ESP_LOGD(TAG, "doublon ignoré (même trame que la précédente, %u ms avant)",
+    ESP_LOGD(TAG, "duplicate ignored (same frame as the previous one, %u ms earlier)",
              (unsigned) (millis() - this->last_frame_ms_));
     return false;
   }
@@ -233,27 +233,27 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   const uint16_t id_trame = (uint16_t) (((uint16_t) raw[2] << 8) | raw[3]);
   if (this->station_id_ == 0) {
     this->station_id_ = id_trame;
-    ESP_LOGI(TAG, "station : ID appris %u (0x%04x) — il change à chaque changement de pile",
+    ESP_LOGI(TAG, "station: ID learned %u (0x%04x) — it changes with the batteries",
              (unsigned) id_trame, (unsigned) id_trame);
   } else if (id_trame != this->station_id_) {
     this->id_etrangere_++;
     if (!this->id_etrangere_signalee_) {
       this->id_etrangere_signalee_ = true;
-      ESP_LOGW(TAG, "station : trame d'une AUTRE station (ID %u attendu, %u reçu) — ignorée ; "
-                    "mets l'ID à 0 ou appuie sur « Re-learn station ID » pour la réapprendre",
+      ESP_LOGW(TAG, "station: frame from ANOTHER station (ID %u expected, %u received) — ignored; "
+                    "set the ID to 0 or press \"Re-learn station ID\" to learn it again",
                (unsigned) this->station_id_, (unsigned) id_trame);
     }
     return false;
   }
 
   this->frames_++;
-  this->maj_fenetre_taux_(raw[18]);   // octet 18 = compteur d'émissions de la station (protocol.h:129)
+  this->maj_fenetre_taux_(raw[18]);   // byte 18 = the station's emission counter (protocol.h:129)
   // The period is in TENTHS of a microsecond (measured on the burst): we log the value actually
   // kept, not a misleading integer.
-  ESP_LOGD(TAG, "trame extraite (période mesurée %d.%d us, polarité %s, %s%s) → %u octets",
-           (int) (period_used / 10), (int) (period_used % 10), inverted ? "inversée" : "normale",
-           from_stitch ? "en deux morceaux recollés" : "d'un seul bloc",
-           repaired ? ", RÉPARÉE" : "", (unsigned) vevor::FRAME_BYTES);
+  ESP_LOGD(TAG, "frame extracted (measured period %d.%d us, polarity %s, %s%s) → %u bytes",
+           (int) (period_used / 10), (int) (period_used % 10), inverted ? "inverted" : "normal",
+           from_stitch ? "stitched from two fragments" : "in one piece",
+           repaired ? ", REPAIRED" : "", (unsigned) vevor::FRAME_BYTES);
 
   // The frame is handed back TO the YAML, which publishes the sensors: the component does not know
   // the entities, and the protocol logic stays testable off-hardware in includes/vevor_protocol.h.
@@ -305,7 +305,7 @@ void Vevor7in1::set_parametre(uint8_t p, float valeur) {
     const uint32_t id = arrondi > 65535.0f ? 65535u : static_cast<uint32_t>(arrondi);
     this->station_id_ = static_cast<uint16_t>(id);
     this->id_etrangere_signalee_ = false;  // a new pin deserves its own warning
-    ESP_LOGI(TAG, "station : ID %s", id == 0 ? "remis en apprentissage" : "forcé");
+    ESP_LOGI(TAG, "station: ID %s", id == 0 ? "back to learning" : "forced");
     return;
   }
   const uint32_t v = valeur < 1.0f ? 1u : static_cast<uint32_t>(valeur + 0.5f);
@@ -316,13 +316,13 @@ void Vevor7in1::set_parametre(uint8_t p, float valeur) {
   } else {
     this->creneaux_avant_rearmement_ = v;
   }
-  ESP_LOGI(TAG, "veille : paramètre %u = %u", (unsigned) p, (unsigned) v);
+  ESP_LOGI(TAG, "watchdog: parameter %u = %u", (unsigned) p, (unsigned) v);
 }
 
 void Vevor7in1::reapprendre_station_id() {
   this->station_id_ = 0;
   this->id_etrangere_signalee_ = false;
-  ESP_LOGI(TAG, "station : ID oublié, la prochaine trame valide fera foi");
+  ESP_LOGI(TAG, "station: ID forgotten, the next valid frame will decide");
 }
 
 void Vevor7in1::surveiller_radio_() {
@@ -368,7 +368,7 @@ void Vevor7in1::surveiller_radio_() {
     if (this->reboots_veille_ > 10 && (this->creneaux_muets_ % 45u) != 0u) {
       return;
     }
-    ESP_LOGW(TAG, "aucune trame depuis %u s (radio %s, captures %u) — redémarrage n°%u",
+    ESP_LOGW(TAG, "no frame for %u s (radio %s, captures %u) — restart #%u",
              (unsigned) muettes_s, radio_en_echec ? "EN ECHEC" : "ok", (unsigned) this->captures_,
              (unsigned) this->reboots_veille_);
     App.safe_reboot();
@@ -379,13 +379,13 @@ void Vevor7in1::surveiller_radio_() {
   if (trame_decodee) {
     return;
   }
-  ESP_LOGD(TAG, "veille : aucune trame depuis %u s (radio %s, captures %u)", (unsigned) muettes_s,
+  ESP_LOGD(TAG, "watchdog: no frame for %u s (radio %s, captures %u)", (unsigned) muettes_s,
            radio_en_echec ? "EN ECHEC" : "ok", (unsigned) this->captures_);
 
   // 3. The fast criterion and its verification (see the policy above).
   if (this->essais_rearmement_ > 0) {
     if (capture_saine) {
-      ESP_LOGI(TAG, "ré-armement VÉRIFIÉ après %u essai(s) : capture saine (%u impulsions)",
+      ESP_LOGI(TAG, "re-arm VERIFIED after %u attempt(s): healthy capture (%u pulses)",
                (unsigned) this->essais_rearmement_, (unsigned) this->last_pulse_count_);
       this->essais_rearmement_ = 0;
       this->creneaux_depuis_rearmement_ = 0;
@@ -394,13 +394,13 @@ void Vevor7in1::surveiller_radio_() {
       if (this->essais_rearmement_ < 3) {
         this->essais_rearmement_++;
         this->rearmements_surdite_++;
-        ESP_LOGW(TAG, "ré-armement sans effet (captures creuses) : essai %u sur 3",
+        ESP_LOGW(TAG, "re-arm had no effect (short captures): attempt %u of 3",
                  (unsigned) this->essais_rearmement_);
         if (this->radio_ != nullptr) {
           this->radio_->reset();
         }
       } else {
-        ESP_LOGW(TAG, "ré-armement : 3 essais sans capture saine, on rend la main au critère lent");
+        ESP_LOGW(TAG, "re-arm: 3 attempts without a healthy capture, back to the slow criterion");
         this->essais_rearmement_ = 0;
       }
     }
@@ -412,7 +412,7 @@ void Vevor7in1::surveiller_radio_() {
     this->essais_rearmement_ = 1;
     this->creneaux_depuis_rearmement_ = 0;
     this->rearmements_surdite_++;
-    ESP_LOGW(TAG, "captures creuses (%u impulsions < seuil %u) : ré-armement radio n°%u",
+    ESP_LOGW(TAG, "short captures (%u pulses < threshold %u): radio re-arm #%u",
              (unsigned) this->last_pulse_count_, (unsigned) this->seuil_impulsions_,
              (unsigned) this->rearmements_surdite_);
     if (this->radio_ != nullptr) {
@@ -430,13 +430,13 @@ void Vevor7in1::surveiller_radio_() {
     // Re-arming there re-initialises a working chip and can cost two minutes of reception, measured.
     // When the chip is deaf, the fast criterion above has already taken the case.
     if (capture_saine) {
-      ESP_LOGD(TAG, "aucune trame depuis %u s mais la puce délivre (%u impulsions) : pas de "
-                    "ré-armement (problème de décodage, pas de radio)",
+      ESP_LOGD(TAG, "no frame for %u s but the chip is delivering (%u pulses): no "
+                    "re-arm (a decoding problem, not a radio one)",
                (unsigned) muettes_s, (unsigned) this->last_pulse_count_);
       return;
     }
     this->rearmements_++;
-    ESP_LOGW(TAG, "aucune trame depuis %u s — ré-armement radio %u (un tous les %u créneaux)",
+    ESP_LOGW(TAG, "no frame for %u s — radio re-arm %u (one every %u slots)",
              (unsigned) muettes_s, (unsigned) this->rearmements_, (unsigned) pas);
     if (this->radio_ != nullptr) {
       this->radio_->reset();
@@ -445,14 +445,14 @@ void Vevor7in1::surveiller_radio_() {
 }
 
 // -------------------------------------------------------------------------------------------
-// Taux de réception conforme (voir vevor_7in1.h). Le compteur de la station est le seul juge
-// fiable du nombre d'émissions écoulées : il avance de 39 unités toutes les 20 s et ne saute jamais
-// de valeur (589 trames vérifiées, dont huit heures de panne de réception). Le temps écoulé, lui,
-// suppose une cadence parfaite et se trompe dès que la station dérive.
+// Conform reception rate (see vevor_7in1.h). The station's counter is the only reliable judge
+// of how many emissions have gone by: it advances 39 units every 20 s and never skips a
+// value (589 frames verified, including eight hours of reception outage). Elapsed time, by
+// contrast, assumes a perfect cadence and is wrong as soon as the station drifts.
 //
-// Son seul défaut est d'être un octet : il repart à zéro tous les 256 unités, soit 131 s. On lève
-// l'ambiguïté avec l'horodatage d'arrivée — si le temps écoulé implique plus d'unités que l'écart
-// brut, c'est qu'un ou plusieurs tours ont eu lieu.
+// Its only flaw is being one byte: it wraps every 256 units, i.e. 131 s. The ambiguity is
+// settled by the arrival timestamp — if elapsed time implies more units than the raw gap,
+// then one or more wraps have occurred.
 // -------------------------------------------------------------------------------------------
 void Vevor7in1::maj_fenetre_taux_(uint8_t compteur) {
   this->compteurs_fenetre_[this->tete_fenetre_] = compteur;
@@ -488,14 +488,14 @@ uint32_t Vevor7in1::get_fenetre_emises() const {
 }
 
 // Le ratio est calcule ICI et nulle part ailleurs : le pourcentage et ses deux termes ne peuvent
-// pas diverger. `recues` compte les trames décodées qui ont mis à jour les mesures (elles sont
-// filtrées en amont sur le doublon puis sur l'identifiant de la station), `emises` celles que la
-// station a produites — que l'on ait entendu ou non : c'est tout l'intérêt du compteur embarqué.
+// diverge. `recues` counts the decoded frames that updated the measurements (they are
+// filtered upstream on duplicates, then on the station ID), `emises` those the station
+// produced — heard or not: that is the whole point of the on-board counter.
 void Vevor7in1::calculer_fenetre_taux_(uint32_t &recues, uint32_t &emises) const {
   recues = 0;
   emises = 0;
   if (this->nb_fenetre_ < 2) {
-    return;   // pas encore de quoi mesurer : il faut au moins deux trames, donc un intervalle
+    return;   // not enough to measure yet: at least two frames are needed, i.e. one interval
   }
   const size_t premier = (this->tete_fenetre_ + FENETRE_TAUX - this->nb_fenetre_) % FENETRE_TAUX;
   for (size_t i = 0; i + 1 < this->nb_fenetre_; i++) {
@@ -503,20 +503,20 @@ void Vevor7in1::calculer_fenetre_taux_(uint32_t &recues, uint32_t &emises) const
     const size_t b = (premier + i + 1) % FENETRE_TAUX;
     const uint32_t ecart = (uint32_t) ((this->compteurs_fenetre_[b] - this->compteurs_fenetre_[a]) & 0xFF);
     if (ecart == 0u) {
-      continue;   // même compteur deux fois : une religne du journal, pas une émission
+      continue;   // the same counter twice: a re-log of the journal, not an emission
     }
     const uint32_t dt_ms = this->instants_fenetre_[b] - this->instants_fenetre_[a];
-    const uint32_t unites_temps = (uint32_t) ((dt_ms + 256u) / 513u);   // 1 unité = 0,513 s
+    const uint32_t unites_temps = (uint32_t) ((dt_ms + 256u) / 513u);   // 1 unit = 0.513 s
     uint32_t tours = 0;
     if (unites_temps > ecart) {
       tours = (unites_temps - ecart + 128u) / 256u;
     }
     const uint32_t delta = ecart + 256u * tours;
-    uint32_t n = (delta + 19u) / 39u;   // 39 unités = une émission de la station
+    uint32_t n = (delta + 19u) / 39u;   // 39 units = one emission from the station
     if (n == 0u) {
       n = 1u;
     }
-    recues++;          // la trame d'arrivée de ce couple a bien été reçue
+    recues++;          // the arriving frame of this pair was indeed received
     emises += n;
   }
 }

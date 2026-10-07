@@ -468,7 +468,7 @@ essai("entités absentes de HA (states() rend « unknown »)", ENCART_TAUX, {},
 
 # --------------------------------------------------------------------------- 6
 # Icône de la vignette luminosité/UV : elle suit l'état du ciel, mesuré, et non une icône fixe.
-# Règle reprise de dev/docs/forecast-rules.md (référence ciel clair Kittler/CIE, seuils 0,70 et
+# Règle re-takene de dev/docs/forecast-rules.md (référence ciel clair Kittler/CIE, seuils 0,70 et
 # 0,35, élévation minimale 3°) — pas de seuils de lux bruts : à 3° d'élévation un ciel limpide ne
 # donne que ~4 500 lx contre ~80 000 à 40°, donc un seuil fixe déclarerait « nuageux » un ciel
 # dégagé au lever et au coucher. Choix du propriétaire (07/10/2026) : pas d'icône de nuit

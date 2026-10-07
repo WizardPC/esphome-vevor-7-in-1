@@ -33,16 +33,16 @@ def summarize(variant: str, log: pathlib.Path) -> dict:
     if variant == "temoin":
         out["rafales_rf_raw"] = len(re.findall(r"rf_raw", text))
         out["trames_decodees"] = len(re.findall(r"\[84CB\]", text))
-        imp = [int(m) for m in re.findall(r"Salve RF recue : (\d+) impulsions", text)]
-        out["impulsions_max"] = max(imp) if imp else 0
+        imp = [int(m) for m in re.findall(r"Salve RF recue : (\d+) pulses", text)]
+        out["pulses_max"] = max(imp) if imp else 0
     else:
         out["v7in1_ok"] = len(re.findall(r"V7IN1 OK", text))
         out["v7in1_raw"] = len(re.findall(r"V7IN1 RAW", text))
         out["v7in1_rej"] = len(re.findall(r"V7IN1 REJ", text))
         caps = [int(m) for m in re.findall(r"captures=(\d+)", text)]
         out["captures_max"] = max(caps) if caps else 0
-        last = [int(m) for m in re.findall(r"dernières impulsions=(\d+)", text)]
-        out["dernieres_impulsions"] = last[-1] if last else 0
+        last = [int(m) for m in re.findall(r"dernières pulses=(\d+)", text)]
+        out["dernieres_pulses"] = last[-1] if last else 0
         out["gdo0_statique"] = len(re.findall(r"GDO0 STATIQUE", text))
         out["inventaire"] = (re.findall(r"INVENTAIRE[^\n]*", text) or [""])[0][:120]
     return out
@@ -79,7 +79,7 @@ def main() -> int:
             flash_ok = proc.returncode == 0 and "OTA successful" in (proc.stdout + proc.stderr)
             # boot: Wi-Fi + API must be up before capture
             subprocess.run(["sleep", "12"], check=False)
-            # Our variants also arm the raw-duration dump (button "Dump impulsions"); it is the
+            # Our variants also arm the raw-duration dump (button "Dump pulses"); it is the
             # only way to see what our RMT actually received during an emission window.
             if name == "temoin":
                 capture_cmd = [str(ROOT / ".venv" / "bin" / "python"),
@@ -89,7 +89,7 @@ def main() -> int:
             else:
                 capture_cmd = [str(ROOT / ".venv" / "bin" / "python"),
                                str(DEV / "tools" / "press_button.py"),
-                               "--host", DEFAULT_HOST, "--name", "Dump impulsions",
+                               "--host", DEFAULT_HOST, "--name", "Dump pulses",
                                "--seconds", str(args.seconds), "--out", str(log)]
             cap = subprocess.run(capture_cmd, capture_output=True, text=True,
                                  timeout=args.seconds + 120)

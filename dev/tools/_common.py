@@ -125,7 +125,7 @@ class Device:
 
     async def wait_states(self, timeout_s: float = 10.0, min_states: int = 1) -> int:
         """Attend d'avoir reçu au moins `min_states` états. Sans cela, lire 0
-        confond « puce muette » et « rien reçu côté API ». Renvoie le nombre
+        confond « puce mute » et « rien reçu côté API ». Renvoie le nombre
         d'états reçus."""
         for _ in range(max(1, int(timeout_s / 0.25))):
             if len(self.state) >= min_states:

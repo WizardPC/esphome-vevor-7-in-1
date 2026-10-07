@@ -18,8 +18,8 @@ VevorParametre = vevor_7in1_ns.class_(
     "VevorParametre", number.Number, cg.Parented.template(Vevor7in1)
 )
 
-# Identifiant côté composant (voir ParametreVeille dans vevor_7in1.h) et BORNES de chaque réglage.
-# Les bornes vivent ici, avec la sémantique du paramètre : le YAML ne fait que nommer l'entité.
+# Component-side identifier (see ParametreVeille in vevor_7in1.h) and BOUNDS of each setting.
+# Bounds live here, with the parameter's semantics: the YAML only names the entity.
 #   type: (identifiant, min, max, pas)
 PARAMETRES = {
     "creneaux_avant_rearmement": (0, 1.0, 30.0, 1.0),
