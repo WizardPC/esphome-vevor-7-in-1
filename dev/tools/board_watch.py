@@ -32,8 +32,8 @@ SUMMARY = re.compile(
     r"captures=(\d+) \(\+(\d+)\), frames=(\d+), rejects=(\d+), repaired=(\d+) \((\d+) refused\), "
     r"rain_refused=(\d+), temp_refused=(\d+), last pulses=(\d+), longest=(\d+)")
 INTERET = re.compile(
-    r"refused|restart|reboot|Reboot|Booting|Reset|panic|Brownout|watchdog|re-arm|CC1101|"
-    r"safe_mode|V7IN1|definitely not taken", re.I)
+    r"no frame for|restart #|Rebooting safely|refused|restart|reboot|Reboot|Booting|Reset|panic|"
+    r"Brownout|watchdog|re-arm|CC1101|safe_mode|V7IN1|definitely not taken", re.I)
 
 
 def etat_precedent() -> dict:
