@@ -188,6 +188,21 @@ component itself owns (`number/`, `button/`).
   RMT buffer (512 symbols) and KILLS the receiver: 8 h without a single frame, counters frozen,
   cured only by a restart (last frame 21:37, the 8000us build flashed 22:17, nothing since).
   2000us froze it again within minutes: the interferer's burst has no internal gap above that.
+* **A 523-543-pulse capture carries NO frame — measured, and no decoder can change that.** Replayed
+  off-board over 2445 real captures (`dev/state/panne_2026*.txt`): the 1854 captures of 400-599
+  pulses hold **zero** frames, by OUR rule and by the external project's rule ported faithfully (both
+  sync words are 16 bits, both scan every offset in both polarities). The sync word `CA 54` is simply
+  ABSENT — the burst is the interferer's, and it MASKS the station instead of merging with it. A
+  synthetic capture that does contain a frame beside an intruder burst is decoded by both decoders
+  (ours through the 90 µs fallback, the measured period having drifted to 75.5 µs). "Several bursts
+  in one capture" is therefore not a decoding gap: there is nothing to find inside them.
+* **The watchdog misreads that state, and that is what reboots the board.** `silent_s` counts time
+  without a DECODED frame, so a chip hearing plenty — captures well above `pulse_threshold`, no sync
+  — looks exactly like a deaf chip, and after 180 s it restarts. Measured 08/10: a 182 s window in
+  which `RMT captures` kept stepping every 20 s while `Valid frames` stood still, then the restart.
+  Treating "healthy but undecodable" as a state of its own, distinct from silence, is the fix to
+  weigh — against the 05/10 measurement where saturated captures were ALSO a chip state that a
+  restart cured.
 * **Live radio settings write their initial value at boot.** The `RX filter bandwidth` entity
   overrides the compiled `bw_khz` when its `initial_value` is stale — caught before a flash on
   05/10/2026 (a board stuck at 100 kHz while the YAML said 162). The two must stay in step.

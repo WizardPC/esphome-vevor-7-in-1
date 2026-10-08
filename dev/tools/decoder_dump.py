@@ -117,9 +117,9 @@ def trame_dans_bits(bits: str):
     """
     for decalage in range(min(8, len(bits))):
         utilisable = (len(bits) - decalage) // 8 * 8
-        bytes = bytes(int(bits[decalage + i: decalage + i + 8], 2) for i in range(0, utilisable, 8))
-        for i in range(len(bytes) - FRAME_BYTES + 1):
-            b = bytes[i:i + FRAME_BYTES]
+        bs = bytes(int(bits[decalage + i: decalage + i + 8], 2) for i in range(0, utilisable, 8))
+        for i in range(len(bs) - FRAME_BYTES + 1):
+            b = bs[i:i + FRAME_BYTES]
             if b[0] != 0xAA or b[1] != 0x00:
                 continue
             if (sum(b[0:19]) & 0xFF) != b[19] or b[20] != ((b[18] + 1) & 0xFF):
