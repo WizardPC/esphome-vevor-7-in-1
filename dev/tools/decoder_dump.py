@@ -38,7 +38,7 @@ PERIODS = (90, 88, 89, 87)          # same candidates as the firmware
 MAX_RUN_BITS = 64
 FRAME_BYTES = 21
 
-DUMP_RE = re.compile(r"pulses \[(\d+)-(\d+)\] sur (\d+) : (.+)$")
+DUMP_RE = re.compile(r"pulses \[(\d+)-(\d+)\] (?:sur|of) (\d+)\s*: (.+)$")
 CAPTURE_RE = re.compile(r"capture #(\d+): (\d+) pulses, (?:de|from) (-?\d+) us (?:à|to) (-?\d+) us")
 
 
