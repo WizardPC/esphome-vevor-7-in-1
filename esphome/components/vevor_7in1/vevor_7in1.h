@@ -258,8 +258,16 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   // Silent slots before a re-arm, and total silence before a restart: the only two settings
   // exposed (`number` entities, number/ sub-platform).
   uint32_t rearm_after_slots_{3};
+  // Backup restart for a receiver that keeps HEARING without decoding. Deliberately far from the
+  // 180 s of the deaf path: a masking burst lasts seconds to minutes, a broken chip lasts for ever.
+  // Compile-time on purpose — a safety net, not a tuning knob.
+  static constexpr uint32_t MASKED_BACKUP_RESTART_S = 1800;
   uint32_t max_restart_delay_s_{180};
   uint32_t silent_slots_{0};
+  // Consecutive slots whose capture was healthy yet produced no frame: the receiver hears, the band
+  // masks the station. Endured, not rebooted — see restart_justified() in vevor_protocol.h.
+  uint32_t masked_slots_{0};
+  uint32_t masked_restarts_{0};
   uint32_t watchdog_frames_{0};
   uint32_t rearms_{0};
   uint32_t watchdog_reboots_{0};

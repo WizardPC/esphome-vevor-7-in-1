@@ -233,6 +233,23 @@ inline bool is_fragment(size_t count) {
   return count >= MIN_TIMINGS && count <= MAX_FRAGMENT_TIMINGS;
 }
 
+// ---------------------------------------------------------------------------------------
+// WATCHDOG POLICY (pure, so it is testable off-board)
+// ---------------------------------------------------------------------------------------
+// Does a silence justify a restart? ONLY a chip that is not hearing anything does. A receiver whose
+// captures are healthy (well above the pulse threshold) yet carry no frame is MASKED: another
+// station's telegram is on the air and rebooting fixes nothing. Measured 08/10/2026 — 2445 real
+// captures replayed off-board, the 1854 of 400-599 pulses hold ZERO frames and the sync word is
+// simply absent; on the card `RMT captures` kept stepping every 20 s while `Valid frames` stood
+// still for 182 s, and the restart that followed cured nothing. Hence:
+//   frame decoded             -> no restart, the reception works;
+//   healthy capture, no frame -> MASKED: never a restart (busy band, live chip);
+//   nothing but short captures-> DEAF: a restart is the last resort, after 180 s.
+inline bool restart_justified(bool frame_decoded, bool healthy_capture, uint32_t silent_s,
+                              uint32_t max_restart_delay_s) {
+  return !frame_decoded && !healthy_capture && silent_s >= max_restart_delay_s;
+}
+
 // Bit periods tried at each capture, in order. The values bracket what is known: 90 µs (published,
 // and the witness build's period), 88.3 µs (user measurement → 11 325 baud), 87 µs (rtl_433). The
 // period is not assumed: the winner is found at the decoded frame and logged.
@@ -313,6 +330,14 @@ inline size_t timings_to_bits_fin(const int32_t *timings, size_t count, int32_t 
 // No allocation: the histogram is static (one task, single-threaded host test).
 static constexpr int32_t PERIOD_MIN_X10 = 500;    // 50 µs: shorter is not a plausible bit
 static constexpr int32_t PERIOD_MAX_X10 = 1500;   // 150 µs: neither is longer
+// ACCEPTANCE band, much tighter than the plausibility window above: what a real transmitter uses.
+// This station measures 88.5-88.9 µs, the reference project 88.3, and the fallback grid covers
+// 87-90. Measured 08/10/2026: on a burst polluted by another station's long telegrams the estimate
+// drifts to 66.3 µs (intruder alone) and 75.5 µs (frame + intruder) — both INSIDE 50-150 µs, so
+// they used to be tried first and only the grid saved the frame. Outside ±5 % of the centre the
+// estimate is worse than the grid: refuse it.
+static constexpr int32_t PERIOD_BAND_MIN_X10 = 840;   // 84 µs
+static constexpr int32_t PERIOD_BAND_MAX_X10 = 940;   // 94 µs
 static constexpr int32_t WINDOW_LOW_US = 45;      // low bound of the protocol window
 static constexpr int32_t WINDOW_HIGH_US = 115;    // high bound
 static constexpr int HIST_MAX_US = 400;
@@ -385,8 +410,8 @@ inline int32_t estimate_period_x10(const int32_t *timings, size_t count) {
     }
     T = nouveau;
   }
-  if (T < PERIOD_MIN_X10 || T > PERIOD_MAX_X10) {
-    return 0;   // implausible estimate: prefer the fallback grid
+  if (T < PERIOD_BAND_MIN_X10 || T > PERIOD_BAND_MAX_X10) {
+    return 0;   // outside the transmitters' band: the fallback grid is better
   }
   return T;
 }

@@ -832,6 +832,17 @@ static void test_reparation_vent_nul() {
          "no FALSE frame published (before the fix: 02 80 80 = 46.0 km/h / 102.4 km/h)");
 }
 
+static void test_watch_policy() {
+  printf("Watchdog policy: deaf vs masked\n");
+  const uint32_t limit = 180;
+  expect(!vevor::restart_justified(true, true, 0, limit), "a decoded frame never justifies a restart");
+  expect(!vevor::restart_justified(true, false, 9999, limit), "a decoded frame wins over everything");
+  expect(!vevor::restart_justified(false, true, 182, limit),
+         "MASKED (healthy capture, no frame, 182 s): a restart cures nothing — measured 08/10");
+  expect(!vevor::restart_justified(false, false, 179, limit), "deaf but short of the limit: wait");
+  expect(vevor::restart_justified(false, false, 180, limit), "DEAF at the limit: restart");
+}
+
 int main() {
   printf("=== Vevor 7-in-1 decoder tests (no hardware) ===\n\n");
   test_vectors();
@@ -850,6 +861,7 @@ int main() {
   test_captures_reelles();
   test_rain_plausible();
   test_reparation_vent_nul();
+  test_watch_policy();
 
   printf("\n%d checks, %d failure(s)\n", g_checks, g_failures);
   if (g_failures == 0) {

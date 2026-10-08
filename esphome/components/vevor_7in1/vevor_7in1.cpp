@@ -383,6 +383,7 @@ void Vevor7in1::watch_radio_() {
   if (frame_decoded) {
     this->watchdog_frames_ = this->decoded_;
     this->silent_slots_ = 0;
+    this->masked_slots_ = 0;
     this->rearms_ = 0;
     if (this->watchdog_reboots_ != 0) {
       this->watchdog_reboots_ = 0;
@@ -390,11 +391,19 @@ void Vevor7in1::watch_radio_() {
     }
   } else {
     this->silent_slots_++;
+    // Consecutive healthy-but-undecodable slots = the band masks the station. One quiet slot ends
+    // the streak, so a chip that really goes deaf still takes the deaf path below.
+    if (healthy_capture) {
+      this->masked_slots_++;
+    } else {
+      this->masked_slots_ = 0;
+    }
   }
   const uint32_t silent_s = this->silent_slots_ * (WATCHDOG_SLOT_MS / 1000u);
   const bool radio_failed = (this->radio_ != nullptr) && this->radio_->is_failed();
 
-  if (silent_s >= this->max_restart_delay_s_) {
+  const uint32_t masked_s = this->masked_slots_ * (WATCHDOG_SLOT_MS / 1000u);
+  if (vevor::restart_justified(frame_decoded, healthy_capture, silent_s, this->max_restart_delay_s_)) {
     this->watchdog_reboots_++;
     this->pref_reboots_.save(&this->watchdog_reboots_);
     // Brake: past ten restarts, only one slot in 45 (15 min) is used, so a genuinely mute board
@@ -409,12 +418,26 @@ void Vevor7in1::watch_radio_() {
     return;
   }
 
+  // 1bis. MASKED: the chip hears, no frame comes out — the band is busy, not the silicon broken.
+  //       Rebooting here would cure nothing (measured 08/10), so the deaf restart above is skipped
+  //       and this path simply waits. It is NOT a way of giving up: a receiver broken the other way
+  //       round (05/10/2026: saturated captures from which it never recovered alone) still gets a
+  //       restart, very sparse, so no chip is left for good without one.
+  if (masked_s >= MASKED_BACKUP_RESTART_S) {
+    this->masked_restarts_++;
+    ESP_LOGW(TAG, "hears but undecodable for %u s (%u slots, longest %u pulses, captures %u) — backup restart #%u",
+             (unsigned) masked_s, (unsigned) this->masked_slots_, (unsigned) this->longest_capture_,
+             (unsigned) this->captures_, (unsigned) this->masked_restarts_);
+    App.safe_reboot();
+    return;
+  }
+
   // 2. A decoded frame ends the round here: nothing below has anything to fix.
   if (frame_decoded) {
     return;
   }
-  ESP_LOGD(TAG, "watchdog: no frame for %u s (radio %s, captures %u)", (unsigned) silent_s,
-           radio_failed ? "FAILED" : "ok", (unsigned) this->captures_);
+  ESP_LOGD(TAG, "watchdog: no frame for %u s (radio %s, captures %u, masked %u)", (unsigned) silent_s,
+           radio_failed ? "FAILED" : "ok", (unsigned) this->captures_, (unsigned) this->masked_slots_);
 
   // 3. The fast criterion and its verification (see the policy above).
   if (this->rearm_attempts_ > 0) {
