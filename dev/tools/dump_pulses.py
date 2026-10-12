@@ -70,7 +70,7 @@ async def main() -> int:
         print(f"  {name:20s} = {getattr(st, 'state', '(never published)')}")
 
     for text in lines:
-        if any(k in text for k in ("capture #", "pulses", "trame extraite", "V7IN1",
+        if any(k in text for k in ("capture #", "pulses", "frame extracted", "V7IN1",
                                    "GDO0", "PLL", "RX state")):
             print("  LOG:", text.strip()[:300])
     print(f"-> {out}")

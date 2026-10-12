@@ -1,5 +1,5 @@
 {
-  "logfile": "logs/verif_garde_fou_60min.log",
+  "logfile": "dev/logs/verif_garde_fou_60min.log",
   "frames_found": 180,
   "frames_valid": 180,
   "checksum_fail": 0,
@@ -3788,11 +3788,11 @@
     }
   ],
   "findings": [
-    "ID 33995: avance du compteur TX conforme au temps écoulé sur 180 trame(s) (~1.95 tick/s ; 0 doublon(s) de livraison RMT, 0 rafale(s) manquée(s))",
-    "ID 33995: pluie monotone OK (59.2 → 59.2 mm)",
-    "ID 33995: toutes les valeurs sont dans les plages physiques et la cohérence lux/UV est respectée",
-    "cadence: 179/179 intervalles significatifs entre 15 et 25 s — la station émet une rafale toutes les 20 s",
-    "firmware: les 180 trames publiées par le C++ concordent champ par champ avec le décodeur Python indépendant"
+    "ID 33995: TX counter advance consistent with elapsed time over 180 frame(s) (~1.95 tick/s; 0 RMT delivery duplicate(s), 0 missed burst(s))",
+    "ID 33995: monotonic rain OK (59.2 → 59.2 mm)",
+    "ID 33995: all values are within the physical ranges and the lux/UV coherence holds",
+    "cadence: 179/179 significant intervals between 15 and 25 s — the station emits one burst every 20 s",
+    "firmware: the 180 frames published by the C++ agree field by field with the independent Python decoder"
   ],
   "verdict": "PASS",
   "reasons_fail": [],

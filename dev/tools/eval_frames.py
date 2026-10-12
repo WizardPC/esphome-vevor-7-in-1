@@ -207,10 +207,10 @@ def main() -> int:
                 else:
                     # Very short dt with a counter gap: signature of a DOUBLE publication (the
                     # station cannot emit two frames in the same second at 20 s cadence).
-                    quoi = ("double publication in the same second"
-                            if dt <= 1 else f"for {dt} s, i.e. {expected:.0f} expected")
+                    why = ("double publication in the same second"
+                           if dt <= 1 else f"for {dt} s, i.e. {expected:.0f} expected")
                     gaps.append(f"TX counter {a['tx_counter']} → {b['tx_counter']} "
-                                f"(gap {dc} {quoi})")
+                                f"(gap {dc} {why})")
             elif dc > 60:
                 gaps.append(f"TX counter {a['tx_counter']} → {b['tx_counter']} (gap {dc})")
         sequence_breaks += len(gaps)

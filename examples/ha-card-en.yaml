@@ -1,7 +1,16 @@
-# Carte Lovelace de la station Vevor 7-en-1 (jardin) — la carte en service, versionnée.
-# Les entity_id viennent du nom d'appareil côté Home Assistant : les relire dans
-# dev/docs/ha-entities.txt (rafraîchir par dev/tools/check_ha_card.py --refresh) après
-# tout renommage, sinon la carte pointe dans le vide.
+# Reference Home Assistant dashboard card for this receiver — ENGLISH labels.
+#
+# Copy it into your dashboard (Raw configuration editor) and adapt the entity ids to your
+# own device name: Home Assistant derives them from the ESPHome device name, so a board
+# named "Vevor 7-in-1 weather station" exposes sensor.vevor_7_in_1_weather_station_*.
+# The ids below are the ones of the author's installation (device "jardin_vevor_7_in_1_weather_station").
+# The French twin of this file is examples/ha-card-fr.yaml.
+#
+# Required cards (HACS): mushroom, mini-graph-card, compass-card.
+# Required helpers, four utility_meter counters on the rain total, are given as a commented
+# block at the end of this file (the rain/hour/day/week/month tiles use them).
+# The equivalent of the station console's forecast icon is NOT here: that icon is not
+# receivable (see dev/docs/forecast-rules.md).
 type: vertical-stack
 cards:
   - type: grid
@@ -13,11 +22,11 @@ cards:
         primary: >-
           {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
           {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
-          {% if age is none %}inconnu {% elif age < 60 %}il y a {{ age | round(0) | int }} s {% elif age < 3600 %}il y a {{ (age / 60) | round(0) | int }} min {% else %}il y a {{ (age / 3600) | round(1) }} h {% endif %}
+          {% if age is none %}unknown {% elif age < 60 %}{{ age | round(0) | int }} s ago {% elif age < 3600 %}{{ (age / 60) | round(0) | int }} min ago {% else %}{{ (age / 3600) | round(1) }} h ago {% endif %}
         secondary: >-
           {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
           {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
-          {% if age is none %}Carte injoignable, ou entité absente {% else %}Trame {{ e.state | int }} à {{ as_timestamp(e.last_changed) | timestamp_custom('%H:%M:%S', true) }} — {% if age <= 35 %}Réception normale {% elif age <= 60 %}Trame manquée {% elif age <= 180 %}Silence (ré-armement) {% else %}Silence (reboot) {% endif %}{% endif %}
+          {% if age is none %}Card unreachable, or entity missing {% else %}Frame {{ e.state | int }} at {{ as_timestamp(e.last_changed) | timestamp_custom('%H:%M:%S', true) }} — {% if age <= 35 %}normal reception {% elif age <= 60 %}missed frame {% elif age <= 180 %}silence (re-arm) {% else %}silence (reboot) {% endif %}{% endif %}
         icon: >-
           {% set e = states.sensor.jardin_vevor_7_in_1_weather_station_tx_counter %}
           {% set age = (now() - e.last_changed).total_seconds() if e is not none and e.state not in ('unknown', 'unavailable') and e.last_changed else none %}
@@ -30,14 +39,14 @@ cards:
         entity: sensor.jardin_vevor_7_in_1_weather_station_reception_rate
         primary: >-
           {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
-          {% if r is none %}en attente {% else %}{{ r | round(1) }} % {% endif %}
+          {% if r is none %}waiting {% else %}{{ r | round(1) }} % {% endif %}
         secondary: >-
           {% set rd = states('sensor.jardin_vevor_7_in_1_weather_station_reception_window_decoded') | float(none) %}
           {% set re = states('sensor.jardin_vevor_7_in_1_weather_station_reception_window_emitted') | float(none) %}
           {% set ok = states('sensor.jardin_vevor_7_in_1_weather_station_valid_frames') | float(none) %}
           {% set ko = states('sensor.jardin_vevor_7_in_1_weather_station_rejected_frames') | float(none) %}
           {% set total = (ok + ko) if ok is not none and ko is not none else 0 %}
-          {% if rd is none or re is none %}Indisponibilité {% elif re | float(0) < 1 %}Analyse... (deux trames requises) {% else %}{{ rd | int }} / {{ re | int }} trames produites par la station, 30 dernières{% if total >= 20 %} · cumul {{ ok | int }} / {{ total | int }}{% endif %}{% endif %}
+          {% if rd is none or re is none %}unavailable {% elif re | float(0) < 1 %}Analyse... (two frames required) {% else %}{{ rd | int }} / {{ re | int }} frames emitted by the station, last 30{% if total >= 20 %} · total {{ ok | int }} / {{ total | int }}{% endif %}{% endif %}
         icon: mdi:access-point
         icon_color: >-
           {% set r = states('sensor.jardin_vevor_7_in_1_weather_station_reception_rate') | float(none) %}
@@ -50,7 +59,7 @@ cards:
         primary: >-
           {{ states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature', 1) }} °C
         secondary: >-
-          Humidité : {{ states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_humidity') }} %
+          Humidity: {{ states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_humidity') }} %
         icon: mdi:thermometer
         icon_color: >-
           {% set temp = states('sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature') | float(0) %}
@@ -60,7 +69,7 @@ cards:
         primary: >-
           {{ (states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(0) / 1000) | round(2) }} klx
         secondary: >-
-          UV : {{ states('sensor.jardin_vevor_7_in_1_weather_station_uv_index') | float(0) | round(0) | int }} / 11+
+          UV: {{ states('sensor.jardin_vevor_7_in_1_weather_station_uv_index') | float(0) | round(0) | int }} / 11+
         icon: >-
           {% set lux = states('sensor.jardin_vevor_7_in_1_weather_station_illuminance') | float(none) %}{% set elev = state_attr('sun.sun', 'elevation') | float(0) %}{% set clair = 133800 * ((elev * pi / 180) | sin) ** 1.15 if elev >= 3 else 0 %}{% set r = lux / clair if (lux is not none and clair > 1) else -1 %}{% if elev < 3 %}mdi:weather-night{% elif lux is none %}mdi:help-circle-outline{% elif r >= 0.70 %}mdi:weather-sunny{% elif r >= 0.35 %}mdi:weather-partly-cloudy{% else %}mdi:weather-cloudy{% endif %}
         icon_color: >-
@@ -70,9 +79,9 @@ cards:
   - type: custom:mini-graph-card
     entities:
       - entity: sensor.jardin_vevor_7_in_1_weather_station_outdoor_temperature
-        name: Température
+        name: Temperature
       - entity: sensor.jardin_vevor_7_in_1_weather_station_outdoor_humidity
-        name: Humidité
+        name: Humidity
         y_axis: secondary
     hours_to_show: 24
     points_per_hour: 6
@@ -90,10 +99,10 @@ cards:
     square: false
     cards:
       - type: custom:compass-card
-        language: fr
+        language: en
         header:
           title:
-            value: Vent & Soleil
+            value: Wind & Sun
         indicator_sensors:
           - sensor: sensor.jardin_vevor_7_in_1_weather_station_wind_direction
             state_abbreviation:
@@ -141,12 +150,12 @@ cards:
         cards:
           - type: custom:mushroom-entity-card
             entity: sensor.jardin_vevor_7_in_1_weather_station_wind_speed
-            name: Vitesse
+            name: Speed
             icon: mdi:weather-windy
             icon_color: light-blue
           - type: custom:mushroom-entity-card
             entity: sensor.jardin_vevor_7_in_1_weather_station_wind_gust
-            name: Rafales
+            name: Gusts
             icon: mdi:weather-windy-variant
             icon_color: deep-orange
           - type: custom:mushroom-entity-card
@@ -156,7 +165,7 @@ cards:
             icon_color: teal
           - type: custom:mushroom-entity-card
             entity: sun.sun
-            name: Soleil
+            name: Sun
             icon: mdi:sun-angle
             icon_color: yellow
   - type: grid
@@ -167,15 +176,15 @@ cards:
         entity: sensor.jardin_vevor_7_in_1_weather_station_rain_total
         primary: >-
           {{ states('sensor.jardin_vevor_7_in_1_weather_station_rain_total', 1) }} mm
-        secondary: Cumul depuis la remise à zéro
+        secondary: Total since the last reset
         icon: mdi:weather-pouring
         icon_color: light-blue
       - type: custom:mushroom-template-card
         entity: sensor.jardin_vevor_7_in_1_weather_station_rain_total
         primary: >-
           {% set c = states.sensor.jardin_vevor_7_in_1_weather_station_rain_total %}
-          {{ relative_time(c.last_changed) if c is not none and c.last_changed else 'inconnu' }}
-        secondary: Dernière bascule (+0,233 mm)
+          {{ relative_time(c.last_changed) if c is not none and c.last_changed else 'unknown' }}
+        secondary: Last tip (+0.233 mm)
         icon: mdi:water-plus-outline
         icon_color: blue
   - type: grid
@@ -184,34 +193,34 @@ cards:
     cards:
       - type: custom:mushroom-entity-card
         entity: sensor.jardin_vevor_7_in_1_weather_station_rain_hour
-        name: Heure
+        name: Hour
         icon: mdi:weather-pouring
         icon_color: light-blue
         layout: vertical
       - type: custom:mushroom-entity-card
         entity: sensor.jardin_vevor_7_in_1_weather_station_rain_day
-        name: Jour
+        name: Day
         icon: mdi:calendar-week-begin
         icon_color: light-blue
         layout: vertical
       - type: custom:mushroom-entity-card
         entity: sensor.jardin_vevor_7_in_1_weather_station_rain_week
-        name: Semaine
+        name: Week
         icon: mdi:calendar-week
         icon_color: light-blue
         layout: vertical
       - type: custom:mushroom-entity-card
         entity: sensor.jardin_vevor_7_in_1_weather_station_rain_month
-        name: Mois
+        name: Month
         icon: mdi:calendar-weekend
         icon_color: light-blue
         layout: vertical
   - type: custom:mini-graph-card
-    name: Cumul de pluie (7 jours)
+    name: Rain total (7 days)
     icon: mdi:weather-rainy
     entities:
       - entity: sensor.jardin_vevor_7_in_1_weather_station_rain_day
-        name: Cumul
+        name: Total
         color: '#2196f3'
     aggregate: max
     hours_to_show: 168
@@ -223,3 +232,21 @@ cards:
       icon: true
       state: true
       labels: true
+
+# --- Required helpers (paste once, uncommented, in your configuration) -----------------------
+# The four rain tiles read utility_meter counters built on the cumulative rain sensor.
+# Without them, those four tiles stay empty; everything else works.
+#
+# utility_meter:
+#   rain_hour:
+#     source: sensor.jardin_vevor_7_in_1_weather_station_rain_total
+#     cycle: hourly
+#   rain_day:
+#     source: sensor.jardin_vevor_7_in_1_weather_station_rain_total
+#     cycle: daily
+#   rain_week:
+#     source: sensor.jardin_vevor_7_in_1_weather_station_rain_total
+#     cycle: weekly
+#   rain_month:
+#     source: sensor.jardin_vevor_7_in_1_weather_station_rain_total
+#     cycle: monthly

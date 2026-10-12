@@ -16,24 +16,24 @@ behind them. Every value below was measured on this board, not copied from an ex
 | GPIO7 | CSN — plus a **10 kΩ pull-up to 3V3, soldered at the pin** |
 | GPIO3 | GDO0 (single data wire); GDO2 not connected |
 
-Decoupling actually fitted: **10 µF / 25 V between GND and the module's VCC**, soldered on the pins.
-Still recommended and **not** fitted: a **100 nF** ceramic as close as possible to the module's VCC.
-An earlier note mentions a transistor to power-cycle the module: **no transistor is fitted**.
+Decoupling: a **10 µF between the module's GND and VCC**, soldered on the pins. No transistor is
+fitted to power-cycle the module — the idea was weighed and dropped.
 
 ## 2. Radio parameters
 
-868.35 MHz, 2-FSK, 11 111 baud, 70 kHz deviation, 100 kHz filter bandwidth.
+868.35 MHz, 2-FSK, 11 111 baud, 70 kHz deviation, **162 kHz filter bandwidth**.
 
 These are the values of the reference build that decodes this station on this board (frequency read
 back from its driver at boot: 868 349 824 Hz). A compiled test at 868.30 MHz produced **zero frames**
 while the write check confirmed FREQ2/1/0 were correctly applied — so the station is not at 868.30.
-Deviation and bandwidth are not suspects either: the reference decodes with exactly these values.
+Deviation and bandwidth are not suspects: the reference decodes with exactly these values, and a
+100 kHz filter was measured to lose one of the two tones (see "Configuration traps").
 
 ## 3. Framework
 
 `esp-idf`. The reference build uses it, and ESPHome has made it the default for ESP32 since 2026.1.
-An earlier attempt to stay on `arduino` was only due to a Python environment problem
-(`ensurepip` missing on Debian's Python), solved by building from the standalone CPython in `.venv`.
+An earlier attempt to stay on `arduino` came only from a Python environment problem (`ensurepip`
+missing on Debian's Python), solved by building from the standalone CPython in `.venv`.
 
 ## 4. One SPI device per bus — a hard rule
 
@@ -49,7 +49,8 @@ publishes and use the dump button — never a second SPI device.
 
 ## 5. The local `cc1101` driver copy
 
-`external_components` loads a local copy of ESPHome's `cc1101` component. What it adds:
+`external_components` loads a local copy of ESPHome's `cc1101` component
+(`esphome/components/cc1101/`, see its `README-LOCAL.md`). What it adds:
 
 * **identity re-reads** — up to 60 non-blocking attempts, one every 250 ms (~15 s), from `loop()`
   instead of one attempt in `setup()`. Blocking re-reads in `setup()` were measured to provoke
@@ -70,7 +71,7 @@ publishes and use the dump button — never a second SPI device.
 edge interrupt (`gpio_intr` → `enable_loop_soon_any_context`) wakes it again. A branch that returned
 from `setup()` before attaching that interrupt therefore left the board configured, with a healthy
 radio flag, writes verified — and permanently deaf, its FIFO filling with nobody reading it. That was
-a real defect of this copy (fixed 03/10, and `reset()` now re-attaches the interrupt too).
+a real defect of this copy (fixed 03/10, and `reset()` re-attaches the interrupt too).
 
 ## 6. The chip's state across an ESP32 restart
 
@@ -142,7 +143,7 @@ build stays quiet, and a debugging session raises the level (or adds `logs: {v7i
 health line, the re-arm attempts and the raw frames.
 
 One line stays at INFO: `V7IN1 OK {...}` on each frame. It is the product of this board, and the host
-tools (`tools/capture_logs.py`, `tools/eval_frames.py`, the A/B harness) parse it.
+tools (`dev/tools/capture_logs.py`, `dev/tools/eval_frames.py`, the A/B harness) parse it.
 
 ## 10. What is kept in the YAML, and why
 
@@ -166,13 +167,13 @@ component itself owns (`number/`, `button/`).
   `Station ID`, `TX counter`, `Last raw frame`, `Last verdict`) and the 10 s publishing interval are
   **the last piece of logic still in the YAML** (flagged TODO in the file): moving it means handing
   the component the sensor ids;
-* the `wifi:` block carries the two settings the owner requires in every delivered YAML
-  (05/10/2026): the transmission power **commented out** at its lowest value
-  (`# output_power: 8.5dB` — 8.5 dB is the low bound, range 8.5-20.5, and some access points refuse
-  the board at the default power), and **no `ap:` section** — the board broadcasts no fallback SSID.
-  State the consequence with the setting: without a fallback access point, a board that stops
-  joining its Wi-Fi can only be recovered over USB. Removing `ap:` also took the firmware from
-  52.3 % to 47.2 % of flash (about 93 kB).
+* the `wifi:` block states the two hardware facts the owner requires in every delivered YAML. The
+  transmission power is fixed at its lowest value (`output_power: 8.5dB` — 8.5 dB is the low bound,
+  range 8.5-20.5): on boards whose Wi-Fi antenna is a ceramic chip antenna, the default power couples
+  into the CC1101 sitting next to it and the receiver goes deaf; raise it only if the access point
+  refuses that level. A **fallback access point** (`ap:` + `captive_portal:`) is kept so a Wi-Fi typo
+  costs a rejoin on the board's own SSID instead of a USB re-flash; `use_address` stays commented out,
+  to be enabled only where mDNS does not cross the network.
 
 ## Configuration traps — measured, kept here so the YAML stays readable
 
@@ -189,13 +190,14 @@ component itself owns (`number/`, `button/`).
   cured only by a restart (last frame 21:37, the 8000us build flashed 22:17, nothing since).
   2000us froze it again within minutes: the interferer's burst has no internal gap above that.
 * **A 523-543-pulse capture carries NO frame — measured, and no decoder can change that.** Replayed
-  off-board over 2445 real captures (`dev/state/panne_2026*.txt`): the 1854 captures of 400-599
-  pulses hold **zero** frames, by OUR rule and by the external project's rule ported faithfully (both
-  sync words are 16 bits, both scan every offset in both polarities). The sync word `CA 54` is simply
-  ABSENT — the burst is the interferer's, and it MASKS the station instead of merging with it. A
-  synthetic capture that does contain a frame beside an intruder burst is decoded by both decoders
-  (ours through the 90 µs fallback, the measured period having drifted to 75.5 µs). "Several bursts
-  in one capture" is therefore not a decoding gap: there is nothing to find inside them.
+  off-board over 2445 real captures recorded off-board on 05/10 (dump kept in the project archive,
+  outside the repository): the 1854 captures of 400-599 pulses hold **zero** frames, by OUR rule and
+  by the external project's rule ported faithfully (both sync words are 16 bits, both scan every
+  offset in both polarities). The sync word `CA 54` is simply ABSENT — the burst is the interferer's,
+  and it MASKS the station instead of merging with it. A synthetic capture that does contain a frame
+  beside an intruder burst is decoded by both decoders (ours through the 90 µs fallback, the measured
+  period having drifted to 75.5 µs). "Several bursts in one capture" is therefore not a decoding gap:
+  there is nothing to find inside them.
 * **The watchdog misreads that state, and that is what reboots the board.** `silent_s` counts time
   without a DECODED frame, so a chip hearing plenty — captures well above `pulse_threshold`, no sync
   — looks exactly like a deaf chip, and after 180 s it restarts. Measured 08/10: a 182 s window in
@@ -215,4 +217,4 @@ component itself owns (`number/`, `button/`).
   shipped — the paired on-board test showed a periodic re-arm does not end the deaf episodes.
 * **Frequency compensation limit is BW/2** in this repo's copy of the driver
   (`esphome/components/cc1101/cc1101.cpp`): the driver exposes no action for it, so it is not
-  swappable at runtime. Campaign log: dev/state/CAMPAGNE_20261005.md.
+  swappable at runtime. Campaign log, 05/10/2026 (project archive).

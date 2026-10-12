@@ -1,63 +1,44 @@
 # Vevor 7-in-1 — development document
 
-This is the **detailed** document: everything about this project, tooling included. If you only want
-to solder a board and flash it, start with the concise entry point at the repository root:
-[`../README.md`](../README.md).
+The **detailed** document: how this firmware is built, verified and tuned, and the tooling around it.
+To solder a board and flash it, start at the repository root: [`../README.md`](../README.md).
 
-The firmware **decodes** the 868 MHz frames of a Vevor 7-in-1 weather station
-(ref. YT60309, Fujian Youtong family) and publishes outdoor temperature, humidity, wind
-(speed / gust / direction), rainfall, UV index, illuminance and the sensor's low-battery flag to
-Home Assistant — while **rejecting** every invalid frame (header, checksum, TX counter, physical
-plausibility gate).
+The firmware **decodes** the 868 MHz frames of a Vevor 7-in-1 weather station (ref. YT60309, Fujian
+Youtong family) and publishes outdoor temperature, humidity, wind (speed / gust / direction), rainfall,
+UV index, illuminance and the low-battery flag to Home Assistant, while **rejecting** every invalid
+frame (header, checksum, TX counter, physical plausibility).
 
-**Status: working and verified.** Frames decoded with checksum and TX counter validated,
-**20.0 s cadence**, plausible values, **field-by-field agreement between the C++ firmware and an
-independent Python decoder**, and cross-checked against a second receiver (`state/DONE.md`,
-`evidence/`).
+**Status: working and verified** — checksum and TX counter validated, **20.0 s cadence**, plausible
+values, **field-by-field agreement between the C++ firmware and an independent Python decoder**,
+cross-checked against a second receiver. Evidence and regeneration: [`evidence/README.md`](evidence/README.md).
 
-> Correction worth knowing about: an early validation claimed "60 frames in 10 minutes". It was
-> **30 measurements delivered twice** (a stitching rule applied to whole bursts — see pitfall 5).
-> The defect is fixed and covered by the off-board tests. Details and evidence: `state/DONE.md`
-> and `evidence/`.
+> Correction: an early validation claimed "60 frames in 10 minutes"; it was **30 measurements delivered
+> twice** — a stitching rule wrongly applied to whole bursts (pitfall 5). Fixed, covered by the tests.
 
 ---
 
-## Repository layout — the firmware, and everything else
+## Repository layout
 
-The repository root holds **the firmware and nothing else**:
+The repository root holds **the firmware and its public entry points**: `README.md` (the entry point),
+`examples/` (the reference Lovelace cards, `ha-card-fr.yaml` and `ha-card-en.yaml`) and `esphome/`
+(**the firmware** — the YAML and the two components), plus `LICENSE`/`.gitignore`.
+
+Everything else lives under **`dev/`** (this folder): how the flash is validated, why each setting is
+what it is, and the tooling. Nothing under `esphome/` needs the tooling, and the tooling never touches
+the radio. **Paths below are relative to this `dev/` folder.**
 
 | Path | Role |
 |---|---|
-| `../README.md` | **Entry point** — solder and flash, for someone who just wants a working board |
-| `../esphome/` | **the firmware** — what you flash, and all that is needed to build it |
+| `../esphome/vevor-7in1.yaml` | **Production** — the complete ESPHome configuration (firmware) |
+| `../esphome/components/vevor_7in1/` | **Production** — the component: `vevor_protocol.h` (pulses → bits → bytes → values, validation gate; pure C++, **testable off-board**) and its glue into `remote_receiver` |
+| `../esphome/components/cc1101/` | **Production** — local fork of ESPHome's driver with this board's fixes (`README-LOCAL.md`) |
+| `../esphome/secrets.yaml.example` | **Production** — template for `../esphome/secrets.yaml` (never versioned) |
+| `docs/` | **Notes** — `wiring.svg` (the root README's drawing), `firmware-design-notes.md` (why each setting is what it is), `bit-jitter-analysis.md` (why single bits go wrong), `forecast-rules.md` (rebuild the console's not-receivable forecast in HA) |
+| `tests/`, `tools/`, `evidence/` | **Test** — off-board suite (independent Python encoder + C++ unit tests), the tooling (`tools/README.md`), and the versioned JSON reports backing every claim (`evidence/README.md`) |
+| `references/` | **Context** — protocol description + rtl_433 reference source (GPL-2.0-or-later) |
 
-Everything else lives under **`dev/`** (this folder): how the flash is validated, why each setting is
-what it is, and the whole history of the project. Nothing under `esphome/` needs the tooling, and
-the tooling never touches the radio.
-
-**Paths on this page are relative to this `dev/` folder**, so every link below works as written.
-
-| Path | Half | Role |
-|---|---|---|
-| `../esphome/vevor-7in1.yaml` | **Production** | the complete ESPHome configuration (firmware) |
-| `../esphome/components/vevor_7in1/vevor_protocol.h` | **Production** | protocol: pulses → bits → bytes → values, validation gate. Pure C++, **testable off-board** |
-| `../esphome/components/vevor_7in1/` | **Production** | C++ component: plugs into `remote_receiver`, stitches burst fragments, counts, triggers |
-| `../esphome/components/cc1101/` | **Production** | local copy of ESPHome's `cc1101` component with the fixes this board needs (`README-LOCAL.md`) |
-| `../esphome/secrets.yaml.example` | **Production** | template to copy to `../esphome/secrets.yaml` (never versioned) |
-| `docs/wiring.svg` | **Production** | wiring diagram (same drawing as the root README) |
-| `docs/forecast-rules.md` | **Rules** | the console's forecast icon is not receivable; tables to reproduce an equivalent in Home Assistant |
-| `docs/firmware-design-notes.md` | **Notes** | why the production YAML says what it says: the measured reason behind each setting |
-| `docs/bit-jitter-analysis.md` | **Analysis** | why single bits go wrong: pulse-width jitter, missing bit-clock recovery, what the literature says, and how to tell a fix from a palliative |
-| `tests/` | **Test** | off-board suite: independent Python encoder + C++ unit tests (**410 checks**, no board needed) |
-| `tools/` | **Test** | build, flash, log capture, independent evaluation, frequency scan, A/B comparison (`tools/README.md`) |
-| `evidence/` | **Test** | versioned JSON reports backing every claim (`evidence/README.md`) |
-| `references/` | Context | protocol description + rtl_433 reference source (GPL-2.0) |
-| `state/` | Journal | full iteration log (French) — what worked, what failed, why |
-
-Internal maintenance documents (`state/*`, `tools/README.md`, `evidence/README.md`) and the
-in-firmware comments are in French; this README is the English entry point. Documents under
-`state/` and `reviews/` are **dated records** and keep the paths of their time (`tools/…` meant the
-repository root before the layout above) — they are not rewritten.
+`dev/requirements.txt` lists the tools' Python dependencies. A few **local-only** directories are **not
+versioned** (`.gitignore`): `build/` (compile logs, status markers), `logs/`, `state/` and `reviews/`.
 
 ---
 
@@ -70,184 +51,67 @@ repository root before the layout above) — they are not rewritten.
 | ESP32-C3 SuperMini | the board this firmware is built for (`board: esp32-c3-devkitm-1`) |
 | CC1101 module, **868 MHz** version | 433 MHz modules are the majority in search results and **do not work** here |
 | 868 MHz antenna | the supplied helical antenna is enough under ~15 m; a λ/4 wire (8.6 cm) is much better |
-| 10 kΩ resistor | pull-up from the module's VCC to CSN — see §1.2 |
-| 10 µF / 25 V capacitor | decoupling across the module's GND/VCC — see §1.2 |
+| 10 kΩ resistor + 10 µF capacitor | the two components of §1.2 |
 | A 5 V supply for the board | the module itself must **never** see 5 V |
 
 ## 1.2 Wiring
 
 ![Wiring diagram](docs/wiring.png)
 
-Full vector version: [`docs/wiring.svg`](docs/wiring.svg). The table below is the same information in
-text form — **wire by signal name, not by header pin number** (module boards number the 8-pin
-header differently).
+Full vector version: [`docs/wiring.svg`](docs/wiring.svg). **Wire by signal name, not by header pin
+number** — module boards number the 8-pin header differently.
 
-| ESP32-C3 SuperMini | CC1101 module | Signal |
-|---|---|---|
-| 3V3 | VCC | 3.3 V supply (**never 5 V**) |
-| GND | GND | ground |
-| GPIO4 | SCLK | SPI clock |
-| GPIO6 | MOSI | SPI data out |
-| GPIO5 | MISO | SPI data in |
-| GPIO7 | CSN | chip select |
-| GPIO3 | GDO0 | demodulated data stream, consumed by `remote_receiver` |
-| — | GDO2 | not connected |
+| ESP32-C3 SuperMini | CC1101 | Signal | ESP32-C3 SuperMini | CC1101 | Signal |
+|---|---|---|---|---|---|
+| 3V3 | VCC | 3.3 V (**never 5 V**) | GPIO5 | MISO | SPI data in |
+| GND | GND | ground | GPIO7 | CSN | chip select |
+| GPIO4 | SCLK | SPI clock | GPIO3 | GDO0 | data stream, feeds `remote_receiver` |
+| GPIO6 | MOSI | SPI data out | — | GDO2 | not connected |
 
-```
-                ESP32-C3 SuperMini                    CC1101 (868 MHz module)
-                +--------------+                      +-------------------+
-     3V3  ------| 3V3          |----------------------| VCC                |
-     GND  ------| GND          |----------------------| GND      [10 µF]   |  10 µF / 25 V across
-     GPIO4------| GPIO4        |----------------------| SCLK               |  GND <-> VCC of the
-     GPIO6------| GPIO6        |----------------------| MOSI               |  module, soldered on
-     GPIO5------| GPIO5        |----------------------| MISO               |  the module pins
-     GPIO7------| GPIO7        |--------+-------------| CSN                |
-     GPIO3------| GPIO3        |----------------------| GDO0               |     ANT ---- λ/4, 8.6 cm
-                +--------------+        |              +-------------------+                (or the helical
-                                        +---[10 kΩ]---+ 3V3                                     antenna)
-                                                       ^ pull-up on CSN
-```
-
-### Why the two extra components (measured, not guessed)
-
-Symptom treated: the chip **intermittently lost register writes** — a register read back at its
-**factory value** (`MDMCFG4` written `0xC8` read `0x8C`), i.e. a chip that was never configured and
-therefore demodulated nothing, at any frequency. Reads stayed reliable: the fault was in the
-**link**, not in the chip. After fitting both components, the firmware's own write check went from
-"1 register permanently not taken" to **"0 registers permanently not taken", four cycles in a row**.
-
-* **10 kΩ between the module's VCC (3.3 V) and CSN (GPIO7)**, soldered on the module pins. Why: at
-  reset the ESP32-C3 GPIOs are **high-impedance** (Espressif datasheet Table 2-1: IE, no WPU) — with
-  no pull-up, CS floats for the whole boot, the chip can see spurious chip selects and end up in the
-  indeterminate state described by the CC1101 datasheet (§4.9). 4.7–10 kΩ works; 10 kΩ is the value
-  on the reference ESP32-C3 + CC1101 board. **The YAML option `cs_pin: mode: {pullup: true}` does not
-  replace this resistor**: it is only applied at the pin's `setup()`, i.e. after the boot window.
-* **10 µF / 25 V capacitor between the module's GND and VCC** (supply-current decoupling).
-
-### Recommended, not fitted yet
-
-* **100 nF** ceramic right at the module's VCC pin — that is the one that acts on fast edges; it
-  **complements** the 10 µF, it does not replace it.
-* **Separate supply for the module**, not the SuperMini's 3V3 pin: a dedicated 3.3 V LDO (≥ 300 mA)
-  fed from 5 V, **common ground mandatory**. SuperMini clones top out around 250 mA and their rail
-  collapses during Wi-Fi peaks.
-* **22 Ω in series on SCLK** (and possibly MOSI/CS) if the wires stay long.
-* **Nothing on the crystal**: the crystal and its load capacitors are inside the module; touching
-  them detunes the frequency. Nothing on the RF path between the chip and the antenna either.
-* Check that **DCOUPL is not tied to 3.3 V** (a schematic error flagged by TI). On a module it is
-  normally not exposed — only relevant on a bare chip board.
-* **Never power from 5 V**, and never declare a second SPI device on the chip's bus.
-
-### Cutting the module's power with a transistor (idea, NOT fitted)
-
-The owner confirmed (02/10) that **no transistor is fitted**: the real assembly has exactly the two
-components above. The following is a **lead**, not a description of the build.
-
-On this assembly, **roughly every other boot brings up a mute chip** (`Chip ID: 0xFFFF`, all SPI
-reads `0xFF`): it never gets configured and stays in IDLE. A software reset does not recover it
-(three attempts, three failures); a **real power cut** does. Driving the module's supply from a GPIO
-would therefore give the firmware the only remedy that works — and the cycle would be immediate
-instead of the ten minutes the current recovery takes.
-
-```
-        3.3 V ──┬───────────┬────────────┬──── source of the P-MOSFET
-                │           │            │
-            [10 kΩ]      [100 nF]     [10 µF]        (10 kΩ = gate pulled to 3.3 V ⇒ off)
-                │           │            │
-                │           └────────────┴──── drain ⇒ VCC of the CC1101 module
-                │
-   free GPIO ──[1 kΩ]── gate of the P-MOSFET
-```
-
-* **Logic-level P-MOSFET** in series with the module's VCC (e.g. AO3401, IRLML6402): source to
-  3.3 V, drain to the module. Gate pulled to 3.3 V through **10 kΩ** (module **off** by default at
-  boot, hence a clean chip at power-up) and driven by a **free GPIO** through **1 kΩ**.
-  GPIO **low = module powered**; leaving the GPIO high-impedance = module off.
-* **Check the transistor conducts at Vgs = −3.3 V**: a non logic-level MOSFET will not open at that
-  voltage. Pick one with Vgs(th) below 1.5 V.
-* Keep the **10 µF** (and the 100 nF) **on the module side**, i.e. after the transistor.
-* **Simpler but dirtier variant**: switch the module's **ground** (N-MOSFET or 2N2222 NPN, driven
-  through 1 kΩ). In that case the SPI lines drive an unpowered chip: add **100 Ω in series on
-  SCLK / MOSI / CS** to limit the current in the protection diodes.
-* Firmware side: one GPIO output, a cycle **off ≥ 300 ms then on**, then re-initialise the radio
-  component. The datasheet asks for a 0 → 1.8 V ramp in ≤ 5 ms and a cut of at least 1 ms — a few
-  hundred milliseconds satisfies both comfortably.
+**Why the two components (measured).** The chip intermittently **lost register writes** — `MDMCFG4`
+written `0xC8` read back at its factory value `0x8C`: a chip never configured, demodulating nothing,
+while its reads stayed reliable, so the fault was in the **link**. With both fitted, the firmware's
+write check went from "1 register permanently not taken" to **"0 registers permanently not taken" four
+cycles in a row**. The **10 kΩ VCC→CSN** stops CS floating through the boot (at reset the ESP32-C3
+GPIOs are high-impedance — Espressif datasheet Table 2-1: IE, no WPU; the YAML option
+`cs_pin: mode: {pullup: true}` does **not** replace it, applied only at `setup()`), and the **10 µF
+GND→VCC** is decoupling. Also recommended, not fitted: a supply separate from the board's 3V3 pin and
+22 Ω in series on SCLK — and nothing on the crystal or the RF path (that detunes).
 
 ## 1.3 Entities published to Home Assistant
 
-**The tables live on the home page**: [`../README.md` §4](../README.md). They are maintained there,
-once, and that is deliberate — a table copied into two documents drifts, and this file's copy had
-already drifted twice (it still described the old rain rule, and the TX counter as *+1* per frame
-instead of the measured +39). This section therefore keeps only what a newcomer does not need.
+**The tables live on the home page**: [`../README.md` §4](../README.md), maintained once on purpose — a
+copy in two documents drifts. Bind automations to the entity `id` and the published *values*, not to a
+display name: HA derives the entity_id from `name:`, so a rename creates **new entities**. Some counters
+appear only in the board's log, not as entities (repairs, gate refusals, rain refusals); the periodic
+line looks like `captures=143 (+3), frames=47, rejects=1, repaired=1 (0 refused), rain_refused=0, …`.
 
-* `name:` values are **English** (they were French until 03/10/2026). Home Assistant derives the
-  entity_id from the name, so a rename creates **new entities**: the old ones become unavailable and
-  any automation or card bound to them must be updated. Automations should bind to the entity `id`
-  and the published *values*, not to a display name.
-* The station's own specifications (manual p. 26-27) are **wider** than what this firmware enforces:
-  outdoor temperature −40…70 °C, humidity 1…99 %, wind 0…180 km/h, 16 directions, rain
-  0…12 999 mm, UV 0…16, light 0…200 klux. The accepted ranges on the home page are the ones the
-  plausibility gate actually applies.
-* **Counters visible in the board's log but not as entities**: frames obtained by repair, frames
-  refused by the continuity gate, and rain refusals. The periodic line looks like:
-  `captures=143 (+3), frames=47, rejects=1, repaired=1 (0 refused), rain_refused=0, last pulses=176, …`
-  Raise the log level for a campaign to see them (`logger` substitution, see the root README's
-  flashing section and `state/PROGRESS.md`).
+## 1.4 The console's forecast icon is not receivable
 
-## 1.4 The console's forecast icon is not receivable — rules for Home Assistant
+The display console shows one of six icons (Sunny … Snowy) computed from **its own barometer** (Vevor
+YT60309 manual, *Weather Forecast*, p. 20); the outdoor sensor transmits no pressure field.
 
-**Read this before expecting a forecast from this board.** The display console shows one of six icons
-(Sunny, Partly Cloudy, Cloudy, Rainy, Stormy, Snowy) computed from **its own barometer** (Vevor
-YT60309 manual, section *Weather Forecast*, p. 20: range 600-1100 hPa, pressure trend over the past
-hour, with the manual's own caveat that such a forecast is "about 65-70%" accurate). The outdoor
-7-in-1 sensor **neither measures nor transmits pressure**: its payload is temperature, humidity, wind
-speed and direction, rainfall, UV index and illuminance, and the 21-byte frame decoded here has no
-pressure field.
-
-> **The station's own forecast icon cannot be read off the air with this hardware.** No firmware can
-> do it, and this project does not pretend otherwise. An earlier iteration estimated the six
-> categories *inside the firmware*, with a sun-position dependency; it was **removed at the owner's
+> **The station's own forecast icon cannot be read off the air with this hardware.** An earlier
+> iteration estimated the six categories *inside the firmware*; it was **removed at the owner's
 > request** — when the station cannot provide the information, the receiver must not invent it.
 
-The board therefore publishes **measured quantities only** (see §1.3), and any forecast is left to
-Home Assistant, where the decision is visible, editable and testable. The rules — thresholds and their
-sources, rain-intensity window, cloudiness proxy, anti-flapping — are documented as tables in
-[`docs/forecast-rules.md`](docs/forecast-rules.md), to be applied with Home Assistant's `sun`
-integration and the Vevor entities.
-
-* One manual rule needs no firmware support and stays directly usable: the **ice alert** (p. 20,
-  "when outdoor temperature is lower than 1 °C, the snowflake icon will appear") is a plain threshold
-  on a quantity we *do* receive — one template sensor away.
+Any forecast is left to Home Assistant, using [`docs/forecast-rules.md`](docs/forecast-rules.md). One
+manual rule stays usable: the **ice alert** (p. 20, snowflake below 1 °C) is a plain threshold.
 
 ## 1.5 Install and flash
 
 ```bash
-# 1. Secrets (once) — never versioned
-cp esphome/secrets.yaml.example esphome/secrets.yaml && $EDITOR esphome/secrets.yaml
-
-# 2. Nothing else to configure: the board needs no location, no time zone and no clock (see §1.4)
-
-# 3. Build
-tools/build.sh                       # writes BUILD OK / BUILD FAIL to build/last_status.txt
-
-# 4. Flash — USB the first time, then OTA by IP
-#    An ESP32-C3 flashed over USB shows up as /dev/ttyACM0 (the C3's USB-Serial-JTAG).
-#    /dev/ttyUSB0 may exist as an unusable node (c---------) : do not target it by default.
-tools/flash.sh /dev/ttyACM0
-tools/flash.sh <ip-de-la-carte>          # OTA afterwards
-
-# 5. Capture the board's logs (native API, port 6053 — no browser needed)
-.venv/bin/python tools/capture_logs.py --host <ip-de-la-carte> --seconds 120 \
-    --out logs/capture_$(date +%Y%m%d_%H%M%S).log
-
-# 6. Evaluate the captured frames (independent Python decoder + acceptance criteria)
-tools/eval_frames.py logs/capture_*.log --json logs/report.json
+# 1. Secrets (once) — never versioned; nothing else to configure (no location, clock or time zone)
+cp ../esphome/secrets.yaml.example ../esphome/secrets.yaml && $EDITOR ../esphome/secrets.yaml
+tools/build.sh                    # 2. build: BUILD OK / BUILD FAIL to build/last_status.txt
+tools/flash.sh /dev/ttyACM0       # 3. flash over USB first (the C3's USB-Serial-JTAG)
+tools/flash.sh <board-ip>         #    …then OTA by IP
+# 4. Capture and evaluate the board's logs (native API, port 6053 — no browser needed)
+.venv/bin/python tools/capture_logs.py --host <board-ip> --seconds 120 --out logs/capture.log
+tools/eval_frames.py logs/capture.log --json logs/report.json
 ```
 
-### Using the components in your own ESPHome install (copy-paste)
-
-Both components are read from this public repository, so a config only needs this block — nothing
-from this repository has to be copied next to your YAML (only your own `secrets.yaml`):
+Both components are read from this public repository, so your own config needs only this block:
 
 ```yaml
 external_components:
@@ -256,49 +120,22 @@ external_components:
     components: [vevor_7in1, cc1101]
 ```
 
-* `@main` follows the current version. Replace it with a tag (`@v1.0.0`) or a commit hash to pin a
-  version — with a pinned ref, `refresh: 0s` is no longer needed.
-* `esphome/components/cc1101` is a local copy of ESPHome's own driver carrying the fixes this board
-  needs, so ESPHome answers `External components are overriding built-in components: cc1101`. That
-  is expected: keep both names in `components:`, and do not add `path:`, ESPHome finds them at
-  `<repo>/esphome/components`.
-* `esphome: min_version:` can be set to the validated ESPHome version (`requirements.txt`).
-* Building **inside a clone of this repository** must use the local sources instead — that is what
-  `tools/build.sh` and `tools/flash.sh` do (`-s vevor_components components`). Without that option a
-  build fetches `@main` and silently ignores your working tree.
-
-### Publishing to the repository
-
-The remote is already paired with this machine: `origin` points at
-`git@github-vevor:WizardPC/esphome-vevor-7-in-1.git`, an SSH alias backed by a deploy key present on
-this host (checked: `ssh -T git@github-vevor` answers *"Hi WizardPC/esphome-vevor-7-in-1!"*).
-
-```bash
-git push origin main     # fetch and push through the deploy key: no token required
-```
-
-**Do not misdiagnose this.** The deploy key allows `fetch`/`push`, **not** the GitHub API. `gh` is
-logged into no host and the `GITHUB_TOKEN` in the environment is a commented-out placeholder, so
-**opening a pull request needs a PAT** (or a click in the web UI). In particular, `gh auth status`
-reporting "not logged into any GitHub hosts" does **not** mean the repository is out of reach: git
-publishing works from any session, because the remote and the key live on disk, not in the agent's
-context.
+`@main` follows the current version; pin a tag or commit to fix it (then `refresh: 0s` is not needed).
+ESPHome answers `External components are overriding built-in components: cc1101` — expected, keep both
+names. Building **inside a clone** must use the local sources instead: that is what `tools/build.sh` and
+`tools/flash.sh` do (`-s vevor_components components`); without it a build fetches `@main` and ignores
+your working tree.
 
 ## 1.6 Home Assistant notes
 
-* The board uses the **native API** with encryption; HA's ESPHome integration discovers it on the
-  LAN. If mDNS does not cross your router (as here), the `wifi: use_address:` value in the YAML is
-  what OTA and log capture target, and HA can be pointed at the IP manually.
+* The board uses the **native API** with encryption; HA discovers it on the LAN. If mDNS does not cross
+  your router, the `wifi: use_address:` value in the YAML is what OTA and log capture target.
 * `api: reboot_timeout: 0s` is deliberate: the board must not reboot when no client is connected,
   otherwise a log-capture session gets cut in the middle.
-* The board **reboots itself on purpose** when no new frame has been published for 10 minutes
-  (`interval: 20s` block): on this hardware, one boot in two brings up a chip that is absent from
-  the SPI bus, and a reboot is the only measured remedy. The reboot is a guard rail, not an
-  instability — see pitfall 7.
-* Everything the firmware exposes is listed in §1.3; diagnose with `Rejected frames` (a decoding
-  problem) vs `RMT captures` (nothing reaching the chip) before touching anything.
-* `Illuminance` is in lux and can be large (up to 327 670 lx); `UV index` has no unit and ranges
-  0…16.
+* The board **reboots itself on purpose** after prolonged frame silence: on this hardware one boot in
+  two brings up a chip absent from the SPI bus, and a reboot is the only measured remedy — pitfall 7.
+* Diagnose with `Rejected frames` (decoding) vs `RMT captures` (nothing reaching the chip) before
+  touching anything. `Illuminance` is in lux (up to 327 670 lx); `UV index` is unitless, 0…16.
 
 ---
 
@@ -312,180 +149,105 @@ tools/run_tests.sh
 
 Steps: self-check of the independent Python encoder (it must reproduce the rtl_433 reference frame
 **byte for byte**) → generation of the test frames and pulse scenarios → compilation of the C++ test
-with the compiler bundled in `.venv-dev` (zig) → execution.
-
-Current state: **377 checks, 0 failures.** The suite covers the happy path, inverted polarity,
-truncated captures, jitter, timing bias, inter-burst gaps, frame stitching (and the rule that a
-*complete* burst must never be stitched), the plausibility gate and its rejection reasons, the
-period-selection sweep, the plausibility gate on injected impossible frames, and the fragment
-policy (a complete burst is never stitched).
-
-Two properties make it a real check rather than a tautology:
-
-* the C++ decoder and the Python encoder are **written separately from the same specification**, so
-  their agreement is meaningful;
-* the suite contains **external anchors** — the rtl_433 reference frame, and hand-computed expected
-  values for the ×10 lux branch — so an error present in *both* implementations cannot self-validate.
-  This has already caught a wrong wind scale copied from one side to the other.
-
-Two non-negotiable rules for the suite itself: it needs **no hardware**, and it is the only place
-allowed to define what "decoded correctly" means.
+with the compiler bundled in `.venv-dev` (zig) → execution → the entity/dashboard consistency check
+(`check_ha_card.py`, both example cards) → the card-template check against Home Assistant
+(`check_ha_templates.py`, skipped when HA is unreachable). **The run prints its own total** —
+`N checks, 0 failure(s)` — the single source of truth for the count, which this document does not
+repeat. It covers the happy path, inverted polarity, truncated captures, jitter, timing bias, inter-burst
+gaps, stitching (a *complete* burst is never stitched), the plausibility gate and its reasons, the
+period-selection sweep and the fragment policy. It is not a tautology: the C++ decoder and the Python
+encoder are **written separately from the same specification**, and the suite carries **external
+anchors** (the rtl_433 frame, hand-computed ×10 lux values) so an error present in *both* fails.
 
 ## 2.2 Independent decoder and window reports
 
-`tools/eval_frames.py` re-implements the decoding in Python, independently of the firmware's C++, and
-**compares frame by frame** with the values the firmware published. A `PASS` verdict requires
-simultaneously:
+`tools/eval_frames.py` re-implements the decoding in Python and **compares frame by frame** with the
+values the firmware published. A `PASS` verdict requires simultaneously: ≥ `--min-valid` valid frames
+(10 by default); values inside the physical ranges **and** a coherent lux/UV pair; a TX-counter advance
+consistent with the elapsed time (~1.95 tick/s); a ~20 s cadence; and **field-by-field agreement with
+the C++ firmware** on every frame. A report with an anomaly can no longer conclude `PASS`.
+`tools/summarize_window.py` adds window-level analysis (cadence, gaps, rejections, per-10-min emission
+counts, value ranges) and **reuses its report's verdict** — a summary cannot contradict its own report.
 
-* at least N valid frames (`--min-valid`, 10 by default);
-* values inside the physical ranges **and** a coherent lux/UV pair (zero lux with a non-zero UV, or
-  lux out of the UV's reach);
-* a TX-counter advance consistent with the elapsed time (~1.95 tick/s: a zero difference means the
-  RMT delivered the burst twice, a multiple means missed bursts);
-* a ~20 s cadence on the significant intervals;
-* **field-by-field agreement with the C++ firmware** on every frame.
-
-A report that contains an anomaly (incoherent sequence, implausible values, disagreement with the
-C++) can no longer conclude `PASS`: the list of refusal reasons is in the JSON report.
-`tools/summarize_window.py` adds long-window analysis (median/min/max cadence, gaps, rejections,
-per-10-minute emission counts, value ranges) and **reuses its report's verdict** — a summary cannot
-contradict its own report.
-
-`tools/count_probe.py`, `tools/analyze_*.py` and the capture helpers are documented in
-`tools/README.md`, which separates the tools of the current flow from the diagnostic tools kept for
-history. Three contracts are enforced there: never write to or print a secret; never announce a
-success without a measurement ("nothing measured" → **NULL MEASUREMENT** and exit code 3, "measured,
-no frame" → exit code 0, technical failure → exit code 2); never conclude on a window without having
-checked the chip's state, since one boot in two brings up a mute chip.
+The `evidence/` folder holds the versioned JSON reports backing the project's claims: a **validated**
+one-hour window (180 frames, `PASS`) and a **faulty** one (181 frames, `FAIL`, three refusal reasons,
+kept on purpose — the defect the plausibility gate and the stitching rule were written for). Each keeps
+the raw 21-byte frames, so the claims stay checkable after a `git clone` (the full `logs/` are not).
 
 ## 2.3 Field tools
 
 | Tool | Role |
 |---|---|
-| `tools/build.sh` | compile (`BUILD OK` / `BUILD FAIL` written to `build/last_status.txt`) |
-| `tools/flash.sh` | flash over OTA (USB the first time) |
-| `tools/run_tests.sh` | off-board suite, no board required |
-| `tools/capture_logs.py` | capture the board's logs over the native API (port 6053) |
-| `tools/eval_frames.py` | independent Python decoder, frame-by-frame verdict |
-| `tools/summarize_window.py` | window summary, generated from a report |
-| `tools/read_state.py` | read the board's entities over the API |
-| `tools/press_button.py` | press a firmware button (`--list-buttons`) |
-| `tools/dump_pulses.py` | fetch the raw durations of the "Dump pulses" button |
-| `tools/decoder_dump.py` | decode those raw durations off-board (4 periods × 2 polarities × 8 alignments) |
-| `tools/scan_freq.py`, `tools/balayer_frequence.py` | scan the frequency **without reflashing** |
-| `tools/ab_cycle.py` | alternate two frozen binaries in interleaved windows (witness / ours) |
-| `tools/verify_radio_config.py` | check the radio configuration actually applied |
+| `build.sh`, `flash.sh`, `run_tests.sh` | compile (`BUILD OK`/`BUILD FAIL` marker); flash over OTA; off-board suite |
+| `capture_logs.py`, `eval_frames.py`, `summarize_window.py` | capture logs (native API, 6053); independent decoder; window summary from a report |
+| `read_state.py`, `press_button.py`, `dump_pulses.py`, `decoder_dump.py` | read entities; press a firmware button (`--list-buttons`); fetch and decode the "Dump pulses" durations off-board |
+| `scan_freq.py`, `verify_radio_config.py` | live frequency scan; check the applied radio config |
+| `board_watch.py`, `temperature_spike_watch.py` | 6-hourly watches (counter deltas, gate activity, restart reason) |
+| `check_ha_card.py`, `check_ha_templates.py` | entity/dashboard consistency offline; card templates against HA |
 
-## 2.4 Evidence kept in the repository
-
-`evidence/` holds the versioned JSON reports that back the claims in `state/DONE.md`: a **validated**
-one-hour window (180 frames, 0 rejections, `PASS`) and a **faulty** one (181 frames, `FAIL`, three
-refusal reasons) — the second is kept on purpose: it documents the defect that the plausibility gate
-and the stitching rule were written for. Each report keeps the raw 21-byte frames, so the claims
-remain checkable after a plain `git clone`, even though the full logs (`logs/`) are not versioned.
-Details and regeneration commands: `evidence/README.md`.
-
-## 2.5 Method
-
-* **No invented values.** Any statement about decoding must cite a raw log line. If nothing is
-  received, say "no signal", never "it should work".
-* **Never trust a script's console output through a pipe**: `tail` and `tee` mask exit codes. Read
-  `build/last_status.txt` and `logs/last_flash_status.txt` — the source of truth for a step's success.
-* **One hypothesis at a time** on the radio side (frequency, deviation, bandwidth) and record the
-  measured effect.
-* **Never delete a log trace**: traces are the evidence. Raw logs are excluded from the repository
-  (`.gitignore`) but the reports that quote them are not.
-* After 3 iterations without improvement: change strategy instead of repeating the same attempt, and
-  say so explicitly in the journal.
-* Diagnostic order when no packet arrives: (1) does the CC1101 answer on SPI? (2) frequency,
-  (3) deviation/bandwidth, (4) sync word/length, (5) wiring/antenna.
+`tools/README.md` inventories the remaining probes, scans and watches (current flow vs. historical
+diagnostics) and the contracts every tool obeys — no secret written or printed, no success claimed
+without a measurement, no window concluded on without checking the chip's state — and the method rules
+hold throughout: a decoding claim cites a raw log line, never trust a script through a pipe, one
+hypothesis at a time on the radio side, never delete a log trace.
 
 ---
 
 ## Known pitfalls of this build (measured, not supposed)
 
-* **`loop()` is interrupt-driven: an early `return` in `setup()` that skips `attach_interrupt` makes
-  the board permanently deaf, with no other symptom.** The component calls `disable_loop()` at the
-  top of `loop()`; only the GDO0 edge interrupt wakes it again. If the interrupt is not attached, the
-  chip still receives: FIFO filled, GDO0 high, `MARCSTATE = 0x0D`, register writes verified,
-  `radio=ok` — and **no frame, ever**. This is what our non-blocking identity re-read did until
-  03/10: it returned before the `defer()` that attaches GDO0, so any boot where the chip was slow to
-  answer (about one in two, and more often right after an OTA) ended up configured and deaf. The
-  stock ESPHome driver has no such early return, which is why it looked like it decoded better.
-  The interrupt is now attached **before any early return**, and `reset()` re-attaches it so a
-  re-arm really recovers.
-
-1. **The CC1101 must remain the ONLY device on its SPI bus.** Declaring a second SPI device in the
-   YAML — even with a **free, unwired** CS pin — is enough to silence the chip: 0 captures, 0 frames,
-   no error. Measured by alternating with a reference firmware on the same board in the same emission
-   windows: 0 frames/60 s with it, 5 frames/60 s without. This is what cost this project the most (a
-   diagnostic instrumentation caused it): **instrumenting the chip from the same firmware costs the
-   reception.** Measure from outside (log capture) instead.
-2. **The station transmits CONTINUOUSLY** — one burst every 20 s, day and night. A "0 frame" is
-   therefore **never** silence from the station: it is the receiver. But a "0 frame" proves nothing
-   unless a reference receiver decoded in the **same window** — because one boot in two brings up a
-   mute chip (pitfall 7), an empty window can be either a mute board or an absence of emission. This
-   lesson comes from a corrected mistake: the station's supposed "silent phases" (11:36→12:36 and
-   13:53→14:53 on 01/10) were in fact **mute boards**. `tools/ab_cycle.py` alternates two firmwares
-   (flash a frozen binary → wait → capture → JSONL line) to compare under equal conditions in time.
-3. **No `gdo0_pin` in the `cc1101` block** when `remote_receiver` consumes the same pin: the
-   component schedules a deferred `pin_mode(INPUT)` that breaks the RMT channel.
-4. **`ota: encryption: {}`** makes the API key serve as the OTA key (no separate password to manage).
-   Conversely, to take over a board running third-party firmware you need a fallback YAML **without**
-   `encryption:` under `ota:` (`esphome/flash-plain.yaml`) plus the already-compiled binary via
-   `--file`.
-5. **Only stitch FRAGMENTS of a burst, never a whole burst.** The C3's RMT sometimes delivers a burst
-   in two pieces (96 + 82 pulses) and they have to be rejoined by merging same-sign pulses at the
-   seam. But applying that stitching to **every** capture makes it re-read the PREVIOUS burst:
-   measured on 01/10, the faulty version published **60 frames for 30 measurements** (each TX counter
-   exactly twice, 20 s apart, outside the 5 s anti-duplicate window). Hence the rule: decode the
-   capture ALONE first, stitch only if it is too short to carry a burst (`MAX_FRAGMENT_TIMINGS`).
-   Exercised by the `_coupe_*` tests.
-6. **A well-formed frame is not a JUST frame.** Measured on 01/10 over a one-hour window: out of 181
-   valid frames (header + checksum + counter all good, 20.0 s cadence), **2 were wrong** — a one-bit
-   shift at extraction doubles every value byte, and they reported 178.2 mm of rain instead of 59.2
-   and a direction of 779°. The checksum of a bit-shifted frame can therefore pass. Hence two rules:
-   (a) a **plausibility gate** in the firmware (`vevor_protocol.h`) refuses what is physically
-   impossible — direction > 359°, humidity > 100 %, wind > 180 km/h, UV > 16 — and the component
-   counts them in its rejections; (b) **stitching fragments** is not innocent: it applies only to
-   captures too short to carry a burst, never to a complete one.
-7. **One boot in two can bring up the chip absent from the SPI bus** — and nothing signals it except a
-   silent `captures=0`. Measured on 01/10 over 6 flash → measure cycles with the same binary:
-   mute / healthy / mute / healthy / mute / healthy. On the mute boots the component reads back
-   `Chip ID: 0xFFFF` (all SPI reads `0xFF`): the chip does not answer, is never configured, stays in
-   factory IDLE and produces nothing on GDO0. The hot re-arm (`reset` + settings + `begin_rx`) does
-   **not** recover it (3 attempts, 3 failures); **the reboot does** — the chip's state flips at each
-   boot, because the chip keeps its registers while the ESP32 restarts. Hence the embedded
-   supervision (`interval: 20s`): radio state logged every 20 s, 30 soft re-initialisation attempts
-   (30 × 20 s = 10 min) while no **new frame** is published, then an **automatic reboot**. The reboot
-   is triggered by frame silence alone, without consulting `is_failed()`: since the station transmits
-   continuously, any prolonged silence is a receiver fault whatever the cause. Ten reboots in quick
-   succession (one per ~10 min cycle), then falling back to one reboot every 15 min.
+* **`loop()` is interrupt-driven: an early `return` in `setup()` that skips `attach_interrupt` makes the
+  board permanently deaf, with no other symptom.** The component calls `disable_loop()` at the top of
+  `loop()`; only the GDO0 edge interrupt wakes it again. Without the interrupt the chip still receives
+  (FIFO filled, GDO0 high, register writes verified) and **no frame, ever**, arrives; it is now attached
+  **before any early return**, and `reset()` re-attaches it.
+* **1 — The CC1101 must remain the ONLY device on its SPI bus.** A second SPI device in the YAML — even
+  with a **free, unwired** CS pin — silences the chip: 0 captures, 0 frames, no error (0 frames / 60 s
+  with it, 5 frames / 60 s without, against a reference firmware). **Instrumenting the chip from the
+  same firmware costs the reception** — measure from outside (log capture) instead.
+* **2 — The station transmits CONTINUOUSLY**, one burst every 20 s, day and night. A "0 frame" is
+  therefore **never** silence from the station: it is the receiver — but it proves nothing unless a
+  reference receiver decoded in the **same window**, because one boot in two brings up a mute chip
+  (pitfall 7). The station's supposed "silent phases" were in fact **mute boards**.
+* **3 — No `gdo0_pin` in the `cc1101` block** when `remote_receiver` consumes the same pin: the
+  component schedules a deferred `pin_mode(INPUT)` that breaks the RMT channel.
+* **4 — `ota: encryption: {}`** makes the API key serve as the OTA key. To take over a board running
+  third-party firmware you need a fallback YAML **without** `encryption:` under `ota:`
+  (`../esphome/flash-plain.yaml`) plus the prebuilt binary via `--file`.
+* **5 — Only stitch FRAGMENTS of a burst, never a whole burst.** The C3's RMT sometimes delivers a
+  burst in two pieces (96 + 82 pulses), rejoined by merging same-sign pulses at the seam; applying that
+  to **every** capture re-reads the PREVIOUS burst (the faulty version published **60 frames for 30
+  measurements**). Rule: decode the capture ALONE first, stitch only if too short (`MAX_FRAGMENT_TIMINGS`).
+* **6 — A well-formed frame is not a JUST frame.** Over one hour, out of 181 valid frames (header +
+  checksum + counter all good), **2 were wrong**: a one-bit shift doubles every value byte, reporting
+  178.2 mm instead of 59.2 and a direction of 779°, and such a checksum can still pass. Hence the
+  **plausibility gate** (direction > 359°, humidity > 100 %, wind > 180 km/h, UV > 16).
+* **7 — One boot in two can bring up the chip absent from the SPI bus**, signalled by nothing but a
+  silent `captures=0` (over 6 cycles: mute / healthy / mute / healthy / mute / healthy): it reads
+  `Chip ID: 0xFFFF`, the hot re-arm does **not** recover it, **the reboot does**. Hence the supervision:
+  re-initialisation attempts while no **new frame** is published, then an **automatic reboot**.
 
 ## USB access from an LXC container (Proxmox)
 
-To flash over USB from a container, pass the host's serial port into the LXC
-(`/etc/pve/lxc/<id>.conf`, then restart the container). The ESP32-C3 appears as
-**USB-Serial-JTAG**, i.e. as **`/dev/ttyACM0`** (character device, major **166**) — and **not** as
-`/dev/ttyUSB0` (major 188), which may exist without being usable (`c---------`):
+To flash over USB from a container, pass the host's serial port into the LXC (`/etc/pve/lxc/<id>.conf`,
+then restart): the ESP32-C3 appears as **`/dev/ttyACM0`** (USB-Serial-JTAG, major **166**) — **not**
+`/dev/ttyUSB0` (major 188), which may exist without being usable (`c---------`).
 
 ```
 lxc.mount.entry: /dev/ttyACM0 dev/ttyACM0 none bind,optional,create=file
 lxc.cgroup2.devices.allow: c 166:* rwm
 ```
 
-Then check `ls -l /dev/ttyACM0` (the node must be `crw-rw----` and reachable) and membership of the
-`dialout` group (`usermod -aG dialout <user>`). Without this, compilation, OTA and logs still work,
-but the very first flash has to be done elsewhere (web.esphome.io or the ESPHome add-on).
+Then check `ls -l /dev/ttyACM0` (`crw-rw----`, reachable) and membership of the `dialout` group. Without
+this everything but the first flash still works (use web.esphome.io or the ESPHome add-on).
 
 ## Licence and attributions
 
-* **GPL-2.0** (see `LICENSE`).
-* The frame format comes from **rtl_433** (`src/devices/vevor_7in1.c`, GPL-2.0); a reference copy is
-  kept in `references/vevor_7in1.c`. This repository's decoder derives from it, hence the GPL-2.0
-  licence.
-* The **`WizardPC/esphome-vevor-7in1`** project (same protocol, asynchronous architecture) served as
-  a comparison point — measured radio parameters and protocol pitfalls — never as a code base.
+* **GPL-3.0-or-later** (see `../LICENSE`; each source file carries the SPDX header). The frame
+  format comes from **rtl_433** (`src/devices/vevor_7in1.c`, GPL-2.0-or-later); a reference copy is
+  kept in `references/vevor_7in1.c`. The licence floor is the local `cc1101` fork: ESPHome publishes
+  its C++ code under the GPLv3 (`esphome/components/cc1101/README-LOCAL.md`).
+* The **`WizardPC/esphome-vevor-7in1`** project (MIT, <https://github.com/WizardPC/esphome-vevor-7in1>,
+  same protocol, asynchronous architecture) served as a comparison point — measured radio parameters
+  and protocol pitfalls — never as a code base.
 * The **Vevor YT60309 owner's manual** is the source for two facts only: the console computes its six
-  forecast icons from its own barometer, and the ice alert trips below 1 °C. No manual text is
-  redistributed here beyond those short quotations.
+  forecast icons from its own barometer, and the ice alert trips below 1 °C.

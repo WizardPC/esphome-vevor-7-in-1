@@ -25,13 +25,36 @@ classification is done by whoever reads it, with the raw bytes in hand.
 
 import datetime
 import json
+import os
 import pathlib
 import sys
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-HA_URL = "http://192.168.2.104"
-PREFIX = "sensor.jardin_vevor_7_in_1_weather_station_"
+# No address and no device name in the code (dev/tools/_common.py is the reference for that rule):
+# $HA_URL / $VEVOR_HA_PREFIX, else the git-ignored .ha_url file and the measured entity listing.
+HA_URL = os.environ.get("HA_URL") or (
+    (ROOT / ".ha_url").read_text(encoding="utf-8").strip() if (ROOT / ".ha_url").exists() else "")
+if not HA_URL:
+    sys.exit("no Home Assistant address: set $HA_URL or create .ha_url")
+
+
+def ha_prefix() -> str:
+    """The device prefix is an installation value, never a constant: $VEVOR_HA_PREFIX, else the
+    measured listing (dev/docs/ha-entities.txt), the same source the dashboard card check uses."""
+    prefix = os.environ.get("VEVOR_HA_PREFIX", "").strip()
+    if prefix:
+        return prefix + "." if prefix.endswith("sensor") else prefix
+    for line in (ROOT / "dev/docs/ha-entities.txt").read_text(encoding="utf-8").splitlines():
+        entity = line.split("#")[0].strip()
+        if entity.endswith("_outdoor_temperature"):
+            domain, name = entity.split(".", 1)
+            return domain + "." + name[: -len("outdoor_temperature")]
+    sys.exit("no device prefix: set $VEVOR_HA_PREFIX, or refresh dev/docs/ha-entities.txt "
+             "(dev/tools/check_ha_card.py --refresh)")
+
+
+PREFIX = ha_prefix()
 STATE = ROOT / "dev/state/temperature_watch_last.txt"
 # A 20 s frame cannot move the temperature by more than this: sensor and air have thermal mass.
 SPIKE_C = 6.0
@@ -49,103 +72,103 @@ def ha_history(entity: str, since: datetime.datetime):
 def decode_temperature(raw: str):
     """Return (temperature, every other field) from an ESPHome hex frame, or None."""
     try:
-        octets = [int(x, 16) for x in raw.split()]
+        byte_values = [int(x, 16) for x in raw.split()]
     except ValueError:
         return None
-    if len(octets) < 21 or octets[0] != 0xAA:
+    if len(byte_values) < 21 or byte_values[0] != 0xAA:
         return None
-    temp = (octets[5] * 256 + octets[6] - 500) / 10.0
+    temp = (byte_values[5] * 256 + byte_values[6] - 500) / 10.0
     return {
         "temperature": temp,
-        "station_id": octets[2] * 256 + octets[3],
-        "humidity": octets[7],
-        "wind_raw": octets[8] * 256 + octets[9],
-        "gust_raw": octets[10],
-        "direction_raw": octets[11] * 256 + octets[12],
-        "rain_raw": octets[13] * 256 + octets[14],
-        "uv": octets[15],
-        "lux_raw": octets[16] * 256 + octets[17],
-        "tx_counter": octets[18],
-        "byte19": octets[19],
-        "byte20": octets[20],
-        "counter_pair_ok": octets[20] == (octets[18] + 1) & 0xFF,
+        "station_id": byte_values[2] * 256 + byte_values[3],
+        "humidity": byte_values[7],
+        "wind_raw": byte_values[8] * 256 + byte_values[9],
+        "gust_raw": byte_values[10],
+        "direction_raw": byte_values[11] * 256 + byte_values[12],
+        "rain_raw": byte_values[13] * 256 + byte_values[14],
+        "uv": byte_values[15],
+        "lux_raw": byte_values[16] * 256 + byte_values[17],
+        "tx_counter": byte_values[18],
+        "byte19": byte_values[19],
+        "byte20": byte_values[20],
+        "counter_pair_ok": byte_values[20] == (byte_values[18] + 1) & 0xFF,
     }
 
 
 def main() -> int:
-    heures = 6.0
+    hours = 6.0
     if "--hours" in sys.argv:
-        heures = float(sys.argv[sys.argv.index("--hours") + 1])
+        hours = float(sys.argv[sys.argv.index("--hours") + 1])
 
     # Window: since the previous run when that is longer, so nothing falls between two ticks.
     now = datetime.datetime.now(datetime.timezone.utc)
-    debut = now - datetime.timedelta(hours=heures)
+    start = now - datetime.timedelta(hours=hours)
     if STATE.exists():
         try:
-            precedent = datetime.datetime.fromisoformat(STATE.read_text(encoding="utf-8").strip())
-            debut = min(debut, precedent)
+            previous_run = datetime.datetime.fromisoformat(STATE.read_text(encoding="utf-8").strip())
+            start = min(start, previous_run)
         except ValueError:
             pass
 
-    faits = []
-    faits.append("window: %s -> %s UTC (%.1f h)"
-                 % (debut.strftime("%d/%m %H:%M"), now.strftime("%d/%m %H:%M"), heures))
+    facts = []
+    facts.append("window: %s -> %s UTC (%.1f h)"
+                 % (start.strftime("%d/%m %H:%M"), now.strftime("%d/%m %H:%M"), hours))
 
     # --- Restarts: the sensor names the cause, that is what it was added for.
-    redemarrages = []
-    for point in ha_history("reset_reason", debut):
-        etat = str(point.get("state"))
+    restarts = []
+    for point in ha_history("reset_reason", start):
+        state = str(point.get("state"))
         t = point.get("last_changed", point.get("last_updated", ""))
-        if etat not in ("unavailable", "unknown"):
-            redemarrages.append((t[11:19], etat))
-    faits.append("restarts seen: %d" % len(redemarrages))
-    for t, etat in redemarrages:
-        faits.append("   %s UTC  %s" % (t, etat))
+        if state not in ("unavailable", "unknown"):
+            restarts.append((t[11:19], state))
+    facts.append("restarts seen: %d" % len(restarts))
+    for t, state in restarts:
+        facts.append("   %s UTC  %s" % (t, state))
 
     # --- Temperature spikes, with the raw frame that carried them when HA kept it.
-    brut = ha_history("last_raw_frame", debut)
-    trame_vers = []
-    for point in brut:
-        trame_vers.append((point.get("last_changed", point.get("last_updated", "")), str(point.get("state"))))
+    raw_history = ha_history("last_raw_frame", start)
+    raw_frames = []
+    for point in raw_history:
+        raw_frames.append((point.get("last_changed", point.get("last_updated", "")), str(point.get("state"))))
 
-    pics = []
-    precedent = None
-    for point in ha_history("outdoor_temperature", debut):
+    spikes = []
+    previous = None
+    for point in ha_history("outdoor_temperature", start):
         try:
-            valeur = float(point.get("state"))
+            value = float(point.get("state"))
         except (TypeError, ValueError):
             continue
         t = point.get("last_changed", point.get("last_updated", ""))
-        if precedent is not None and abs(valeur - precedent) > SPIKE_C:
+        if previous is not None and abs(value - previous) > SPIKE_C:
             # the raw frame at that instant, if Home Assistant recorded one
-            proche = None
-            for ts, s in trame_vers:
+            nearest = None
+            for ts, s in raw_frames:
                 if ts <= t:
-                    proche = s
-            pics.append((t, precedent, valeur, proche))
-        precedent = valeur
+                    nearest = s
+            spikes.append((t, previous, value, nearest))
+        previous = value
 
-    faits.append("temperature spikes (> %.1f C between two frames): %d" % (SPIKE_C, len(pics)))
-    for t, avant, apres, proche in pics:
-        faits.append("   %s UTC  %.1f -> %.1f C" % (t[11:19], avant, apres))
-        if proche and "aa 00" in proche:
-            faits.append("      raw: %s" % proche)
-            detail = decode_temperature(proche)
+    facts.append("temperature spikes (> %.1f C between two frames): %d" % (SPIKE_C, len(spikes)))
+    for t, before, after, nearest in spikes:
+        facts.append("   %s UTC  %.1f -> %.1f C" % (t[11:19], before, after))
+        if nearest and "aa 00" in nearest:
+            facts.append("      raw: %s" % nearest)
+            detail = decode_temperature(nearest)
             if detail:
-                faits.append("      decoded: %s" % json.dumps(detail))
+                facts.append("      decoded: %s" % json.dumps(detail))
 
     # --- Counters right now: context for whatever is reported above.
-    for entite, nom in (("valid_frames", "valid frames"), ("rejected_frames", "rejected frames"),
-                        ("rmt_captures", "RMT captures"), ("reset_reason", "reset reason now"),
-                        ("outdoor_temperature", "temperature now")):
-        points = ha_history(entite, now - datetime.timedelta(minutes=20))
+    for entity, label in (("valid_frames", "valid frames"), ("rejected_frames", "rejected frames"),
+                          ("rmt_captures", "RMT captures"), ("reset_reason", "reset reason now"),
+                          ("outdoor_temperature", "temperature now")):
+        points = ha_history(entity, now - datetime.timedelta(minutes=20))
         if points:
-            faits.append("%s: %s" % (nom, points[-1].get("state")))
+            facts.append("%s: %s" % (label, points[-1].get("state")))
 
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(now.isoformat(), encoding="utf-8")
 
-    print("\n".join(faits))
+    print("\n".join(facts))
     return 0
 
 

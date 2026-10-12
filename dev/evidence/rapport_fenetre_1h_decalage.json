@@ -1,5 +1,5 @@
 {
-  "logfile": "logs/fenetre_1h_cond_20261001.log",
+  "logfile": "dev/logs/fenetre_1h_cond_20261001.log",
   "frames_found": 181,
   "frames_valid": 181,
   "checksum_fail": 0,
@@ -1853,7 +1853,7 @@
       "lux": 12606,
       "ts": "13:20:03",
       "problems": [
-        "direction hors plage: 779°"
+        "direction out of range: 779°"
       ]
     },
     {
@@ -2590,7 +2590,7 @@
       "lux": 11885,
       "ts": "13:31:23",
       "problems": [
-        "direction hors plage: 835°"
+        "direction out of range: 835°"
       ]
     },
     {
@@ -3813,17 +3813,17 @@
     }
   ],
   "findings": [
-    "ID 33995: 2 incohérence(s) de compteur TX — compteur TX 175 → 173 (écart 254 pour 20 s, soit 39 attendus); compteur TX 173 → 214 (écart 41 double publication dans la même seconde)",
-    "ID 33995: pluie décroissante [59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 178.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 178.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2] → suspicion de mauvais mapping d'octets",
-    "ID 33995: 2 trame(s) à valeurs implausibles — direction hors plage: 779°; direction hors plage: 835°",
-    "cadence: 179/179 intervalles significatifs entre 15 et 25 s — la station émet une rafale toutes les 20 s",
-    "firmware: les 181 trames publiées par le C++ concordent champ par champ avec le décodeur Python indépendant"
+    "ID 33995: 2 TX counter incoherence(s) — TX counter 175 → 173 (gap 254 for 20 s, i.e. 39 expected); TX counter 173 → 214 (gap 41 double publication in the same second)",
+    "ID 33995: decreasing rain [59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 178.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 178.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2, 59.2] → suspicion of wrong byte mapping",
+    "ID 33995: 2 frame(s) with implausible values — direction out of range: 779°; direction out of range: 835°",
+    "cadence: 179/179 significant intervals between 15 and 25 s — the station emits one burst every 20 s",
+    "firmware: the 181 frames published by the C++ agree field by field with the independent Python decoder"
   ],
   "verdict": "FAIL",
   "reasons_fail": [
-    "pluie décroissante",
-    "valeurs implausibles (ou incohérence lux/UV)",
-    "2 incohérence(s) de compteur TX"
+    "decreasing rain",
+    "implausible values (or lux/UV incoherence)",
+    "2 TX counter incoherence(s)"
   ],
   "ts_deltas_s": [
     20,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 // Vevor 7-in-1 frame extractor from the CC1101 demodulated stream.
 //
@@ -12,7 +13,7 @@
 // HARD RULE — NEVER INSTRUMENT THE CHIP FROM THIS FIRMWARE
 //
 // A second SPI device on the `cc1101` bus makes the chip mute: 0 RMT captures and 0 frames with it,
-// 5 frames/60 s without it. Removed, not disabled (dev/docs/firmware-design-notes.md §4) — the chip
+// 5 frames/60 s without it. Removed, not disabled (dev/docs/firmware-design-notes.md) — the chip
 // must stay the only device on its bus.
 
 #include <cmath>
@@ -39,7 +40,7 @@
 //     - source: github://WizardPC/esphome-vevor-7-in-1@main
 //       components: [vevor_7in1, cc1101]
 //
-// Testable off-hardware: tools/run_tests.sh.
+// Testable off-hardware: dev/tools/run_tests.sh.
 #include "vevor_protocol.h"
 
 namespace esphome {
@@ -59,7 +60,7 @@ static const uint32_t HEARTBEAT_MS = 5000;
 class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase {
  public:
   void set_receiver(remote_receiver::RemoteReceiverComponent *r) { this->receiver_ = r; }
-  // The radio, so the watchdog can re-arm it (a full reset, see design notes §8). Declared here,
+  // The radio, so the watchdog can re-arm it (a full reset, see the design notes). Declared here,
   // never driven from the YAML: the policy is code.
   void set_radio(cc1101::CC1101Component *r) { this->radio_ = r; }
 
@@ -69,7 +70,7 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   void set_parameter(uint8_t p, float value);
   // Put the station filter back in learning mode: the station's ID changes at every battery change,
   // so re-learning must never require a reflash.
-  void reapprendre_station_id();
+  void relearn_station_id();
   // Initial pin, straight from the YAML (0 = learn). 2 is PARAM_STATION_ID in the .cpp, and the
   // same identifier the number platform uses — the mapping lives in number/__init__.py.
   void set_station_id(uint16_t id) { this->set_parameter(2, static_cast<float>(id)); }
@@ -201,7 +202,7 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   uint32_t window_times_[RATE_WINDOW]{};
   size_t window_count_{0};
   size_t window_head_{0};
-  void update_rate_window_(uint8_t compteur);
+  void update_rate_window_(uint8_t counter);
   // One single place computes the ratio; the three public accessors lean on it.
   void compute_rate_window_(uint32_t &decoded, uint32_t &emitted) const;
   uint32_t captures_{0};
@@ -252,7 +253,7 @@ class Vevor7in1 : public Component, public remote_base::RemoteReceiverDumperBase
   bool receiver_dumped_{false};
   uint32_t heartbeats_{0};
 
-  // --- Reception watchdog (policy in code, never in the YAML; design notes §8) ---
+  // --- Reception watchdog (policy in code, never in the YAML; the design notes) ---
   // One single copy of this logic: if you change it here, that is the change.
   cc1101::CC1101Component *radio_{nullptr};
   // Silent slots before a re-arm, and total silence before a restart: the only two settings

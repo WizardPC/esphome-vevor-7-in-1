@@ -25,15 +25,15 @@ DEFAULT_HOST = os.environ.get("VEVOR_HOST", "")
 DEFAULT_PORT = 6053
 ESPHOME = ROOT / ".venv" / "bin" / "esphome"
 PY = ROOT / ".venv" / "bin" / "python"
-# Witness (reference project) is built outside the repo; overridable via $VEVOR_TEMOIN_DIR.
-TEMOIN = pathlib.Path(os.environ.get(
-    "VEVOR_TEMOIN_DIR", str(pathlib.Path.home() / "projets" / "_temoins")))
+# Witness (reference project) is built outside the repo; overridable via $VEVOR_WITNESS_DIR.
+WITNESS = pathlib.Path(os.environ.get(
+    "VEVOR_WITNESS_DIR", str(pathlib.Path.home() / "projets" / "_temoins")))
 
 # --- Return codes -----------------------------------------------------------
 RC_OK = 0
 RC_SIGNAL_ABSENT = 1
-RC_ERREUR = 2
-RC_MESURE_NULLE = 3
+RC_ERROR = 2
+RC_NULL_MEASUREMENT = 3
 
 
 # ESPHome YAML `encryption:` block (private: use key_from_yaml / resolve_key).
@@ -172,21 +172,21 @@ class Device:
 # --- Variant table: single source of truth ----------------------------------
 # name: (workdir, YAML, frozen OTA binary, description)
 VARIANTS: dict[str, tuple[pathlib.Path, str, pathlib.Path, str]] = {
-    "temoin": (TEMOIN / "witness-test", "witness.yaml",
-               TEMOIN / "witness-test/.esphome/build/vevor-weather-station/build/firmware.ota.bin",
-               "reference project (WizardPC/esphome-vevor-7in1), compiled by us"),
-    "origine": (ROOT / "esphome", "vevor-7in1.yaml",
-                DEV / "build/variants/nous_pilote_origine.ota.bin",
-                "ESPHome original driver, our YAML"),
+    "witness": (WITNESS / "witness-test", "witness.yaml",
+                WITNESS / "witness-test/.esphome/build/vevor-weather-station/build/firmware.ota.bin",
+                "reference project (WizardPC/esphome-vevor-7in1), compiled by us"),
+    "original": (ROOT / "esphome", "vevor-7in1.yaml",
+                 DEV / "build/variants/nous_pilote_origine.ota.bin",
+                 "ESPHome original driver, our YAML"),
     "prod": (ROOT / "esphome", "vevor-7in1.yaml",
              DEV / "build/variants/nous_prod.ota.bin",
              "our production firmware"),
-    "prod_corrige": (ROOT / "esphome", "vevor-7in1.yaml",
-                     DEV / "build/variants/nous_prod_corrige.ota.bin",
-                     "our driver + the 03/10 fix (GDO0 interrupt attached before any early return)"),
-    "prod_avant_revue": (ROOT / "esphome", "vevor-7in1.yaml",
-                         DEV / "build/variants/prod_avant_revue.ota.bin",
-                         "our firmware from before the review"),
+    "prod_fixed": (ROOT / "esphome", "vevor-7in1.yaml",
+                   DEV / "build/variants/nous_prod_corrige.ota.bin",
+                   "our driver + the 03/10 fix (GDO0 interrupt attached before any early return)"),
+    "prod_pre_review": (ROOT / "esphome", "vevor-7in1.yaml",
+                        DEV / "build/variants/prod_avant_revue.ota.bin",
+                        "our firmware from before the review"),
 }
 
 
@@ -207,8 +207,8 @@ TS_RE = re.compile(r"^\[(\d{2}:\d{2}:\d{2})\]")
 # contains the same French word — its key silently ignores number_command and the setting did
 # nothing. Never unanchor it.
 FREQ_RE = re.compile(r"cc1101 frequency", re.I)      # entity "CC1101 frequency"
-VALID_RE = re.compile(r"^\s*trames valides", re.I)
-REJECT_RE = re.compile(r"^\s*trames rejet", re.I)
+VALID_RE = re.compile(r"^\s*valid frames", re.I)
+REJECT_RE = re.compile(r"^\s*rejected frames", re.I)
 RSSI_RE = re.compile(r"^\s*rssi\b", re.I)
 CAP_RE = re.compile(r"captures=(\d+) \(\+(\d+)\)")
 RAW_RE = re.compile(r"RAW[ :=]+((?:[0-9a-fA-F]{2}[ \t]+){20}[0-9a-fA-F]{2})")

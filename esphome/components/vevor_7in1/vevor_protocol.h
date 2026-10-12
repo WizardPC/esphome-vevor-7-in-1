@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 // Vevor 7-in-1 868/915 MHz frame decoder — port of vevor_7in1.c (rtl_433).
 // Frame spec: references/PROTOCOL.md
@@ -58,15 +59,15 @@ inline bool counter_ok(const uint8_t *b) { return b[20] == (uint8_t)(b[18] + 1);
 
 // Continuity guard for REPAIRED frames: same station ID as the last accepted frame, temperature
 // within 1 °C and humidity within 5 %. Measured on 200 random payloads: 0 published — a zero-cost
-// precaution, not a measured necessity (dev/docs/bit-jitter-analysis.md §5ter).
-inline bool continuite_ok(const Frame &f, const Frame &precedente) {
-  if (f.id != precedente.id) {
+// precaution, not a measured necessity (dev/docs/bit-jitter-analysis.md).
+inline bool continuity_ok(const Frame &f, const Frame &previous) {
+  if (f.id != previous.id) {
     return false;
   }
-  const float dt = f.temp_c > precedente.temp_c ? f.temp_c - precedente.temp_c
-                                                : precedente.temp_c - f.temp_c;
-  const int dh = f.humidity > precedente.humidity ? f.humidity - precedente.humidity
-                                                  : precedente.humidity - f.humidity;
+  const float dt = f.temp_c > previous.temp_c ? f.temp_c - previous.temp_c
+                                                : previous.temp_c - f.temp_c;
+  const int dh = f.humidity > previous.humidity ? f.humidity - previous.humidity
+                                                  : previous.humidity - f.humidity;
   return dt <= 1.0f && dh <= 5;
 }
 
@@ -82,9 +83,9 @@ static constexpr float WIND_LIMIT_MARGE_KMH = 0.01f;
 //
 // The rise bound is physical: the gauge tips 0.233 mm, so +5 mm between two 20 s bursts = 21 tips =
 // 15 mm/min — beyond any real rain. Do not tighten without a sustained real-rain measurement.
-static constexpr float RAIN_MAX_HAUSSE_MM = 5.0f;
+static constexpr float RAIN_MAX_RISE_MM = 5.0f;
 
-// `connue` = a previous accepted frame to compare against. Without a reference, accept: the frame
+// `known` = a previous accepted frame to compare against. Without a reference, accept: the frame
 // already passed the header, checksum, counter and the rest of the plausibility gate.
 // A 20 s frame cannot carry a temperature step larger than this: the sensor and the air have
 // thermal mass. Measured failure, 07/10/2026: a raw frame with EVERY other field plausible carried
@@ -92,22 +93,22 @@ static constexpr float RAIN_MAX_HAUSSE_MM = 5.0f;
 // held. The escape hatch lives in the component: three identical out-of-range values in a row are
 // accepted, so a genuine step change (moved sensor, cold front) is never blocked for ever.
 static constexpr float TEMP_JUMP_MAX_C = 5.0f;
-inline bool temp_plausible(float nouvelle, float precedente, bool connue) {
-  return !connue || std::fabs(nouvelle - precedente) <= TEMP_JUMP_MAX_C;
+inline bool temp_plausible(float value, float previous, bool known) {
+  return !known || std::fabs(value - previous) <= TEMP_JUMP_MAX_C;
 }
 
-inline bool rain_plausible(float nouvelle, float precedente, bool connue) {
-  if (nouvelle < 0.0f) {
+inline bool rain_plausible(float value, float previous, bool known) {
+  if (value < 0.0f) {
     return false;
   }
-  if (!connue) {
+  if (!known) {
     return true;
   }
-  if (nouvelle < precedente - 0.01f) {
+  if (value < previous - 0.01f) {
     // Decrease: legitimate only towards zero (rain-counter reset).
-    return nouvelle <= 0.01f;
+    return value <= 0.01f;
   }
-  return (nouvelle - precedente) <= RAIN_MAX_HAUSSE_MM;
+  return (value - previous) <= RAIN_MAX_RISE_MM;
 }
 
 // `in`: 21 payload bytes (sync already done by the CC1101 in packet mode).
@@ -256,7 +257,7 @@ inline bool restart_justified(bool frame_decoded, bool healthy_capture, uint32_t
 static const int32_t PERIOD_CANDIDATES[] = {90, 88, 89, 87};
 // Measured: widening this grid (86-90, then 85.0-91.0 µs in 0.1 steps) decodes not one more of the
 // six dump captures (1/6 without the net, whatever the grid). The exact bit rate is not the lock;
-// do not touch it without a measurement that proves it (dev/docs/bit-jitter-analysis.md §2bis).
+// do not touch it without a measurement that proves it (dev/docs/bit-jitter-analysis.md).
 static constexpr size_t PERIOD_CANDIDATE_COUNT =
     sizeof(PERIOD_CANDIDATES) / sizeof(PERIOD_CANDIDATES[0]);
 
@@ -496,8 +497,8 @@ inline bool repair_by_insertion(const uint8_t *bits, size_t payload_bit, uint8_t
       attempt[b] = octet;
     }
     Frame f;
-    const char *raison = "";
-    if (decode(attempt, f, &raison)) {
+    const char *reason = "";
+    if (decode(attempt, f, &reason)) {
       for (size_t i = 0; i < FRAME_BYTES; i++) {
         candidate[i] = attempt[i];
       }

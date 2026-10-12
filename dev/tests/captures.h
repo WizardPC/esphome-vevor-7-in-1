@@ -39,8 +39,8 @@ static const uint8_t VEVOR_CAPTURE_PREFIX[11] = {0xAA, 0x00, 0x84, 0xCB, 0x16,
                                                 0x02, 0x90, 0x50, 0x01, 0x01, 0x00};
 static const int VEVOR_CAPTURE_PREFIX_LEN = 11;
 // 2 of the 6 bursts are not decodable — and must NOT be: the only solution the old
-// insertion repair found was a FABRICATION. For burst 3 (measured on 04/10) it published
-// rain 536.4 mm against 59.2 mm in neighbouring bursts, with a bit inserted at the level
+// insertion repair found was a FABRICATION. For burst 3 it published rain 536.4 mm
+// against 59.2 mm in the neighbouring bursts, with a bit inserted at the level
 // opposite to the pulse — physically impossible; the rain guard rejected it, it never
 // reached Home Assistant.
 // See docs/zero-wind-fabrication.md. Criterion: 4 decodable bursts out of 6.

@@ -9,7 +9,7 @@ side of the estimate has been removed; what follows is the rule book, kept out o
 | Fact | Source |
 |---|---|
 | The console computes its six icons (Sunny, Partly Cloudy, Cloudy, Rainy, Stormy, Snowy) from **its own barometer**: range 600-1100 hPa, pressure trend over the past hour, and the manual itself warns the accuracy is *"about 65-70%"* | Vevor YT60309 owner's manual, *Weather Forecast*, p. 20 |
-| The outdoor 7-in-1 sensor **neither measures nor transmits pressure**. Its payload is temperature, humidity, wind speed, wind direction, rainfall, UV index and illuminance — the 21-byte frame has no pressure field | manual *Specifications*; `references/PROTOCOL.md`; `esphome/components/vevor_7in1/vevor_protocol.h` |
+| The outdoor 7-in-1 sensor **neither measures nor transmits pressure**. Its payload is temperature, humidity, wind speed, wind direction, rainfall, UV index and illuminance — the 21-byte frame has no pressure field | manual *Specifications*; `dev/references/PROTOCOL.md`; `esphome/components/vevor_7in1/vevor_protocol.h` |
 | *"When outdoor temperature is lower than 1 °C/33.8 °F, the snowflake icon will appear"* | manual, *Ice Alert*, p. 20 |
 
 **Consequence: the station's own forecast icon cannot be read off the air with this hardware.** No
@@ -80,15 +80,21 @@ which is exactly why the night case returns `unknown` instead of a plausible-loo
 
 ## 8. Sketch in Home Assistant
 
-A ready-to-paste Lovelace card built on these rules — drop-in replacement for the
-older `esp32_weather` / `jardin_vevor` card — is versioned as
-[`dev/docs/ha-card.yaml`](ha-card.yaml); it needs no helper in Home Assistant (the rain
-window is read from the cumulative counter's `last_changed`), and it is checked
-against the **measured** Home Assistant entity list in
-[`dev/docs/ha-entities.txt`](ha-entities.txt) — the entity prefix depends on the device
-name, which is renamable inside HA, so it is never deduced from the firmware.
-`dev/tools/check_ha_card.py` runs both that check and the rules below against numeric
-scenarios, so the card cannot drift away from this document.
+A ready-to-paste Lovelace card built on these rules — drop-in replacement for the older `esp32_weather`
+/ `jardin_vevor` card — ships in two languages:
+[`examples/ha-card-en.yaml`](../../examples/ha-card-en.yaml) (English) and
+[`examples/ha-card-fr.yaml`](../../examples/ha-card-fr.yaml) (French). Copy it and adapt the entity
+ids to your device name.
+
+* It **does need helpers for the rain tiles**: the hour / day / week / month tiles and the 7-day graph
+  read four `utility_meter` counters on the cumulative rain sensor. The card ships them as a commented
+  block at the end of the file — uncomment it, or delete those tiles. Everything else needs no helper
+  (the freshness tile reads the last frame's `last_changed`).
+* It is checked against the **measured** Home Assistant entity list in
+  [`ha-entities.txt`](ha-entities.txt) — the entity prefix depends on the device name, which is
+  renamable inside HA, so it is never deduced from the firmware.
+  `dev/tools/check_ha_card.py` re-runs that check on **both** cards, plus the rules below against
+  numeric scenarios, so a card cannot drift away from this document.
 
 Starting point, meant to be adapted and tested in your own configuration — it is not deployed
 anywhere and has not been exercised against a live Home Assistant.
@@ -139,7 +145,7 @@ Notes on the sketch:
   of a negative number is a **complex number**: HA then refuses the whole template and the card's icon
   silently disappears (measured 07/10/2026). A local simulation cannot catch it — a checker that
   defines `sin` itself agrees with the card, not with HA. `dev/tools/check_ha_templates.py` submits
-  every card template to HA and fails on any refusal; `run_tests.sh` now runs it as a step.
+  every card template to HA and fails on any refusal; `dev/tools/run_tests.sh` runs it as a step.
 
 ## 9. What this will never give you
 

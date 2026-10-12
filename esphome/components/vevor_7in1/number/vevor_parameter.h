@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 // Watchdog setting, changeable from Home Assistant.
 //
 // No policy here: the value is handed to the component, which alone owns the policy
-// (Vevor7in1::watch_radio_()). See dev/docs/firmware-design-notes.md §8.
+// (Vevor7in1::watch_radio_()). See dev/docs/firmware-design-notes.md.
 
 #include "esphome/core/component.h"
 #include "esphome/components/number/number.h"

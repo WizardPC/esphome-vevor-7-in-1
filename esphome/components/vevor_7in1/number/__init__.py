@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import number
@@ -7,8 +8,8 @@ from .. import CONF_VEVOR_7IN1_ID, Vevor7in1, vevor_7in1_ns
 # Watchdog settings, exposed in Home Assistant.
 #
 # This file holds NO policy: it declares two entities and hands the value to the component, which
-# owns the logic on its own (Vevor7in1::watch_radio_(), see dev/docs/firmware-design-notes.md
-# §8). The YAML only names and bounds the entity.
+# owns the logic on its own (Vevor7in1::watch_radio_(), see dev/docs/firmware-design-notes.md).
+# The YAML only names and bounds the entity.
 
 DEPENDENCIES = ["vevor_7in1"]
 

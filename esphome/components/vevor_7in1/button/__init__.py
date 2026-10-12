@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import button
@@ -7,7 +8,7 @@ from .. import CONF_VEVOR_7IN1_ID, Vevor7in1, vevor_7in1_ns
 # Diagnostic buttons, owned by the component.
 #
 # They used to be `platform: template` with a lambda in the YAML: the YAML carries only logs and
-# declarations (owner's rule, design notes §10). "Re-apply radio config" calls EXACTLY the same
+# declarations (owner's rule, the design notes). "Re-apply radio config" calls EXACTLY the same
 # re-arm as the watchdog, so the two can no longer drift apart.
 
 DEPENDENCIES = ["vevor_7in1"]

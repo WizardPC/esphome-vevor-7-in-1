@@ -44,6 +44,12 @@ apart, then up to 60 re-reads 250 ms apart (≈ 15 s) from `loop()` before givin
 
 ## Maintaining the fork
 
+- **Licence.** These four files (`cc1101.cpp`, `cc1101.h`, `cc1101defs.h`, `cc1101pa.h`) are
+  ESPHome's C++ code, published under the **GPLv3** — ESPHome's own LICENSE file states that "the
+  C++/runtime codebase of the ESPHome project (file extensions .c, .cpp, .h, .hpp, .tcc, .ino) are
+  published under the GPLv3 license", while its Python code is MIT. **This is what sets the licence
+  floor of the whole firmware: the project is distributed under the GPL-3.0-or-later** (see the
+  repository's `LICENSE` and the "Licence" section of the README).
 - **Base version**: ESPHome **2026.9.1** (`esphome version`). It is the only reference; the folder is
   not a versioned package, so on every ESPHome upgrade the upstream fixes are **not picked up
   automatically**.

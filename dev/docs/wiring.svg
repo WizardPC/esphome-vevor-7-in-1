@@ -113,7 +113,7 @@
 
   <!-- ============ Detail B ============ -->
   <rect x="394" y="570" width="340" height="222" rx="8" fill="#fffaf0" stroke="#b7791f"/>
-  <text x="410" y="598" font-size="13.5" font-weight="bold" fill="#7b341e">Detail B — decoupling : 10 µF / 25 V</text>
+  <text x="410" y="598" font-size="13.5" font-weight="bold" fill="#7b341e">Detail B — decoupling: 10 µF</text>
   <line x1="412" y1="630" x2="530" y2="630" stroke="#b7791f" stroke-width="2"/>
   <text x="412" y="622" font-size="11" fill="#7b341e">+3V3 (module VCC)</text>
   <line x1="440" y1="630" x2="440" y2="656" stroke="#b7791f" stroke-width="2"/>
@@ -122,24 +122,23 @@
   <line x1="440" y1="666" x2="440" y2="702" stroke="#b7791f" stroke-width="2"/>
   <line x1="412" y1="702" x2="530" y2="702" stroke="#b7791f" stroke-width="2"/>
   <text x="412" y="720" font-size="11" fill="#7b341e">GND (module)</text>
-  <text x="474" y="664" font-size="11.5" fill="#b7791f">10 µF / 25 V</text>
+  <text x="474" y="664" font-size="11.5" fill="#b7791f">10 µF</text>
   <g font-size="11" fill="#975a16">
     <text x="410" y="750">Soldered across the module's GND and VCC pins.</text>
-    <text x="410" y="766">A 100 nF ceramic at the VCC pin is the recommended</text>
-    <text x="410" y="782">complement (fast edges), not a replacement.</text>
+    <text x="410" y="766">Any voltage rating above the 3.3 V rail will do.</text>
   </g>
 
   <!-- ============ Rules ============ -->
   <rect x="754" y="570" width="372" height="222" rx="8" fill="#f7fafc" stroke="#cbd5e0"/>
-  <text x="770" y="598" font-size="13.5" font-weight="bold" fill="#1a365d">Rules that cost measurements here</text>
+  <text x="770" y="598" font-size="13.5" font-weight="bold" fill="#1a365d">Hard rules</text>
   <g font-size="11" fill="#2d3748">
     <text x="770" y="624">• The CC1101 must stay the ONLY device on its SPI bus:</text>
     <text x="784" y="640">one extra SPI device in the YAML silences the chip</text>
     <text x="784" y="656">(0 frames, 0 captures, no error at all).</text>
     <text x="770" y="680">• Never power the module from 5 V.</text>
-    <text x="770" y="704">• Optional, not fitted: switching the module's 3.3 V</text>
+    <text x="770" y="704">• Optional (not fitted): switching the module's 3.3 V</text>
     <text x="784" y="720">with a logic-level P-MOSFET (gate pulled to 3V3 by</text>
     <text x="784" y="736">10 kΩ, driven by a free GPIO through 1 kΩ) recovers</text>
-    <text x="784" y="752">a mute chip without a reboot. See README §1.2.</text>
+    <text x="784" y="752">a mute chip without a reboot. See the design notes.</text>
   </g>
 </svg>

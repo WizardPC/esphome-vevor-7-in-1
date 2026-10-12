@@ -1,9 +1,9 @@
 # Why single bits go wrong — functional analysis of the 03/10 discovery
 
 Scope: the production receiver (`ESP32-C3 + CC1101`, GPIO3/GDO0 into `remote_receiver`, decoder in
-`esphome/components/vevor_7in1/vevor_protocol.h`). Written after the owner challenged the first fix ("if 5 of 6
-bursts carry the sync word, that cannot be chance — the problem comes from elsewhere"), and after a
-literature check to make sure we were not shipping a placebo.
+`esphome/components/vevor_7in1/vevor_protocol.h`). Written after the owner challenged the first fix ("if
+5 of 6 bursts carry the sync word, that cannot be chance — the problem comes from elsewhere"), and
+after a literature check to make sure we were not shipping a placebo.
 
 ## 1. What was observed
 
@@ -130,22 +130,17 @@ Ordered by expected value, all measurable:
    pinning the behaviour on synthetic bursts before going anywhere near the board. Treat it as the
    next real piece of work, not as a quick win.
 
-2. **Reduce the jitter at the source (physical layer).** A **10 µF bulk is already fitted** at the
-   module's VCC/GND (03/10). TI's reference application also calls for a **100 nF** at the pin — a
-   different job, not a bigger version of the same one: the 10 µF supplies the slow current demand
-   but its ESR/ESL make its impedance rise above roughly 1 MHz, so it decouples nothing at the edge
-   timescales; the small ceramic acts on the fast current spikes, and works because it is soldered
-   as short as possible across the module's pins.
+2. **Reduce the jitter at the source (physical layer).** The module's supply carries a **10 µF** at
+   its VCC/GND (fitted 03/10). Beyond that, the actionable physical-layer lead is the supply itself:
+   the chip reports `CHIP_RDYn` high — "supply or crystal not ready" — which points at supply/quartz
+   **startup**, where the remedy is a supply cycle, not finer decoupling. Decoupling has never been
+   measured as the cause of this jitter on this board; it was carried from the project notes, and is
+   not presented here as the lever it was once assumed to be.
 
-   **Its absence has never been measured as a cause on this board.** It was carried from the project
-   notes ("100 nF not fitted" — true, but that is not a measurement). Do not present it as the lever
-   it was assumed to be. What the chip itself reports — `CHIP_RDYn` high, "supply or crystal not
-   ready" — points at supply/quartz **startup**, where the actionable lever is a supply cycle, not
-   decoupling.
 3. **Question the demodulator's settings as a measured experiment**, one variable at a time: the
-   filter bandwidth (100 kHz for 70 kHz deviation is at the Carson limit), the AGC target, and the
-   RMT's `filter` threshold — the last one being the reason 45-50 µs glitches can still enter the
-   bit stream.
+   filter bandwidth (100 kHz for 70 kHz deviation is at the Carson limit; 162 kHz is the value that
+   works here), the AGC target, and the RMT's `filter` threshold — the last one being the reason
+   45-50 µs glitches can still enter the bit stream.
 
 ## 5bis. Clock track — what worked, what did not (03/10 evening)
 
@@ -160,12 +155,12 @@ Ordered by expected value, all measurable:
   187 of the bit stream); earlier, deleting one bit repaired nothing. So a pulse that should have
   yielded two bits yielded one — a *missing* bit, not an added one. That is the boundary case, and it
   is what the per-pulse rounding gets wrong.
-* **A combination that reaches the acceptance criterion: 5 of 6 bursts decode**, all five carrying the
-  same payload. Contributions: 1 direct, 2 via the one-bit header net, 2 via inserting one bit in the
-  payload. Every path is gated by header + checksum + counter + plausibility gate.
-* **Cost on the target:** the insertion repair is ~168 positions × 21 bytes worst case ≈ 67 k
-  operations, under 1 ms at 160 MHz, and only runs when a sync was found but the frame failed —
-  ~125 times per 12 minutes in practice. Negligible.
+* **The offline prototype reached 5 of 6 bursts**, all five carrying the same payload: 1 direct,
+  2 via the one-bit header net, 2 via inserting one bit in the payload. Every path is gated by header
+  + checksum + counter + plausibility gate. One of those five later turned out to be a fabrication of
+  the insertion repair — see §5ter and `zero-wind-fabrication.md`. Cost on the target: ~168 positions
+  × 21 bytes worst case ≈ 67 k operations, under 1 ms at 160 MHz, and it only runs when a sync was
+  found but the frame failed (~125 times per 12 minutes in practice) — negligible.
 
 **What did not work:**
 
@@ -183,24 +178,23 @@ Ordered by expected value, all measurable:
   plausible story, not the mechanism.
 
 **Honest status:** the bit-level clock recovery is **not achieved**. What is achieved is a self-adapting
-period plus bounded, checksum-validated repairs, reaching 5/6. By the acceptance rule above ("if the
-net is still carrying the result, the recovery is not finished"), the recovery is unfinished and the
-repairs are nets — better ones, but nets. Burst 2 is still unexplained: it needs at least two
-corrections.
+period plus bounded, checksum-validated repairs. By the acceptance rule above ("if the net is still
+carrying the result, the recovery is not finished"), the recovery is unfinished and the repairs are
+nets — better ones, but nets.
 
 ## 5ter. Step 1 implemented (03/10, evening) — measured result
 
 The self-adapting period and the bounded repairs are now in the firmware decoder
-(`esphome/includes/vevor_protocol.h`), with host tests. What is measured, not claimed:
+(`esphome/components/vevor_7in1/vevor_protocol.h`), with host tests. What is measured, not claimed:
 
 | what | result |
 |---|---|
 | period estimator, no station constant | 87.8 / 88.7 / 86.9 / 90.2 µs on synthetic bursts emitted at 88 / 89 / 87 / 90 µs |
-| **real captures replayed in the C++ decoder** | **5 of 6 decoded** — criterion met in the code that ships (`tests/data/captures_reelles.txt`, replayed by `test_captures_reelles`) |
-| the five decoded captures | all carry the station's measurement (identical 11-byte prefix); periods measured at 88.2-89.1 µs |
+| **real captures replayed in the C++ decoder** | **4 of 6 decoded** — the two counter-examples (bursts 2 and 3) need at least a second correction; the shipped test asserts this floor (`dev/tests/data/captures_reelles.txt`, replayed by `test_captures_reelles`) |
+| the decoded captures | all carry the station's measurement (identical 11-byte prefix); periods measured at 88.2-89.1 µs |
 | shortened two-bit pulse (the proven mechanism) | repaired to the **identical** frame |
 | 200 random payloads with a valid sync + header | **0 published** — the repairs do not fabricate frames |
-| firmware test suite | **397 checks, 0 failures** |
+| firmware test suite | **0 failures** — the exact count is the last line of `dev/tools/run_tests.sh` (never quote it here: it changes with every added check) |
 
 Two structural corrections were needed to make the insertion repair work at all, both found by
 measurement rather than reasoning: the frame no longer fits in the search window once a bit is
@@ -208,12 +202,19 @@ missing (`find_frame_candidate` now accepts a payload one bit short), and the bi
 boundaries belong to the **previous** segment, not the next one — my first attempt was shifted by a
 whole segment, which is why it decoded nothing.
 
+**Reconciling "5 of 6" with "4 of 6".** The offline prototype (§5bis) and the first C++ port decoded
+5 of 6, but one of those five was a **fabrication** of the insertion repair: burst 3 was published with
+rain 536.4 mm against 59.2 mm in the neighbouring bursts (see `zero-wind-fabrication.md`). Once the
+repair was constrained to same-level insertions, that frame is no longer published, and the honest
+count on the six real bursts is **4 of 6**. The regression test asserts exactly that floor —
+`VEVOR_CAPTURE_ATTENDUES = 4`, with bursts 2 and 3 as the documented counter-examples — so a change
+that drops a decodable burst is a failure, not a silent pass.
+
 The continuity gate on repaired frames (same station, temperature within 1 °C, humidity within 5 %)
 is kept in the component. Measured fabrication rate is 0/200, so it is a **precaution at zero cost**,
 not a measured necessity — and it is documented as such.
 
-Still open, unchanged: the sixth capture (needs at least two corrections), and the strict bit-clock
-recovery of step 2, which remains research.
+Still open, unchanged: the strict bit-clock recovery of step 2, which remains research.
 
 ## 6. Implementation plan (revised with the 03/10 evening measurements)
 
@@ -224,18 +225,20 @@ recovery of step 2, which remains research.
   keeping the fixed grid as a last-resort fallback.
 * **bounded repairs, all gated by header + checksum + counter + plausibility gate:** the one-bit
   header net (existing), then a **one-bit insertion** search in the payload (~67 k operations worst
-  case, under 1 ms). Measured: 5/6 bursts on the dump, all identical payloads.
+  case, under 1 ms). Measured: 4 of 6 bursts on the real dump, all identical payloads, with the two
+  known counter-examples.
 * add a **counter gate**: the decoded `tx_counter` must be consistent with the previous frame, which
   closes the false-positive door on the repairs and is cheap.
 
-**Step 2 — the actual bit-clock recovery (still open):** the phase-tracked clock described below,
+**Step 2 — the actual bit-clock recovery (still open):** the phase-tracked clock described above,
 which exists to make step 1's repairs unnecessary. Per the measurements, it needs *true* phase
 tracking (a per-edge loop), not a fixed phase search, and it must be shown to beat per-pulse rounding
 under a deliberately wrong period before it is allowed on the board. Until then, step 1 is the
 product; step 2 is research.
 
 **Step 3 — host tests, before anything touches the board:**
-* the six real captures as regression vectors — five must decode, the sixth stays as the counter-example;
+* the six real captures as regression vectors — four must decode, bursts 2 and 3 stay as the
+  counter-examples (the shipped test asserts the floor, not a range);
 * synthetic burst with a known frame and pulse widths jittered ±10 % / ±25 % → decoded;
 * synthetic burst with a delayed/advanced period (±1 %, ±2 %) → shows step 1 robust, and would catch a
   regression that reintroduces cumulative rounding;
@@ -247,6 +250,6 @@ product; step 2 is research.
 * A fix changes the **rate of decodable bursts**, measured on the same dump, offline, with the same
   script before and after. The number to publish is `decoded / bursts`, never "it works now".
 * A palliative raises the rate only where the damage is *predictable* (a constant byte), and leaves
-  the rest untouched. Its own counter-example must be stated: here, bursts 12 and 17.
+  the rest untouched. Its own counter-example must be stated: here, bursts 2 and 3.
 * Every intermediate analysis script must use **the firmware's own arithmetic** (rounding rule
   included) before it accuses the firmware of anything — paid for twice on 03/10.

@@ -1,17 +1,17 @@
 {
-  "fichier": "logs/fenetre_1h_cond_20261001.log",
-  "lignes": 3719,
-  "trames_decodues": 181,
-  "emissions_distinctes": 180,
-  "debut": "12:51:03",
-  "fin": "13:50:43",
-  "duree_couverte_s": 3580,
-  "cadence_mediane_s": 20,
+  "file": "dev/logs/fenetre_1h_cond_20261001.log",
+  "lines": 3719,
+  "decoded_frames": 181,
+  "distinct_emissions": 180,
+  "start": "12:51:03",
+  "end": "13:50:43",
+  "covered_seconds": 3580,
+  "cadence_median_s": 20,
   "cadence_min_s": 20,
   "cadence_max_s": 20,
-  "trous_sup_30s": [],
-  "rejets_firmware": 0,
-  "raisons_rejet_firmware": [],
+  "gaps_over_30s": [],
+  "firmware_rejects": 0,
+  "firmware_reject_reasons": [],
   "ids": [
     33995
   ],
@@ -19,15 +19,15 @@
     19.0,
     20.2
   ],
-  "humidite_pct": [
+  "humidity_pct": [
     53,
     60
   ],
-  "vent_kmh": [
+  "wind_kmh": [
     0.0,
     42.4
   ],
-  "rafale_kmh": [
+  "gust_kmh": [
     1.6,
     28.8
   ],
@@ -35,7 +35,7 @@
     43,
     835
   ],
-  "pluie_mm": [
+  "rain_mm": [
     59.2,
     178.2
   ],
@@ -49,12 +49,12 @@
     11885,
     65160
   ],
-  "pluie_decroissante": true,
-  "valeurs_hors_plage": [
-    "direction hors plage: 779°",
-    "direction hors plage: 835°"
+  "rain_decreasing": true,
+  "out_of_range_values": [
+    "direction out of range: 779°",
+    "direction out of range: 835°"
   ],
-  "emissions_par_10min": {
+  "emissions_per_10min": {
     "770-780 min": 27,
     "780-790 min": 30,
     "790-800 min": 30,
@@ -64,12 +64,12 @@
     "830-840 min": 3
   },
   "verdict": "FAIL",
-  "motifs_fail": [
-    "pluie décroissante",
-    "valeurs implausibles (ou incohérence lux/UV)",
-    "2 incohérence(s) de compteur TX"
+  "reasons_fail": [
+    "decreasing rain",
+    "implausible values (or lux/UV incoherence)",
+    "2 TX counter incoherence(s)"
   ],
-  "rapport": "evidence/rapport_fenetre_1h_decalage.json",
-  "rapport_logfile": "logs/fenetre_1h_cond_20261001.log",
-  "rapport_verdict": "FAIL"
+  "report": "dev/evidence/rapport_fenetre_1h_decalage.json",
+  "report_logfile": "dev/logs/fenetre_1h_cond_20261001.log",
+  "report_verdict": "FAIL"
 }

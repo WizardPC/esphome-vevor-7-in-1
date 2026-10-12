@@ -1,131 +1,43 @@
-# === Secrets : ne JAMAIS publier ===
+# === Secrets — never published ===========================================================
 .ha_token
+# Local Home Assistant address used by the dev checks: never the author's, never in the repo.
+.ha_url
 esphome/secrets.yaml
 secrets.yaml
 *.secret.yaml
 
-# === Build environments and caches (the generated .esphome holds the compiled config,
-#     hence the Wi-Fi passwords and the API keys in the clear) ===
+# === Local environments and build caches =================================================
+# The generated esphome/.esphome/ holds the compiled configuration, hence the Wi-Fi
+# passwords and the API keys in the clear.
 .venv/
 .venv-dev/
 esphome/.esphome/
+build/
 *.bin
 *.elf
 *.map
+*.o
+*.obj
 
-# === Build artefacts (binaries and compilation logs: regenerable) ===
-build/test_decoder
-build/*.log
-build/.build_flash.lock
-
-# === Python ===
+# === Python ==============================================================================
 __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# === Sauvegardes et divers ===
+# === Runtime state and raw measurements (data, not code) =================================
+# dev/state/ holds the device-address cache and the watch states: they belong to the machine
+# that runs the tools. Only the marker is versioned (git does not track empty directories).
+dev/state/*
+!dev/state/.gitkeep
+dev/logs/*
+!dev/logs/.gitkeep
+
+# === Backups and editor leftovers ========================================================
 *.bak
 *.bak-*
 *.orig
 *.tmp
-.tmp_*
-state/.tmp_entry.md
-# Raw measurement logs: data, not code. Produced by the campaign tools (capture_logs.sh);
-# they stay on disk, out of the repository.
-dev/state/panne_*.txt
-dev/state/*.jsonl
-# Etat d'execution des surveillances (propre a la machine qui les fait tourner).
-dev/state/board_watch_state.json
-dev/state/temperature_watch_last.txt
-
-# === Raw measurement logs (2.4 MB of captures): out of the repository by default.
-#     The evidence kept in the repo lives in state/ (PROGRESS.md, DONE.md) and the JSON reports.
-logs/*
-!logs/.gitkeep
-
-# === Sorties de build (journaux de compilation, statuts, binaires de test) ===
-build/
-
-# === C/C++ template provided by GitHub when the repo was created (kept) ===
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-*.so.*
-
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# Build directories
-build/
-Build/
-build-*/
-
-# CMake generated files
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
-install_manifest.txt
-compile_commands.json
-
-# Temporary files
-*.tmp
-*.log
-*.bak
 *.swp
 
-# vcpkg
-vcpkg_installed/
-
-# debug information files
-*.dwo
-
-# test output & cache
-Testing/
-.cache/
-
-# === Code review reports (they contain installation details) ===
+# === Code review reports (they carry installation details) ===============================
 reviews/
-
-# Le dossier des journaux est ignore a tout niveau, SAUF son marqueur (git ne suit pas un dossier vide).
-!dev/logs/.gitkeep
-
-# Depuis la reorganisation, journaux et artefacts vivent sous dev/ : les motifs ci-dessus etaient
-# ancre au dossier du .gitignore et ne les couvraient plus. On ignore le CONTENU (pas le dossier),
-# pour pouvoir garder le marqueur .gitkeep que git exige.
-dev/logs/*
-!dev/logs/.gitkeep
-dev/build/*

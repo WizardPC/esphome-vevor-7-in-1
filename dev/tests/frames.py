@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Vevor 7-in-1 frame encoder — independent of the decoder, for host-side tests.
 
 Inverted of `esphome/components/vevor_7in1/vevor_7in1.h`: from physical values to the 21 raw bytes
@@ -141,8 +142,8 @@ def _scenarios() -> list[tuple[str, list[int], bool, str]]:
     out.append(("temperature_60_acceptee", encode(temp_c=60.0), True, ""))
     out.append(("temperature_moins40_acceptee", encode(temp_c=-40.0), True, ""))
     # Each BRANCH of the gate, exercised by a test frame: well formed (header + checksum +
-    # counter) but physically impossible → rejected WITH the matching reason. Previously only
-    # the "direction" branch had a frame (review round 2, §4).
+    # counter) but physically impossible → rejected WITH the matching reason. Every branch of the
+    # gate has its own test frame.
     out.append(("humidity_101_rejected", encode(humidity=101), False, "humidity"))
     out.append(("temperature_70_rejected", encode(temp_c=70.0), False, "temperature"))
     out.append(("temperature_minus45_rejected", encode(temp_c=-45.0), False, "temperature"))
@@ -281,8 +282,9 @@ def _pulse_scenarios() -> list[tuple[str, list[int], bool, dict, int]]:
 
 def emit_captures(path: pathlib.Path, source: pathlib.Path) -> int:
     """Write tests/captures.h: the REAL bursts recorded from the station, replayed by the C++ test
-    as regression vectors. They carry the project's acceptance criterion (5 of 6 decodable) and
-    alone prove the decoder on real signal; synthetic scenarios only describe what was thought of.
+    as regression vectors. They carry the project's acceptance criterion (4 of 6 decodable — the
+    two others are counter-examples, listed in captures.h) and alone prove the decoder on real
+    signal; synthetic scenarios only describe what was thought of.
     """
     captures: list[list[int]] = []
     for line in source.read_text(encoding="utf-8").splitlines():
@@ -322,8 +324,8 @@ def emit_captures(path: pathlib.Path, source: pathlib.Path) -> int:
         "                                                0x02, 0x90, 0x50, 0x01, 0x01, 0x00};",
         "static const int VEVOR_CAPTURE_PREFIX_LEN = 11;",
         "// 2 of the 6 bursts are not decodable — and must NOT be: the only solution the old",
-        "// insertion repair found was a FABRICATION. For burst 3 (measured on 04/10) it published",
-        "// rain 536.4 mm against 59.2 mm in neighbouring bursts, with a bit inserted at the level",
+        "// insertion repair found was a FABRICATION. For burst 3 it published rain 536.4 mm",
+        "// against 59.2 mm in the neighbouring bursts, with a bit inserted at the level",
         "// opposite to the pulse — physically impossible; the rain guard rejected it, it never",
         "// reached Home Assistant.",
         "// See docs/zero-wind-fabrication.md. Criterion: 4 decodable bursts out of 6.",

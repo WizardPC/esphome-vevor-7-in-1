@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 // Diagnostic buttons owned by the component (see button/__init__.py).
 //
@@ -20,7 +21,7 @@ class VevorButton : public button::Button, public Parented<Vevor7in1> {
     if (this->type_ == 1) {
       this->parent_->reapply_radio();
     } else if (this->type_ == 2) {
-      this->parent_->reapprendre_station_id();
+      this->parent_->relearn_station_id();
     } else {
       this->parent_->request_raw_dump();
     }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Off-hardware tests of the Vevor 7-in-1 decoder.
 #
-#   tools/run_tests.sh
+#   dev/tools/run_tests.sh
 #
 # Steps: Python encoder selfcheck (must reproduce the rtl_433 frame byte for byte)
 #        -> generate test frames -> compile the C++ test -> run.
@@ -35,7 +35,9 @@ echo "=== 2c. generating the REAL bursts (dump regression vectors) ==="
 "$DEV_PY" "$DEV/tests/frames.py" --captures || exit 1
 
 echo "=== 3. compiling the C++ test ==="
-"$DEV_PY" -m ziglang c++ -std=c++17 -w \
+# -Wall -Wextra, no -w: the test builds clean at this level, so a new warning is news rather
+# than noise (hiding them would also hide the warning that announces a real defect).
+"$DEV_PY" -m ziglang c++ -std=c++17 -Wall -Wextra \
   -I "$ROOT/esphome/components/vevor_7in1" -I "$DEV/tests" \
   "$DEV/tests/test_decoder.cpp" -o "$DEV/build/test_decoder" || exit 2
 echo "binary: build/test_decoder"
@@ -43,7 +45,7 @@ echo "binary: build/test_decoder"
 echo "=== 4. run ==="
 "$DEV/build/test_decoder" || exit 4
 
-echo "=== 5. firmware / Home Assistant card / entity listing consistency ==="
+echo "=== 5. firmware / example cards / entity listing consistency ==="
 # This check used to live outside the suite: an entity rename or a file move could break it
 # silently. It is now a step, and its failure fails the suite. It needs PyYAML and jinja2,
 # present in the ESPHome environment.
@@ -54,11 +56,12 @@ else
   echo "  Entity consistency was NOT checked." >&2
 fi
 
-echo "=== 6. every template in the card is ACCEPTED by Home Assistant ==="
+echo "=== 6. every template in the example cards is ACCEPTED by Home Assistant ==="
 # The card's sky icon once used `(elevation | sin)` on a value in DEGREES: HA's `sin` takes radians,
 # the power of a negative number is complex, HA refused the template and the icon vanished from the
 # card. The offline simulation could not see it — it defined `sin` itself. This step simulates
-# nothing: it posts the real templates to HA and fails on any refusal (skipped if HA is unreachable).
+# nothing: it posts the real templates to HA and fails on any refusal (skipped if HA's address is
+# unknown — set $HA_URL or create .ha_url — or if HA is unreachable).
 if [ -x "$ROOT/.venv/bin/python" ]; then
   "$ROOT/.venv/bin/python" "$DEV/tools/check_ha_templates.py" || exit 6
 else

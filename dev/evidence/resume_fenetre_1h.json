@@ -1,17 +1,17 @@
 {
-  "fichier": "logs/verif_garde_fou_60min.log",
-  "lignes": 2223,
-  "trames_decodues": 180,
-  "emissions_distinctes": 180,
-  "debut": "14:58:23",
-  "fin": "15:58:03",
-  "duree_couverte_s": 3580,
-  "cadence_mediane_s": 20,
+  "file": "dev/logs/verif_garde_fou_60min.log",
+  "lines": 2223,
+  "decoded_frames": 180,
+  "distinct_emissions": 180,
+  "start": "14:58:23",
+  "end": "15:58:03",
+  "covered_seconds": 3580,
+  "cadence_median_s": 20,
   "cadence_min_s": 20,
   "cadence_max_s": 20,
-  "trous_sup_30s": [],
-  "rejets_firmware": 0,
-  "raisons_rejet_firmware": [],
+  "gaps_over_30s": [],
+  "firmware_rejects": 0,
+  "firmware_reject_reasons": [],
   "ids": [
     33995
   ],
@@ -19,15 +19,15 @@
     19.2,
     19.9
   ],
-  "humidite_pct": [
+  "humidity_pct": [
     54,
     61
   ],
-  "vent_kmh": [
+  "wind_kmh": [
     1.3,
     13.4
   ],
-  "rafale_kmh": [
+  "gust_kmh": [
     2.4,
     16.8
   ],
@@ -35,7 +35,7 @@
     240,
     310
   ],
-  "pluie_mm": [
+  "rain_mm": [
     59.2
   ],
   "uv": [
@@ -46,9 +46,9 @@
     19890,
     38160
   ],
-  "pluie_decroissante": false,
-  "valeurs_hors_plage": [],
-  "emissions_par_10min": {
+  "rain_decreasing": false,
+  "out_of_range_values": [],
+  "emissions_per_10min": {
     "890-900 min": 5,
     "900-910 min": 30,
     "910-920 min": 30,
@@ -58,8 +58,8 @@
     "950-960 min": 25
   },
   "verdict": "PASS",
-  "motifs_fail": [],
-  "rapport": "evidence/rapport_fenetre_1h.json",
-  "rapport_logfile": "logs/verif_garde_fou_60min.log",
-  "rapport_verdict": "PASS"
+  "reasons_fail": [],
+  "report": "dev/evidence/rapport_fenetre_1h.json",
+  "report_logfile": "dev/logs/verif_garde_fou_60min.log",
+  "report_verdict": "PASS"
 }

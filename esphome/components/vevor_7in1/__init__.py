@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 import esphome.automation as automation
 import esphome.codegen as cg
 import esphome.config_validation as cv
@@ -8,7 +9,7 @@ from esphome.const import CONF_ID
 #
 # Role deliberately limited: turn pulses into bytes and hand the raw frame back to the YAML
 # (`on_frame` trigger). Protocol logic (header, checksum, counter, value ranges) lives in
-# `includes/vevor_protocol.h`, pure C++ testable without hardware (`tools/run_tests.sh`).
+# `includes/vevor_protocol.h`, pure C++ testable without hardware (`dev/tools/run_tests.sh`).
 #
 # NO BIT-PERIOD SETTING, on purpose. The bit period is MEASURED on every burst
 # (estimate_period_x10) and several nearby values are tried on each capture: the station's crystal
@@ -17,7 +18,7 @@ from esphome.const import CONF_ID
 #
 # NO SPI ACCESS. A second SPI device on the CC1101 bus makes the chip mute: 0 captures and 0 frames
 # with it, 5 frames/60 s without it. Removed, not disabled; the chip must stay the only device on
-# its bus (see dev/docs/firmware-design-notes.md §4).
+# its bus (see dev/docs/firmware-design-notes.md).
 
 CODEOWNERS = ["@projet-vevor-7in1"]
 DEPENDENCIES = ["remote_receiver", "cc1101"]

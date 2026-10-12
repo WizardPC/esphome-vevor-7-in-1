@@ -29,7 +29,7 @@ import time
 import asyncio
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _common import (Device, RC_ERREUR, RC_MESURE_NULLE, RC_OK,  # noqa: E402
+from _common import (Device, RC_ERROR, RC_NULL_MEASUREMENT, RC_OK,  # noqa: E402
                      VALID_RE, atomic_write_json, resolve_key)
 
 
@@ -54,7 +54,7 @@ async def do_set(dev: Device, mhz: float) -> int:
     if not ok:
         print(f"# ERROR: the board did NOT take the value (read {got!r}) — see FREQ_RE",
               file=sys.stderr)
-        return RC_ERREUR
+        return RC_ERROR
     return RC_OK
 
 
@@ -62,7 +62,7 @@ async def scan(dev: Device, start: float, stop: float, step: float,
                dwell: float, settle: float) -> list[dict] | None:
     """Returns the measured steps, or None if NOTHING could be measured (missing entity)."""
     # Without the "Valid frames" entity no counter is readable: refuse to conclude
-    # (RC_MESURE_NULLE in main).
+    # (RC_NULL_MEASUREMENT in main).
     if not dev.has(VALID_RE):
         print("# NULL MEASUREMENT: \"Valid frames\" entity missing — no counter to read",
               file=sys.stderr)
@@ -100,7 +100,7 @@ async def scan(dev: Device, start: float, stop: float, step: float,
         print(
             f"{mhz:8.3f} MHz  frames={int(row['frames']):3d} "
             f"(valid={int(row['valid']):3d} rejected={int(row['rejected']):3d})  "
-            f"rssi_max={row['rssi_max']}  rssi_moy={row['rssi_mean']}",
+            f"rssi_max={row['rssi_max']}  rssi_mean={row['rssi_mean']}",
             flush=True,
         )
     return results
@@ -131,7 +131,7 @@ def main() -> int:
             if args.set_mhz is not None:
                 return await do_set(dev, args.set_mhz), []
             rows = await scan(dev, args.start, args.stop, args.step, args.dwell, args.settle)
-            return (RC_MESURE_NULLE if rows is None else RC_OK), rows
+            return (RC_NULL_MEASUREMENT if rows is None else RC_OK), rows
 
     try:
         rc, rows = asyncio.run(run())
@@ -139,10 +139,10 @@ def main() -> int:
         raise
     except Exception as exc:
         print(f"# ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return RC_ERREUR
+        return RC_ERROR
 
     if not rows:
-        if rc == RC_MESURE_NULLE:
+        if rc == RC_NULL_MEASUREMENT:
             print("# NULL MEASUREMENT — nothing was measured (no readable counter)", file=sys.stderr)
         return rc
 
@@ -153,7 +153,7 @@ def main() -> int:
     if total == 0:
         print("# NO FRAME over the whole range (measurement done): check SPI/power, then "
               "deviation, bandwidth, syncword, wiring and antenna "
-              "(see MISSION.md § diagnostic order)")
+              "(diagnostic order: see dev/docs/firmware-design-notes.md)")
     if args.out:
         p = atomic_write_json(args.out, {"rows": rows, "best": best})
         print(f"# report written (atomic): {p}")

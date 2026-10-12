@@ -60,7 +60,7 @@ CC1101Component::CC1101Component() {
   // the chip stops re-centring, the duty cycle distorts, and the decoder refuses frames whose
   // sync word it had nonetheless found — 60 rejects and 0 frames measured at 868.35 on the
   // evening of 05/10, where the same setting gave 7 frames twenty minutes earlier.
-  // BW/2 widens the window to ±81 kHz. See dev/state/CAMPAGNE_20261005.md.
+  // BW/2 widens the window to ±81 kHz.
   this->state_.FOC_LIMIT = 3;
   this->state_.FOC_POST_K = 1;
   this->state_.FOC_PRE_K = 2;

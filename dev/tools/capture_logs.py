@@ -21,7 +21,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _common import (RC_ERREUR, RC_MESURE_NULLE, RC_OK,  # noqa: E402
+from _common import (RC_ERROR, RC_NULL_MEASUREMENT, RC_OK,  # noqa: E402
                      atomic_write_text, out_path, resolve_key)
 
 import aioesphomeapi  # noqa: E402
@@ -67,7 +67,7 @@ async def run(host: str, port: int, key: str | None, seconds: float) -> tuple[in
     await cli.disconnect()
     tail = f"# capture end (started {t0}, {seconds}s) — {len(lines)} log line(s) received"
     print(tail, flush=True)
-    return (RC_OK if lines else RC_MESURE_NULLE), [header, *lines, tail]
+    return (RC_OK if lines else RC_NULL_MEASUREMENT), [header, *lines, tail]
 
 
 def main() -> int:
@@ -90,7 +90,7 @@ def main() -> int:
         raise
     except Exception as exc:
         print(f"# capture ERROR: {type(exc).__name__}: {exc}", flush=True)
-        return RC_ERREUR
+        return RC_ERROR
 
     if args.out:
         p = out_path(args.out)
@@ -100,7 +100,7 @@ def main() -> int:
         atomic_write_text(p, body)
         print(f"# file written (atomic): {p}")
 
-    if rc == RC_MESURE_NULLE:
+    if rc == RC_NULL_MEASUREMENT:
         print("# NULL MEASUREMENT — connection established but NO log line received: "
               "nothing was measured", file=sys.stderr)
     return rc

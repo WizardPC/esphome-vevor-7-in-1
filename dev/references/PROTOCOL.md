@@ -50,8 +50,8 @@ decrements apply only **after** validation.
 
 **No pressure field.** The frame carries no barometric pressure: the station's 6-icon weather
 forecast is computed by the display console from the console's own barometer (owner's manual
-YT60309, p. 20). The console's icon is therefore not receivable — see §1.4 of the README and the
-header of `esphome/components/vevor_7in1/vevor_forecast.h`.
+YT60309, p. 20). The console's icon is therefore not receivable — see the README, section
+"Known limitations", and [`../docs/forecast-rules.md`](../docs/forecast-rules.md).
 
 ## Self-evaluation criteria (ground truth, without an SDR)
 

@@ -11,7 +11,7 @@ DEV="$(cd "$(dirname "$0")/.." && pwd)"   # dev/: tools, tests, docs, logs
 ROOT="$(cd "$DEV/.." && pwd)"            # repo root: esphome/ lives here, and nothing else
 TARGET="${1:?usage: flash.sh <serial_port|IP> [yaml]}"
 YAML="${2:-vevor-7in1}"
-mkdir -p "$DEV/logs"
+mkdir -p "$DEV/logs" "$DEV/build"   # before the lock: a fresh clone has neither directory yet
 # Same lock as build.sh: prevents a flash concurrent with another run's build.
 exec 9>"$DEV/build/.build_flash.lock"
 flock -w 1500 9 || {

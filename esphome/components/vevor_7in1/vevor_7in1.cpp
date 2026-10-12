@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "vevor_7in1.h"
 
 // This file holds ONLY the receiver wiring, the stitching of cut bursts, the deduplication of
@@ -169,16 +170,16 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   // rain). A frame refused here does NOT become the next reference (last_frame_ is updated after).
   {
     vevor::Frame f;
-    vevor::Frame precedente;
-    const char *raison = "";
-    if (vevor::decode(raw, f, &raison)) {
-      float derniere = 0.0f;
-      bool connue = false;
-      if (this->has_last_frame_ && vevor::decode(this->last_frame_, precedente, &raison)) {
-        derniere = precedente.rain_mm;
-        connue = true;
+    vevor::Frame previous;
+    const char *reason = "";
+    if (vevor::decode(raw, f, &reason)) {
+      float previous_value = 0.0f;
+      bool known = false;
+      if (this->has_last_frame_ && vevor::decode(this->last_frame_, previous, &reason)) {
+        previous_value = previous.rain_mm;
+        known = true;
       }
-      if (!vevor::rain_plausible(f.rain_mm, derniere, connue)) {
+      if (!vevor::rain_plausible(f.rain_mm, previous_value, known)) {
         this->rain_rejected_++;
         // The RAW bytes in the message: without them the frame is blocked with no way to know why,
         // which is exactly what we want to understand.
@@ -186,7 +187,7 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
         ESP_LOGW(TAG,
                  "rain refused: %.1f mm while the previous frame gave %.1f mm (rise "
                  "physiquement impossible) — bruts : %s",
-                 f.rain_mm, derniere, bytes.c_str());
+                 f.rain_mm, previous_value, bytes.c_str());
         return false;
       }
     }
@@ -199,28 +200,28 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   // never blocked for ever.
   {
     vevor::Frame f;
-    vevor::Frame precedente;
-    const char *raison = "";
-    if (vevor::decode(raw, f, &raison)) {
+    vevor::Frame previous;
+    const char *reason = "";
+    if (vevor::decode(raw, f, &reason)) {
       if (this->temp_rejected_ > 0 && std::fabs(f.temp_c - this->temp_refused_value_) < 0.5f) {
         this->temp_same_refusals_++;
       } else {
         this->temp_same_refusals_ = 0;
       }
-      float derniere = 0.0f;
-      bool connue = false;
-      if (this->has_last_frame_ && vevor::decode(this->last_frame_, precedente, &raison)) {
-        derniere = precedente.temp_c;
-        connue = true;
+      float previous_value = 0.0f;
+      bool known = false;
+      if (this->has_last_frame_ && vevor::decode(this->last_frame_, previous, &reason)) {
+        previous_value = previous.temp_c;
+        known = true;
       }
-      if (!vevor::temp_plausible(f.temp_c, derniere, connue) && this->temp_same_refusals_ < 3) {
+      if (!vevor::temp_plausible(f.temp_c, previous_value, known) && this->temp_same_refusals_ < 3) {
         this->temp_rejected_++;
         this->temp_refused_value_ = f.temp_c;
         const std::string bytes = vevor::hex_bytes(raw, vevor::FRAME_BYTES);
         ESP_LOGW(TAG,
                  "temperature refused: %.1f C while the previous frame gave %.1f C "
                  "(jump > %.1f C) — raw: %s",
-                 f.temp_c, derniere, (double) vevor::TEMP_JUMP_MAX_C, bytes.c_str());
+                 f.temp_c, previous_value, (double) vevor::TEMP_JUMP_MAX_C, bytes.c_str());
         return false;
       }
     }
@@ -231,11 +232,11 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
   // it fabricated none: a zero-cost precaution; direct frames are exempt.
   if (repaired) {
     vevor::Frame f;
-    vevor::Frame precedente;
-    const char *raison = "";
+    vevor::Frame previous;
+    const char *reason = "";
     const bool reference =
-        this->has_last_frame_ && vevor::decode(this->last_frame_, precedente, &raison);
-    if (vevor::decode(raw, f, &raison) && reference && !vevor::continuite_ok(f, precedente)) {
+        this->has_last_frame_ && vevor::decode(this->last_frame_, previous, &reason);
+    if (vevor::decode(raw, f, &reason) && reference && !vevor::continuity_ok(f, previous)) {
       this->repairs_rejetees_++;
       ESP_LOGD(TAG,
                "repaired frame REFUSED by the continuity guard (station or measurements "
@@ -274,7 +275,7 @@ bool Vevor7in1::dump(remote_base::RemoteReceiveData src) {
     if (!this->foreign_id_warned_) {
       this->foreign_id_warned_ = true;
       ESP_LOGW(TAG, "station: frame from ANOTHER station (ID %u expected, %u received) — ignored; "
-                    "set the ID to 0 or press \"Re-learn station ID\" to learn it again",
+                    "set the \"Station ID (0 = learn)\" number to 0 to learn it again",
                (unsigned) this->station_id_, (unsigned) frame_id);
     }
     return false;
@@ -353,14 +354,14 @@ void Vevor7in1::set_parameter(uint8_t p, float value) {
   ESP_LOGI(TAG, "watchdog: parameter %u = %u", (unsigned) p, (unsigned) v);
 }
 
-void Vevor7in1::reapprendre_station_id() {
+void Vevor7in1::relearn_station_id() {
   this->station_id_ = 0;
   this->foreign_id_warned_ = false;
   ESP_LOGI(TAG, "station: ID forgotten, the next valid frame will decide");
 }
 
 void Vevor7in1::watch_radio_() {
-  // --- Re-arm policy, measured 05/10/2026 (dev/state/CAMPAGNE_20261005.md) --------------------
+  // --- Re-arm policy, measured 05/10/2026 --------------------
   // A re-arm is a COMPLETE, register-verified re-initialisation whose ANALOG outcome (VCO/PLL
   // calibration) is a coin flip: over five presses, three cured the chip, one left it deaf for two
   // minutes and one degraded a partially working chip — with every key register read back
@@ -511,8 +512,8 @@ void Vevor7in1::watch_radio_() {
 // settled by the arrival timestamp — if elapsed time implies more units than the raw gap,
 // then one or more wraps have occurred.
 // -------------------------------------------------------------------------------------------
-void Vevor7in1::update_rate_window_(uint8_t compteur) {
-  this->window_counters_[this->window_head_] = compteur;
+void Vevor7in1::update_rate_window_(uint8_t counter) {
+  this->window_counters_[this->window_head_] = counter;
   this->window_times_[this->window_head_] = millis();
   this->window_head_ = (this->window_head_ + 1) % RATE_WINDOW;
   if (this->window_count_ < RATE_WINDOW) {

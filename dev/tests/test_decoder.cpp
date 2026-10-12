@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Unit tests for the Vevor 7-in-1 decoder — run WITHOUT hardware.
 
 // Built by tests/run_tests.sh with the compiler in .venv-dev (zig c++). Test frames come from
@@ -662,8 +663,9 @@ static void test_period_measured() {
 // The six bursts of the dump, replayed as-is: the only test on REAL signal (synthetic
 // scenarios only reproduce what was thought to describe).
 
-// Criterion fixed in docs/bit-jitter-analysis.md: 5 of 6 must decode, the sixth an assumed
-// counter-example (it needs at least two corrections); the five carry the same measurement.
+// Criterion: every burst except the assumed counter-examples must decode — a capture that stops
+// decoding is a regression, named here and counted below (a bare "at least N" would let one
+// regression hide behind another capture's repair).
 static void test_captures_reelles() {
   printf("REAL station bursts (%d captures from the 03/10 dump)\n", VEVOR_REAL_CAPTURE_COUNT);
   std::vector<uint8_t> bits(vevor::MAX_BITS);
@@ -673,6 +675,7 @@ static void test_captures_reelles() {
   bool repaired = false;
   size_t rejected = 0;
   int decoded = 0;
+  int regressions = 0;
   for (int i = 0; i < VEVOR_REAL_CAPTURE_COUNT; i++) {
     const VevorRealCapture &c = VEVOR_REAL_CAPTURES[i];
     repaired = false;
@@ -695,8 +698,13 @@ static void test_captures_reelles() {
       }
       printf("    %-18s NOT decoded%s\n", c.name,
              counter_example ? " (assumed counter-example)" : " <-- REGRESSION");
+      if (!counter_example) {
+        regressions++;
+      }
     }
   }
+  expect(regressions == 0, "real bursts: no capture outside the counter-examples stopped "
+                           "decoding (" + std::to_string(regressions) + " regression(s))");
   expect(decoded >= VEVOR_CAPTURE_ATTENDUES,
          "real bursts: " + std::to_string(decoded) + " decoded out of " +
              std::to_string(VEVOR_REAL_CAPTURE_COUNT) + " (criterion: " +
@@ -748,8 +756,8 @@ static void test_rain_plausible() {
   pic[19] = (uint8_t)(sum_bytes & 0xFF);
   pic[20] = (uint8_t)(pic[18] + 1);
   vevor::Frame f;
-  const char *raison = "";
-  expect(vevor::decode(pic, f, &raison),
+  const char *reason = "";
+  expect(vevor::decode(pic, f, &reason),
          "the peak frame passes header, sum, counter and the protocol plausibility gate");
   expect(f.rain_mm > 7000.0f && f.rain_mm < 7700.0f,
          "it really carries the aberrant rain (7634.5 mm expected, " +
@@ -781,8 +789,8 @@ static void test_reparation_vent_nul() {
   };
   static std::vector<uint8_t> bits(vevor::MAX_BITS);
   vevor::Frame genuine;
-  const char *raison = "";
-  expect(vevor::decode(frames[0], genuine, &raison), "reference frame: zero wind, accepted");
+  const char *reason = "";
+  expect(vevor::decode(frames[0], genuine, &reason), "reference frame: zero wind, accepted");
   expect_near(genuine.wind_kmh, 0.0f, 0.05f, "reference: measured wind 0.0 km/h");
 
   int attempts = 0;

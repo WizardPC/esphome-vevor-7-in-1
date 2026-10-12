@@ -26,7 +26,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _common import (Device, RC_ERREUR, RC_MESURE_NULLE, RC_OK,  # noqa: E402
+from _common import (Device, RC_ERROR, RC_NULL_MEASUREMENT, RC_OK,  # noqa: E402
                      atomic_write_json, resolve_key)
 
 
@@ -43,7 +43,7 @@ async def run(host: str, port: int, key: str | None) -> dict:
             if isinstance(v, float) and v != v:  # NaN = never published
                 v = None
             values[name] = v
-        return {"entites": len(dev.keys), "recues": len(dev.state), "valeurs": values}
+        return {"entities": len(dev.keys), "received": len(dev.state), "values": values}
 
 
 def main() -> int:
@@ -61,15 +61,15 @@ def main() -> int:
         raise
     except Exception as exc:
         print(f"# ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return RC_ERREUR
-    print(f"# {rep['recues']}/{rep['entites']} entities with a value")
-    for name, v in rep["valeurs"].items():
+        return RC_ERROR
+    print(f"# {rep['received']}/{rep['entities']} entities with a value")
+    for name, v in rep["values"].items():
         print(f"  {name:24s} = {v}")
     if a.json:
         print(f"-> {atomic_write_json(a.json, rep)}")
-    if not rep["recues"]:
+    if not rep["received"]:
         print("# NULL MEASUREMENT — no entity state received: nothing was measured", file=sys.stderr)
-        return RC_MESURE_NULLE
+        return RC_NULL_MEASUREMENT
     return RC_OK
 
 

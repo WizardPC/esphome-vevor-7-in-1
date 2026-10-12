@@ -1,9 +1,8 @@
 # Zero-wind fabrication: the insertion repair published 46,0 km/h / 102,4 km/h
 
 Measured 04/10/2026 on the production board (Home Assistant history, entity
-`sensor.jardin_vevor_7_in_1_weather_station_last_raw_frame`, which carries the 21 raw bytes of every
-published frame). This document records a defect of OUR decoder — not of the station, not of the RF
-link — and what was done about it.
+`last_raw_frame`, which carries the 21 raw bytes of every published frame). This document records a
+defect of OUR decoder — not of the station, not of the RF link — and what was done about it.
 
 ## 1. Symptom
 
@@ -37,10 +36,10 @@ sum-neutral.
 
 ## 3. Reproducing it off-hardware
 
-`dev/tests/test_decoder.cpp`, section 15 (`test_reparation_vent_nul`), and the throwaway probe used
-during the diagnosis: take a real zero-wind frame, build the pulse sequence, shorten by one bit a
-pulse of two bits or more (the measured mechanism: a pulse whose duration was rounded DOWN), then
-run the decoder.
+The zero-wind test `test_reparation_vent_nul` in `dev/tests/test_decoder.cpp`, and the throwaway
+probe used during the diagnosis: take a real zero-wind frame, build the pulse sequence, shorten by
+one bit a pulse of two bits or more (the measured mechanism: a pulse whose duration was rounded
+DOWN), then run the decoder.
 
 Before the fix, 4 of the 36 shortened pulses of the reference frame produced a published frame that
 was **not** the real one, among them:
@@ -80,22 +79,21 @@ Measured effect (throwaway probe, three real frames, every pulse of two bits or 
 
 The repair recovers *more* true frames and fabricates none of the `46,0 / 102,4` kind. The one
 remaining false frame (reference frame, pulse 78) is stopped by the rain continuity guard
-(`rain_plausible`: rain 15 270 mm instead of 59,2 mm) and never reaches Home Assistant: the test of
-section 15 asserts precisely that — a published frame is either the true frame, or refused by the
-rain guard.
+(`rain_plausible`: rain 15 270 mm instead of 59,2 mm) and never reaches Home Assistant: the test
+asserts precisely that — a published frame is either the true frame, or refused by the rain guard.
 
 ## 6. What remains open
 
 - The repair can still accept a wrong position when the corrupted window is sum-neutral for a
   *different* pattern than `01 01 00`. The constraint removes the measured defect; it does not make
-  the checksum discriminating. The honest bound is the test of section 15: nothing false is
-  published on the two zero-wind frames, and everything false elsewhere is caught by the rain guard
-  — that is a measurement on three frames, not a proof for all payloads.
+  the checksum discriminating. The honest bound is the zero-wind test: nothing false is published on
+  the two zero-wind frames, and everything false elsewhere is caught by the rain guard — that is a
+  measurement on three frames, not a proof for all payloads.
 - The upstream project (rtl_433 `vevor_7in1.c`) has no repair and no plausibility gate at all:
   users report "nonsense packets" (issue #3428, and #3020's comments), where the values are doubled
   (humidity 188 %, direction 3838°) — our gate refuses those. Our defect is the opposite: a
   sum-neutral corruption that no stateless guard can see.
 - To settle "station or receiver" on the RF side, the decisive measurement is the raw pulse dump of
   an anomalous burst (button "Dump pulses", `idle: 1100 µs`, then offline decoding). Not done: the
-  board rejects the API key in `esphome/secrets.yaml` (it runs a build flashed with the owner's own
-  secrets), so neither the board's logs nor its API are reachable from here.
+  production board runs a build flashed with the owner's own secrets, so neither its logs nor its API
+  were reachable from here.

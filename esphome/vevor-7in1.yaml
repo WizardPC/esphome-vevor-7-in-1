@@ -57,10 +57,19 @@ ota:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  # Network-dependent, hence in secrets.yaml. use_address is only needed when mDNS does not cross
-  # your network (VLAN, other subnet): OTA cannot find the board otherwise.
-  use_address: !secret vevor_7in1__use_address
-  output_power: 8.5dB       # lowest accepted value (range 8.5-20.5); raise it if your AP refuses
+  # Only needed when mDNS does not cross your network (VLAN, another subnet, a gateway in between):
+  # OTA then fails with "no route to host". Uncomment AND add the key to secrets.yaml.
+  # use_address: !secret use_address
+  # Lowest accepted value (range 8.5-20.5 dB). On boards whose Wi-Fi antenna is a ceramic chip
+  # antenna, this is what keeps the Wi-Fi from coupling into the CC1101 next to it; raise it only
+  # if your access point refuses that level.
+  output_power: 8.5dB
+  # Fallback access point: if the board cannot join your network, it raises its own AP for
+  # `ap_timeout` (90 s by default), which is what makes the captive portal below reachable —
+  # instead of the device needing a USB re-flash after a Wi-Fi typo.
+  ap:
+    ssid: "Vevor 7-in-1 setup"
+    password: !secret ap_password
 
 captive_portal:
 
@@ -106,11 +115,12 @@ vevor_7in1:
   id: vevor_rx
   receiver_id: rf_receiver
   radio_id: radio          # the component's watchdog re-arms the radio itself (cc1101.reset)
-  # Station identity, in decimal as the "Station ID" sensor reads it (33995 = 0x84cb).
-  # 0 = learn the first station seen; any other value PINS that station and ignores every other ID,
-  # which is how a neighbour's station on the same protocol stays out. The ID changes with the
-  # batteries: the component logs a warning on another ID, and 0 (or "Station ID" in HA) re-learns.
-  station_id: 33995
+  # 0 = learn: the first station heard is adopted (the default; works for any installation).
+  # Any other value PINS that station and ignores every other ID, which is how a neighbour's
+  # station on the same protocol stays out. The value is the decimal ID the "Station ID" sensor
+  # publishes (33995 = 0x84cb). The ID changes when the station's batteries are changed: the
+  # component logs a warning on another ID, and 0 re-learns.
+  station_id: 0
   # Second station example: it would need its own sensor set and its own block, since ESPHome does
   # not create entities on the fly. While the ID above is pinned, a second station stays ignored.
   # station_id: 12345

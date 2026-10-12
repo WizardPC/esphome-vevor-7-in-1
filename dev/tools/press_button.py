@@ -22,7 +22,7 @@ import sys
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _common import (RC_ERREUR, RC_MESURE_NULLE, RC_OK,  # noqa: E402
+from _common import (RC_ERROR, RC_NULL_MEASUREMENT, RC_OK,  # noqa: E402
                      atomic_write_text, key_from_yaml, maybe_await)
 
 from aioesphomeapi import APIClient  # noqa: E402
@@ -56,7 +56,7 @@ async def main() -> int:
         print("available buttons:", ", ".join(sorted(buttons)) or "(none)", file=sys.stderr)
         await client.disconnect()
         print(f"# ERROR: button \"{args.name}\" not found", file=sys.stderr)
-        return RC_ERREUR
+        return RC_ERROR
 
     lines: list[str] = []
 
@@ -80,13 +80,13 @@ async def main() -> int:
         print(f"-> {atomic_write_text(args.out, header + '\n' + '\n'.join(lines) + '\n')}")
 
     for text in lines:
-        if any(k in text for k in ("capture #", "impulsion", "trame extraite", "V7IN1", "GDO0",
+        if any(k in text for k in ("capture #", "pulses", "frame extracted", "V7IN1", "GDO0",
                                    "PLL", "cc1101", "CC1101")):
             print("  LOG:", text.strip()[:300])
     await client.disconnect()
     if not lines:
         print("# NULL MEASUREMENT — no log line received: nothing was measured", file=sys.stderr)
-        return RC_MESURE_NULLE
+        return RC_NULL_MEASUREMENT
     return RC_OK
 
 
@@ -97,4 +97,4 @@ if __name__ == "__main__":
         raise
     except Exception as exc:
         print(f"# ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
-        raise SystemExit(RC_ERREUR)
+        raise SystemExit(RC_ERROR)
